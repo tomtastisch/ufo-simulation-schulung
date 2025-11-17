@@ -1,2 +1,4 @@
+# PyQt5 mit spezifischen Versionen für Kompatibilität
 PyQt5==5.15.11
-numpy==1.26.4
+PyQt5-sip==12.17.1
+numpy==2.3.5
