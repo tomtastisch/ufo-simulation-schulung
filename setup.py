@@ -74,6 +74,7 @@ def get_platform_info() -> dict[str, str]:
         "activate_cmd": activate_cmd,
     }
 
+
 # ---------------------------------------------------------------------------
 # pyproject.toml lesen (für Python-Version und Dev-Dependencies)
 # ---------------------------------------------------------------------------
@@ -148,6 +149,7 @@ def read_dev_requirements_from_pyproject(pyproject_data: dict[str, Any]) -> dict
 # requirements.txt parsen
 # ---------------------------------------------------------------------------
 
+
 def parse_requirements() -> dict[str, str]:
     """Liest requirements.txt und gibt ein Mapping Paketname -> VersionSpec zurück."""
     print("📖 Lese requirements.txt...")
@@ -178,6 +180,7 @@ def parse_requirements() -> dict[str, str]:
     print_success(f"Requirements gelesen: {len(requirements)} Pakete")
     print()
     return requirements
+
 
 # ---------------------------------------------------------------------------
 # Python-Version prüfen
@@ -215,9 +218,11 @@ def check_python_version(pyproject_info: dict[str, Any] | None) -> bool:
     print()
     return True
 
+
 # ---------------------------------------------------------------------------
 # Virtual Environment
 # ---------------------------------------------------------------------------
+
 
 def create_virtualenv() -> bool:
     """Erstellt ein .venv, falls noch nicht vorhanden."""
@@ -334,6 +339,26 @@ def install_dev_requirements(
         return True
     except subprocess.CalledProcessError as exc:  # noqa: TRY003
         print_error(f"Fehler bei der Installation der Dev-Dependencies: {exc}")
+        return False
+
+
+def install_project_editable(platform_info: dict[str, str]) -> bool:
+    """Installiert das Projekt selbst (-e .) im Virtual Environment.
+
+    Dadurch wird das Paketlayout aus src/ (z. B. core.*) als importierbares
+    Paket im venv registriert, sodass Aufrufe wie
+        python -m core.simulation.ufo_main
+    zuverlässig funktionieren.
+    """
+    python_venv = platform_info["python_venv"]
+    print("📦 Installiere Projekt (Editable-Modus, -e .) im Virtual Environment...")
+    try:
+        subprocess.run([python_venv, "-m", "pip", "install", "-e", "."], check=True)
+        print_success("Projekt als Editable installiert (core.* ist als Paket verfügbar)")
+        print()
+        return True
+    except subprocess.CalledProcessError as exc:  # noqa: TRY003
+        print_error(f"Fehler bei der Installation des Projekts (-e .): {exc}")
         return False
 
 
@@ -487,6 +512,10 @@ def main() -> int:
 
     dev_requirements = read_dev_requirements_from_pyproject(pyproject_raw)
     if not install_dev_requirements(platform_info, dev_requirements):
+        print_troubleshooting()
+        return 1
+
+    if not install_project_editable(platform_info):
         print_troubleshooting()
         return 1
 
