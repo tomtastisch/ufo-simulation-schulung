@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=45", "wheel"]
+requires = ["setuptools>=66.1.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,9 +7,9 @@ name = "ufo-simulation-schulung"
 version = "1.0.0"
 description = "UFO/Drohnen-Simulation mit Autopilot-Schulungsvorlage für Anfänger"
 readme = "README.md"
-license = {text = "MIT"}
+license = { text = "MIT" }
 authors = [
-    {name = "tomtastisch", email = "tom@example.com"}
+    { name = "tomtastisch", email = "tom@example.com" }
 ]
 keywords = ["simulation", "education", "ufo", "autopilot", "python"]
 classifiers = [
@@ -17,21 +17,16 @@ classifiers = [
     "Intended Audience :: Education",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3 :: Only",
 ]
-requires-python = ">=3.11"  # ← HIER Python-Version!
-dependencies = [
-    "PyQt5==5.15.11",
-    "numpy==1.26.4",
-]
+requires-python = ">=3.11"
+dynamic = ["dependencies"]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=6.0",
-    "black>=22.0",
-    "flake8>=4.0",
+    "pytest>=8.0.0",
+    "black>=24.4.0",
+    "flake8>=7.0.0",
 ]
 
 [project.urls]
@@ -39,7 +34,15 @@ Repository = "https://github.com/tomtastisch/ufo-simulation-schulung"
 Issues = "https://github.com/tomtastisch/ufo-simulation-schulung/issues"
 
 [tool.setuptools]
-packages = ["ufo_simulation"]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.setuptools.package-data]
-ufo_simulation = ["resources/*.png"]
+core = [
+    "simulation/ressources/*.png",
+]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }

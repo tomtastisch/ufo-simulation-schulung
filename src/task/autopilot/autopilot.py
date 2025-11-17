@@ -10,20 +10,18 @@ NICHT ändern:
 - Die Struktur dieser Klasse
 - Irgendwas anderes als die 3 Funktionen
 """
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ufo_simulation.autopilot_base import AutopilotBase
+from core.simulation.autopilot_base import AutopilotBase
 
 if TYPE_CHECKING:
-    from ufo_simulation.ufosim import UfoSim
-
+    from core.simulation.ufosim import UfoSim
 
 class Autopilot(AutopilotBase):
     """
-    Dein Autopilot zum Selberschreiben.
+    Dein Autopilot zum selbst schreiben.
 
     Setze das Flag unten auf False wenn du fertig bist:
     """

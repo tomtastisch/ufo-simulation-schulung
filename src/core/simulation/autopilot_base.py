@@ -19,12 +19,12 @@ from __future__ import annotations
 
 import math
 import time
+
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ufo_simulation.ufosim import UfoSim
-
+    from .ufosim import UfoSim
 
 class AutopilotBase(ABC):
     """

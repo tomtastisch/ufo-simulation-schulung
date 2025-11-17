@@ -19,9 +19,9 @@ Eine interaktive **UFO/Drohnen-Simulation** mit Clean Architecture für Anfänge
 python setup.py
 
 # 2️⃣  Demo anschauen
-python -m ufo_simulation.ufo_main
+python -m simulation.ufo_main
 
-# 3️⃣  Implementieren in ufo_simulation/autopilot.py:
+# 3️⃣  Implementieren in simulation/autopilot.py:
 #     - takeoff()  - Startphase
 #     - cruise()   - Reiseflug  
 #     - landing()  - Landephase
@@ -29,7 +29,7 @@ python -m ufo_simulation.ufo_main
 # 4️⃣  Setze USE_DEMO = False in autopilot.py
 
 # 5️⃣  Testen! Starte Demo erneut
-python -m ufo_simulation.ufo_main
+python -m simulation.ufo_main
 ```
 
 **Das war's!** 🚀 Nach `setup.py` funktioniert alles automatisch.
@@ -87,7 +87,7 @@ source .venv/bin/activate  # Linux/macOS
 .venv\Scripts\activate     # Windows
 
 # Starte Demo (UFO fliegt automatisch)
-python -m ufo_simulation.ufo_main
+python -m simulation.ufo_main
 ```
 
 Das UFO fliegt automatisch zum Ziel und landet. `USE_DEMO = True` in `autopilot.py`.

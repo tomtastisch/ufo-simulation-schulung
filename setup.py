@@ -1,72 +1,86 @@
 #!/usr/bin/env python3
-"""
-🛸 UFO-Simulation Schulung - Automatisches Setup Script
+"""\
+UFO-Simulation Schulung – Automatisches Setup-Script.
 
-Dieses Script richtet die Entwicklungsumgebung automatisch ein.
-Funktioniert auf Windows, macOS und Linux.
-
-WICHTIG:
-- Behebt Fehler automatisch und versucht sich selbst zu reparieren!
-- Liest Python-Version aus pyproject.toml
-- Liest Pakete aus requirements.txt
-
-Verwendung:
-    python setup.py
-
-Das war's! Alles funktioniert danach automatisch.
+Dieses Script richtet die Entwicklungsumgebung für das Projekt ein und ist
+als eigenständiges CLI-Script gedacht (kein Bibliotheksmodul).
 """
 
-import os
-import sys
-import subprocess
-import platform
-from pathlib import Path
-import time
+from __future__ import annotations
+
 import re
-import tomllib  # Python 3.11+ built-in
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+import importlib.metadata as importlib_metadata
+import tomllib  # Python 3.11+
+
+
+# ---------------------------------------------------------------------------
+# Hilfsfunktionen für Ausgabe (CLI-Feedback für Nutzer)
+# ---------------------------------------------------------------------------
 
 
 def print_header(text: str) -> None:
-    """Druckt einen formatierten Header."""
-    print(f"\n{'=' * 70}")
+    print("\n" + "=" * 70)
     print(f"  {text}")
-    print(f"{'=' * 70}\n")
+    print("=" * 70 + "\n")
 
 
 def print_success(text: str) -> None:
-    """Druckt erfolgreiche Nachricht."""
     print(f"   ✅ {text}")
 
 
 def print_error(text: str) -> None:
-    """Druckt Fehlernachricht."""
     print(f"   ❌ {text}")
 
 
 def print_warning(text: str) -> None:
-    """Druckt Warnmeldung."""
     print(f"   ⚠️  {text}")
 
 
 def print_info(text: str) -> None:
-    """Druckt Info-Nachricht."""
     print(f"   ℹ️  {text}")
 
 
 def print_fix(text: str) -> None:
-    """Druckt Fix-Nachricht."""
     print(f"   🔧 {text}")
 
 
-def parse_pyproject_toml() -> dict:
-    """
-    Liest pyproject.toml und extrahiert Python-Versionsanforderung.
+# ---------------------------------------------------------------------------
+# Plattform- und Umgebungsabfrage
+# ---------------------------------------------------------------------------
 
-    Gibt dict mit:
-    - "requires_python": ">=3.11"
-    - "python_major": 3
-    - "python_minor": 11
-    """
+
+def get_platform_info() -> dict[str, str]:
+    """Ermittelt Betriebssystem und venv-spezifische Pfade/Befehle."""
+    import platform
+
+    system = platform.system()
+    venv_dir = Path(".venv")
+
+    if system == "Windows":
+        python_venv = str(venv_dir / "Scripts" / "python.exe")
+        activate_cmd = ".venv\\Scripts\\activate"
+    else:
+        python_venv = str(venv_dir / "bin" / "python")
+        activate_cmd = "source .venv/bin/activate"
+
+    return {
+        "system": system,
+        "python_venv": python_venv,
+        "activate_cmd": activate_cmd,
+    }
+
+# ---------------------------------------------------------------------------
+# pyproject.toml lesen (für Python-Version und Dev-Dependencies)
+# ---------------------------------------------------------------------------
+
+
+def parse_pyproject_toml() -> dict[str, Any]:
+    """Liest pyproject.toml und extrahiert Python-Anforderung sowie Rohdaten."""
     print("📖 Lese pyproject.toml...")
     pyproject_file = Path("pyproject.toml")
 
@@ -75,37 +89,67 @@ def parse_pyproject_toml() -> dict:
         return {}
 
     try:
-        with open(pyproject_file, "rb") as f:
+        with pyproject_file.open("rb") as f:
             data = tomllib.load(f)
 
         requires_python = data.get("project", {}).get("requires-python", ">=3.11")
         print_info(f"Python-Anforderung: {requires_python}")
 
-        # Parse ">=3.11" zu (3, 11)
         match = re.search(r"(\d+)\.(\d+)", requires_python)
         if match:
-            major, minor = int(match.group(1)), int(match.group(2))
+            major = int(match.group(1))
+            minor = int(match.group(2))
             print_success(f"Erkannt: Python {major}.{minor}+")
             print()
             return {
                 "requires_python": requires_python,
                 "python_major": major,
                 "python_minor": minor,
+                "raw": data,
             }
-    except Exception as e:
-        print_error(f"Fehler beim Parsen von pyproject.toml: {e}")
+    except Exception as exc:  # noqa: BLE001
+        print_error(f"Fehler beim Parsen von pyproject.toml: {exc}")
         return {}
 
     return {}
 
 
-def parse_requirements() -> dict[str, str]:
-    """
-    Liest requirements.txt und parst Pakete mit Versionen.
+def read_dev_requirements_from_pyproject(pyproject_data: dict[str, Any]) -> dict[str, str]:
+    """Liest [project.optional-dependencies].dev als Mapping Name -> VersionSpec."""
+    dev_reqs: dict[str, str] = {}
 
-    Gibt dict mit Format: {"paketname": "version_spec"}
-    z.B. {"PyQt5": "==5.15.11", "numpy": "==1.26.4"}
-    """
+    opt = pyproject_data.get("project", {}).get("optional-dependencies", {})
+    dev_list = opt.get("dev", [])
+
+    if not dev_list:
+        return dev_reqs
+
+    print("📖 Lese Dev-Dependencies aus pyproject.toml ([project.optional-dependencies].dev)...")
+    pattern = re.compile(r"^\s*([A-Za-z0-9_.\-]+)\s*(.*)$")
+
+    for entry in dev_list:
+        line = entry.strip()
+        if not line or line.startswith("#"):
+            continue
+        match = pattern.match(line)
+        if not match:
+            continue
+        name = match.group(1)
+        version_spec = match.group(2).strip()
+        dev_reqs[name] = version_spec
+        print_info(f"{name}{version_spec}")
+
+    print_success(f"Dev-Dependencies gelesen: {len(dev_reqs)} Pakete")
+    print()
+    return dev_reqs
+
+
+# ---------------------------------------------------------------------------
+# requirements.txt parsen
+# ---------------------------------------------------------------------------
+
+def parse_requirements() -> dict[str, str]:
+    """Liest requirements.txt und gibt ein Mapping Paketname -> VersionSpec zurück."""
     print("📖 Lese requirements.txt...")
     req_file = Path("requirements.txt")
 
@@ -113,491 +157,347 @@ def parse_requirements() -> dict[str, str]:
         print_error("requirements.txt nicht gefunden!")
         return {}
 
-    requirements = {}
+    requirements: dict[str, str] = {}
     try:
-        with open(req_file, "r") as f:
-            for line in f:
-                line = line.strip()
-                # Ignoriere leere Zeilen und Kommentare
+        with req_file.open("r", encoding="utf-8") as f:
+            for raw_line in f:
+                line = raw_line.strip()
                 if not line or line.startswith("#"):
                     continue
 
-                # Parse "paket==version" oder "paket>=version" etc.
-                match = re.match(r"([a-zA-Z0-9\-_]+)(.*)", line)
+                match = re.match(r"([A-Za-z0-9_.\-]+)(.*)", line)
                 if match:
                     package_name = match.group(1)
                     version_spec = match.group(2).strip()
                     requirements[package_name] = version_spec
                     print_info(f"{package_name}{version_spec}")
-    except Exception as e:
-        print_error(f"Fehler beim Parsen von requirements.txt: {e}")
+    except Exception as exc:  # noqa: BLE001
+        print_error(f"Fehler beim Parsen von requirements.txt: {exc}")
         return {}
 
     print_success(f"Requirements gelesen: {len(requirements)} Pakete")
     print()
     return requirements
 
+# ---------------------------------------------------------------------------
+# Python-Version prüfen
+# ---------------------------------------------------------------------------
 
-def check_python_version(pyproject: dict) -> bool:
-    """Prüft ob die benötigte Python-Version installiert ist."""
+
+def check_python_version(pyproject_info: dict[str, Any] | None) -> bool:
+    """Prüft, ob die aktuelle Python-Version die Anforderung erfüllt."""
+    if not pyproject_info:
+        print_warning(
+            "Konnte Python-Anforderung aus pyproject.toml nicht lesen – überspringe Versionstest.",
+        )
+        return True
+
+    required_major = int(pyproject_info.get("python_major", 3))
+    required_minor = int(pyproject_info.get("python_minor", 11))
+
+    current_major = sys.version_info.major
+    current_minor = sys.version_info.minor
+
     print("📋 Prüfe Python-Version...")
-    version = sys.version_info
-    version_str = f"{version.major}.{version.minor}.{version.micro}"
-    print(f"   Python: {version_str}")
+    print_info(f"Python: {current_major}.{current_minor}.{sys.version_info.micro}")
 
-    if pyproject:
-        required_major = pyproject["python_major"]
-        required_minor = pyproject["python_minor"]
-        requires_str = pyproject["requires_python"]
+    if (current_major, current_minor) < (required_major, required_minor):
+        print_error(
+            f"Python {required_major}.{required_minor}+ benötigt, "
+            f"aber {current_major}.{current_minor} gefunden.",
+        )
+        return False
 
-        if version < (required_major, required_minor):
-            print_error(f"Python {requires_str} erforderlich, aber {version.major}.{version.minor} installiert")
-            print_info(
-                f"Bitte installiere Python {required_major}.{required_minor}+ von https://www.python.org/downloads/")
-            print_warning("Das Script kann dies nicht automatisch beheben.")
-            print()
-            return False
-
-        print_success(f"Python {required_major}.{required_minor}+ OK (Anforderung: {requires_str})")
-    else:
-        print_success("Python OK")
-
+    print_success(
+        f"Python {required_major}.{required_minor}+ OK "
+        f"(Anforderung: {pyproject_info.get('requires_python')})",
+    )
     print()
     return True
 
+# ---------------------------------------------------------------------------
+# Virtual Environment
+# ---------------------------------------------------------------------------
 
-def get_platform_info() -> dict[str, str]:
-    """Gibt plattformabhängige Informationen."""
-    system = platform.system()
-    venv_path = Path(".venv")
-
-    if system == "Windows":
-        python_venv = venv_path / "Scripts" / "python.exe"
-        activate_cmd = ".venv\\Scripts\\activate"
-    else:
-        python_venv = venv_path / "bin" / "python"
-        activate_cmd = "source .venv/bin/activate"
-
-    return {
-        "system": system,
-        "python_venv": str(python_venv),
-        "activate_cmd": activate_cmd,
-    }
-
-
-def create_venv() -> bool:
-    """Erstellt Virtual Environment, löscht bei Fehler und versucht erneut."""
-    print("📦 Erstelle Virtual Environment...")
-    venv_path = Path(".venv")
-
-    if venv_path.exists():
+def create_virtualenv() -> bool:
+    """Erstellt ein .venv, falls noch nicht vorhanden."""
+    venv_dir = Path(".venv")
+    if venv_dir.exists():
         print_success("Virtual Environment existiert bereits")
         print()
         return True
 
+    print("📦 Erstelle Virtual Environment...")
     try:
-        subprocess.run([sys.executable, "-m", "venv", ".venv"], check=True, capture_output=True)
+        subprocess.run([sys.executable, "-m", "venv", ".venv"], check=True)
         print_success("Virtual Environment erstellt")
         print()
         return True
-    except subprocess.CalledProcessError as e:
-        print_error(f"Fehler beim Erstellen des Virtual Environment")
-        print_fix("Lösche beschädigtes .venv und versuche erneut...")
-
-        try:
-            import shutil
-            if venv_path.exists():
-                shutil.rmtree(venv_path)
-            print_info(".venv gelöscht")
-            time.sleep(1)
-        except Exception as delete_error:
-            print_error(f"Konnte .venv nicht löschen: {delete_error}")
-            return False
-
-        try:
-            subprocess.run([sys.executable, "-m", "venv", ".venv"], check=True, capture_output=True)
-            print_success("Virtual Environment beim 2. Versuch erstellt")
-            print()
-            return True
-        except subprocess.CalledProcessError as retry_error:
-            print_error(f"Virtual Environment Erstellung fehlgeschlagen auch beim 2. Versuch")
-            print()
-            return False
+    except subprocess.CalledProcessError as exc:  # noqa: TRY003
+        print_error(f"Fehler beim Erstellen des Virtual Environment: {exc}")
+        return False
 
 
-def handle_pyqt5_macos(platform_info: dict[str, str]) -> bool:
-    """
-    Behebt macOS-spezifische PyQt5-Probleme (M1/M2/M3).
-    """
-    print("🍎 Prüfe macOS PyQt5-Kompatibilität...")
+def update_pip(platform_info: dict[str, str]) -> bool:
+    """Aktualisiert pip, setuptools und wheel im Virtual Environment."""
     python_venv = platform_info["python_venv"]
+    print("⬆️  Aktualisiere pip, setuptools und wheel...")
+    try:
+        subprocess.run([python_venv, "-m", "pip", "install", "--upgrade", "pip"], check=True)
+        subprocess.run(
+            [python_venv, "-m", "pip", "install", "--upgrade", "setuptools>=66.1.0", "wheel"],
+            check=True,
+        )
+        print_success("pip, setuptools und wheel aktualisiert")
+        print()
+        return True
+    except subprocess.CalledProcessError as exc:  # noqa: TRY003
+        print_error(f"Fehler beim Aktualisieren von pip/setuptools/wheel: {exc}")
+        return False
 
+
+def configure_pip_index(platform_info: dict[str, str]) -> None:
+    """Setzt den pip-Index auf https://pypi.org/simple."""
+    python_venv = platform_info["python_venv"]
+    print_fix("Konfiguriere pip Index (behebt typische PyPI-Fehler)...")
+    try:
+        subprocess.run(
+            [python_venv, "-m", "pip", "config", "set", "global.index-url", "https://pypi.org/simple"],
+            check=False,
+        )
+        print_success("PyPI Index konfiguriert")
+    except Exception as exc:  # noqa: BLE001
+        print_warning(f"Konnte pip Index nicht konfigurieren: {exc}")
+    print()
+
+
+def check_pyqt5_macos(platform_info: dict[str, str]) -> None:
+    """Führt auf macOS einen Minimaltest für PyQt5 im venv aus."""
     if platform_info["system"] != "Darwin":
-        print_info("Nicht macOS - Überspringe macOS-Fix")
-        print()
-        return True
+        return
 
-    try:
-        # Versuche PyQt5 zu importieren
-        result = subprocess.run(
-            [python_venv, "-c", "import PyQt5; print('OK')"],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=5,
-        )
-        if "OK" in result.stdout:
-            print_success("PyQt5 funktioniert auf macOS")
-            print()
-            return True
-    except:
-        pass
-
-    # Falls PyQt5 nicht funktioniert, installiere mit spezifischen Flags
-    print_warning("PyQt5 Import fehlgeschlagen auf macOS")
-    print_fix("Installiere PyQt5 mit macOS-Kompatibilität...")
-
-    try:
-        subprocess.run(
-            [python_venv, "-m", "pip", "install", "--upgrade",
-             "PyQt5==5.15.11",
-             "--no-cache-dir",
-             "--force-reinstall"],
-            check=True,
-            timeout=120,
-        )
-        print_success("PyQt5 auf macOS installiert")
-        print()
-        return True
-    except subprocess.CalledProcessError:
-        print_warning("PyQt5 Installation auf macOS fehlgeschlagen (nicht kritisch)")
-        print_warning("Das Projekt sollte trotzdem funktionieren")
-        print()
-        return True
-
-def upgrade_pip(platform_info: dict[str, str]) -> bool:
-    """Aktualisiert pip, versucht bei Fehler Neuinstallation."""
-    print("⬆️  Aktualisiere pip...")
     python_venv = platform_info["python_venv"]
-
-    try:
-        subprocess.run(
-            [python_venv, "-m", "pip", "install", "--upgrade", "pip", "--quiet"],
-            check=True,
-            capture_output=True,
-        )
-        print_success("pip aktualisiert")
-        print()
-        return True
-    except subprocess.CalledProcessError as e:
-        print_warning("pip Upgrade fehlgeschlagen, versuche Neuinstallation...")
-        print_fix("Installiere pip neu...")
-
-        try:
-            subprocess.run(
-                [python_venv, "-m", "ensurepip", "--upgrade"],
-                check=True,
-                capture_output=True,
-            )
-            print_success("pip neu installiert")
-            print()
-            return True
-        except subprocess.CalledProcessError:
-            print_warning("pip Neuinstallation auch fehlgeschlagen (nicht kritisch)")
-            print()
-            return True
-
-
-def configure_pip_index(platform_info: dict[str, str]) -> bool:
-    """Konfiguriert PyPI Index URL, erstellt Config-Datei bei Fehler."""
-    print("🔧 Konfiguriere pip Index (behebt PyPI-Fehler)...")
-    python_venv = platform_info["python_venv"]
-
+    print("🍎 Prüfe macOS PyQt5-Kompatibilität...")
     try:
         subprocess.run(
             [
                 python_venv,
-                "-m",
-                "pip",
-                "config",
-                "set",
-                "global.index-url",
-                "https://pypi.org/simple",
+                "-c",
+                "import PyQt5; from PyQt5.QtWidgets import QApplication; print('OK')",
             ],
             check=True,
             capture_output=True,
+            text=True,
         )
-        print_success("PyPI Index konfiguriert")
-        print()
-        return True
-    except subprocess.CalledProcessError as e:
-        print_warning("pip config Befehl fehlgeschlagen, versuche manuelle Konfiguration...")
-        print_fix("Erstelle pip config manuell...")
-
-        try:
-            if platform_info["system"] == "Windows":
-                config_dir = Path.home() / "AppData" / "Roaming" / "pip"
-                config_file = config_dir / "pip.ini"
-            else:
-                config_dir = Path.home() / ".config" / "pip"
-                config_file = config_dir / "pip.conf"
-
-            config_dir.mkdir(parents=True, exist_ok=True)
-
-            config_content = "[global]\nindex-url = https://pypi.org/simple\n"
-            config_file.write_text(config_content)
-
-            print_success(f"pip Konfiguration erstellt")
-            print()
-            return True
-        except Exception as config_error:
-            print_warning(f"Manuelle pip Konfiguration auch fehlgeschlagen (nicht kritisch)")
-            print()
-            return True
-
-
-def install_dependencies(platform_info: dict[str, str], requirements: dict[str, str], retry_count: int = 0) -> bool:
-    """Installiert Dependencies aus requirements.txt, versucht bei Fehler mehrfach erneut."""
-    print("📥 Installiere Dependencies (aus requirements.txt)...")
-    python_venv = platform_info["python_venv"]
-    max_retries = 3
-
-    try:
-        subprocess.run(
-            [python_venv, "-m", "pip", "install", "-r", "requirements.txt"],
-            check=True,
-        )
-        print_success("Alle Dependencies installiert")
-        print()
-        return True
-    except subprocess.CalledProcessError as e:
-        retry_count += 1
-
-        if retry_count < max_retries:
-            print_error(f"Installation fehlgeschlagen (Versuch {retry_count}/{max_retries})")
-            print_fix(f"Warte 3 Sekunden und versuche erneut...")
-            time.sleep(3)
-
-            try:
-                subprocess.run(
-                    [python_venv, "-m", "pip", "install", "--upgrade", "pip"],
-                    check=True,
-                    capture_output=True,
-                )
-            except:
-                pass
-
-            return install_dependencies(platform_info, requirements, retry_count)
-        else:
-            print_error(f"Installation nach {max_retries} Versuchen fehlgeschlagen")
-            print_info("Falls PyPI-Fehler: Prüfe deine Internetverbindung")
-            print()
-            return False
-
-
-def verify_installation(platform_info: dict[str, str], requirements: dict[str, str]) -> bool:
-    """
-    Prüft ob alle aus requirements.txt definierten Module installiert sind.
-    WICHTIG: Kein Rekursion! Maximal 1 Retry-Versuch pro Modul.
-    """
-    print("✔️  Prüfe Installation (von requirements.txt)...")
-    python_venv = platform_info["python_venv"]
-
-    all_ok = True
-    failed_modules = []
-    max_module_retries = 1  # Pro Modul max 1 Versuch
-    module_retry_count = {}
-
-    for package_name, version_spec in requirements.items():
-        # Map für Import-Namen (z.B. PyQt5 -> PyQt5, aber andere können unterschiedlich sein)
-        import_name_map = {
-            "PyQt5": "PyQt5",
-            "numpy": "numpy",
-        }
-        import_name = import_name_map.get(package_name, package_name)
-
-        try:
-            # Versuche zu importieren
-            result = subprocess.run(
-                [python_venv, "-c", f"import {import_name}; print({import_name}.__version__)"],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=5,
-            )
-            version = result.stdout.strip()
-            print_success(f"{package_name}{version_spec} (installiert: {version})")
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            print_error(f"{package_name}{version_spec} - Importtest fehlgeschlagen")
-
-            # Prüfe ob schon pip list funktioniert
-            try:
-                pip_list = subprocess.run(
-                    [python_venv, "-m", "pip", "show", package_name],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                    timeout=5,
-                )
-                if "Location:" in pip_list.stdout:
-                    print_warning(f"   → Aber pip zeigt: {package_name} ist installiert")
-                    print_warning(f"   → Import-Fehler ignoriert (Module können dennoch funktionieren)")
-                    continue
-            except:
-                pass
-
-            # Modul ist nicht installiert oder fehlerhaft
-            module_retry_count[package_name] = module_retry_count.get(package_name, 0) + 1
-
-            if module_retry_count[package_name] <= max_module_retries:
-                print_fix(f"   Versuche zu reparieren...")
-                install_spec = f"{package_name}{version_spec}"
-                try:
-                    subprocess.run(
-                        [python_venv, "-m", "pip", "install", install_spec, "--upgrade", "--force-reinstall"],
-                        check=True,
-                        capture_output=True,
-                        timeout=60,
-                    )
-                    print_success(f"   {package_name} neu installiert")
-
-                    # Prüfe nochmal
-                    try:
-                        result = subprocess.run(
-                            [python_venv, "-c", f"import {import_name}; print({import_name}.__version__)"],
-                            capture_output=True,
-                            text=True,
-                            check=True,
-                            timeout=5,
-                        )
-                        version = result.stdout.strip()
-                        print_success(f"   Import funktioniert jetzt: {version}")
-                        continue
-                    except:
-                        print_warning(f"   Import funktioniert immer noch nicht - aber pip zeigt Paket als installiert")
-                        continue
-                except subprocess.CalledProcessError as e:
-                    print_error(f"   Konnte {package_name} nicht neu installieren")
-                    failed_modules.append((package_name, version_spec))
-                    all_ok = False
-            else:
-                print_error(f"   Max Versuche für {package_name} erreicht")
-                failed_modules.append((package_name, version_spec))
-                all_ok = False
-
+        print_success("PyQt5 funktioniert auf macOS")
+    except subprocess.CalledProcessError as exc:  # noqa: TRY003
+        print_warning(f"PyQt5-Test fehlgeschlagen: {exc}")
     print()
 
-    if not all_ok and failed_modules:
-        print_error(f"Folgende Module konnten nicht installiert werden:")
-        for pkg, spec in failed_modules:
-            print_error(f"   - {pkg}{spec}")
+
+# ---------------------------------------------------------------------------
+# Dependencies installieren
+# ---------------------------------------------------------------------------
+
+
+def install_runtime_requirements(platform_info: dict[str, str]) -> bool:
+    """Installiert Runtime-Dependencies aus requirements.txt im venv."""
+    python_venv = platform_info["python_venv"]
+    print("📥 Installiere Runtime-Dependencies (aus requirements.txt)...")
+    try:
+        subprocess.run([python_venv, "-m", "pip", "install", "-r", "requirements.txt"], check=True)
+        print_success("Alle Runtime-Dependencies installiert")
+        print()
+        return True
+    except subprocess.CalledProcessError as exc:  # noqa: TRY003
+        print_error(f"Fehler bei der Installation der Runtime-Dependencies: {exc}")
+        return False
+
+
+def install_dev_requirements(
+    platform_info: dict[str, str],
+    dev_requirements: dict[str, str],
+) -> bool:
+    """Installiert Dev-Dependencies aus pyproject.toml im venv."""
+    if not dev_requirements:
+        return True
+
+    python_venv = platform_info["python_venv"]
+    print("📥 Installiere Dev-Dependencies (pytest, black, flake8, ...)...")
+    try:
+        for name, version_spec in dev_requirements.items():
+            spec = f"{name}{version_spec}"
+            print_info(f"Installiere {spec}...")
+            subprocess.run([python_venv, "-m", "pip", "install", spec], check=True)
+        print_success("Alle Dev-Dependencies installiert")
+        print()
+        return True
+    except subprocess.CalledProcessError as exc:  # noqa: TRY003
+        print_error(f"Fehler bei der Installation der Dev-Dependencies: {exc}")
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Installationen verifizieren (generisch, ohne Paket-Spezialfälle)
+# ---------------------------------------------------------------------------
+
+
+def verify_installation(
+    platform_info: dict[str, str],
+    runtime_requirements: dict[str, str],
+    dev_requirements: dict[str, str],
+) -> bool:
+    """Prüft, ob alle Runtime- und Dev-Dependencies installierte Distributionsnamen haben."""
+    # Es wird davon ausgegangen, dass setup.py mit dem venv-Python gestartet wurde,
+    # daher nutzt importlib.metadata.version() das richtige Environment.
+    del platform_info  # Signatur bleibt konsistent, ohne den Parameter zu benötigen
+
+    all_ok = True
+    failed: list[tuple[str, str, str]] = []  # (scope, name, version_spec)
+
+    def check_and_fix(scope: str, name: str, version_spec: str) -> None:
+        nonlocal all_ok
+
+        display = f"{name}{version_spec}"
+        try:
+            installed_version = importlib_metadata.version(name)
+            print_success(f"   ✅ [{scope}] {display} (installiert: {installed_version})")
+            return
+        except importlib_metadata.PackageNotFoundError:
+            print_warning(
+                f"   ⚠️  [{scope}] {display} - nicht gefunden, versuche Installation...",
+            )
+
+        try:
+            install_spec = f"{name}{version_spec}"
+            subprocess.run([sys.executable, "-m", "pip", "install", install_spec], check=True)
+            try:
+                installed_version = importlib_metadata.version(name)
+                print_success(
+                    f"   ✅ [{scope}] {display} (nach Installation: {installed_version})",
+                )
+                return
+            except importlib_metadata.PackageNotFoundError:
+                print_error(
+                    f"   ❌ [{scope}] {display} - trotz Installation nicht verfügbar",
+                )
+                all_ok = False
+                failed.append((scope, name, version_spec))
+        except subprocess.CalledProcessError as exc:  # noqa: TRY003
+            print_error(
+                f"   ❌ [{scope}] {display} - pip-Installation fehlgeschlagen: {exc}",
+            )
+            all_ok = False
+            failed.append((scope, name, version_spec))
+
+    print("✔️  Prüfe Installation (Runtime-Dependencies)...")
+    for name, spec in runtime_requirements.items():
+        check_and_fix("runtime", name, spec)
+
+    if dev_requirements:
+        print()
+        print("✔️  Prüfe Installation (Dev-Dependencies)...")
+        for name, spec in dev_requirements.items():
+            check_and_fix("dev", name, spec)
+
+    print()
+    if failed:
+        print_error("   ❌ Folgende Pakete konnten nicht verifiziert werden:")
+        for scope, name, spec in failed:
+            print_error(f"      - [{scope}] {name}{spec}")
         return False
 
     return True
 
 
+# ---------------------------------------------------------------------------
+# Nächste Schritte / Troubleshooting
+# ---------------------------------------------------------------------------
+
+
 def print_next_steps(platform_info: dict[str, str]) -> None:
-    """Druckt die nächsten Schritte."""
+    """Gibt die nächsten manuellen Schritte zur Nutzung des Projekts aus."""
     print_header("🎉 Setup erfolgreich abgeschlossen!")
 
     activate_cmd = platform_info["activate_cmd"]
 
     print("📍 Nächste Schritte:\n")
-    print(f"1️⃣  Aktiviere das Virtual Environment:")
+    print("1️⃣  Aktiviere das Virtual Environment:")
     print(f"    {activate_cmd}\n")
-    print(f"2️⃣  Starte die Demo:")
-    print(f"    python -m ufo_simulation.ufo_main\n")
-    print(f"3️⃣  Öffne ufo_simulation/autopilot.py")
-    print(f"    Implementiere die 3 Aufgaben:\n")
-    print(f"    - takeoff()  - Startphase")
-    print(f"    - cruise()   - Reiseflug")
-    print(f"    - landing()  - Landephase\n")
-    print(f"4️⃣  Setze USE_DEMO = False in autopilot.py\n")
-    print(f"5️⃣  Starte die Demo erneut und teste deinen Autopiloten!\n")
+    print("2️⃣  Starte die Demo (Simulation mit Demo-Autopilot):")
+    print("    python -m core.simulation.ufo_main\n")
+    print("3️⃣  Öffne die Autopilot-Aufgabe:")
+    print("    src/task/autopilot/autopilot.py\n")
+    print("    Implementiere die 3 Aufgaben:\n")
+    print("    - takeoff()  - Startphase")
+    print("    - cruise()   - Reiseflug")
+    print("    - landing()  - Landephase\n")
+    print("4️⃣  Setze USE_DEMO = False in der Klasse Autopilot (Attribut USE_DEMO)\n")
+    print("5️⃣  Starte die Demo erneut und teste deinen Autopiloten!\n")
     print("Happy Flying! 🚀\n")
 
 
 def print_troubleshooting() -> None:
-    """Druckt Troubleshooting-Tipps."""
-    print_header("🆘 Troubleshooting")
+    """Gibt grundlegende Hinweise zur Fehlerdiagnose aus."""
+    print_header("🛠 Troubleshooting-Hinweise")
+    print("Wenn Probleme auftreten:")
+    print("1. Stelle sicher, dass du Python 3.11+ verwendest.")
+    print("2. Lösche ggf. das .venv Verzeichnis und führe setup.py erneut aus.")
+    print("3. Prüfe deine Internetverbindung für pip-Installationen.")
+    print("4. Falls weiterhin Fehler auftreten, prüfe die vollständige Fehlermeldung oben.")
 
-    print("Falls immer noch etwas schiefgeht:\n")
-    print("❌ Python-Version nicht korrekt?")
-    print("   → Prüfe: python --version")
-    print("   → Installiere erforderliche Version von https://www.python.org/downloads/\n")
 
-    print("❌ pip Fehler / PyPI-Download fehlgeschlagen?")
-    print("   → Prüfe deine Internetverbindung")
-    print("   → Versuche: python -m pip install -r requirements.txt\n")
-
-    print("❌ Virtual Environment Fehler?")
-    print("   → Lösche .venv: rm -rf .venv (Linux/macOS)")
-    print("   →               rmdir /s .venv (Windows)")
-    print("   → Führe setup.py erneut aus\n")
-
-    print("❌ PyQt5 Import-Fehler (aber pip zeigt installiert)?")
-    print("   → Das ist ein bekanntes Problem auf macOS mit M1/M2")
-    print("   → Versuche: pip install --upgrade PyQt5")
-    print("   → Oder: Verwende native Python statt Homebrew\n")
-
-    print("📞 Weitere Hilfe:")
-    print("   → Öffne ein Issue auf GitHub")
-    print("   → Kontaktiere deinen Lehrer\n")
+# ---------------------------------------------------------------------------
+# main()
+# ---------------------------------------------------------------------------
 
 
 def main() -> int:
-    """Haupt-Setup Funktion."""
+    """Führt den vollständigen Setup-Workflow aus."""
     print_header("🛸 UFO-Simulation Schulung - Setup")
 
-    # Platform Info
     platform_info = get_platform_info()
     print_info(f"Betriebssystem: {platform_info['system']}\n")
 
-    # 0. Lese pyproject.toml (Python-Version)
-    pyproject = parse_pyproject_toml()
+    pyproject_info = parse_pyproject_toml()
+    pyproject_raw = pyproject_info.get("raw", {}) if pyproject_info else {}
 
-    # 1. Lese requirements.txt
-    requirements = parse_requirements()
-    if not requirements:
+    runtime_requirements = parse_requirements()
+    if not runtime_requirements:
         print_error("Keine Requirements gefunden!")
         return 1
 
-    # 2. Prüfe Python-Version (gegen pyproject.toml)
-    if not check_python_version(pyproject):
+    if not check_python_version(pyproject_info):
+        return 1
+
+    if not create_virtualenv():
         print_troubleshooting()
         return 1
 
-    # 3. Erstelle Virtual Environment
-    if not create_venv():
+    if not update_pip(platform_info):
         print_troubleshooting()
         return 1
 
-    # 4. Upgrade pip
-    if not upgrade_pip(platform_info):
-        pass
-
-    # 5. Konfiguriere pip Index
     configure_pip_index(platform_info)
+    check_pyqt5_macos(platform_info)
 
-    # NEU: macOS-Fix NACH pip-Konfiguration
-    if platform_info["system"] == "Darwin":
-        handle_pyqt5_macos(platform_info)
-
-    # 6. Installiere Dependencies
-    if not install_dependencies(platform_info, requirements):
+    if not install_runtime_requirements(platform_info):
         print_troubleshooting()
         return 1
 
-    # 7. Verifiziere Installation (KEINE Rekursion!)
-    if not verify_installation(platform_info, requirements):
+    dev_requirements = read_dev_requirements_from_pyproject(pyproject_raw)
+    if not install_dev_requirements(platform_info, dev_requirements):
         print_troubleshooting()
         return 1
 
-    # 8. Nächste Schritte
+    if not verify_installation(platform_info, runtime_requirements, dev_requirements):
+        print_troubleshooting()
+        return 1
+
     print_next_steps(platform_info)
-
     return 0
 
 
 if __name__ == "__main__":
+    # Für CLI-Scripts ist sys.exit(main()) zulässig, da hier der Prozess bewusst beendet wird.
     sys.exit(main())

@@ -1,5 +1,5 @@
-from autopilot import Autopilot  # ← Automatisch die richtige Klasse!
-from ufosim import UfoState, Phase, UfoSim
+from task.autopilot import Autopilot  # ← Automatisch die richtige Klasse!
+from .ufosim import UfoState, Phase, UfoSim
 
 if __name__ == "__main__":
     sim = UfoSim()
