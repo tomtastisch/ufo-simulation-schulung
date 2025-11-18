@@ -37,7 +37,8 @@ sind bewusst deutsch gehalten.
 - **Verantwortlichkeiten**: Lead Dev (Hauptimplementierung), Reviewer (Code-Review), QA (Tests/Checks nach Option B:
   Selbsttest + unabhängige Prüfung).
 - **Referenz**: Detaillierte Anforderungen siehe `docs/specs/notes/introductions.md` (Abschnittsnummer entspricht
-  Ticket-ID).
+  Ticket-ID). **Architektur-Zielbild**: `docs/specs/architecture/core-simulation-zielbild.md` (erstellt in T0) – 
+  verbindliche Referenz für alle Phasen T1–T17.
 
 ## Nächste Schritte
 
