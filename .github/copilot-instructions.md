@@ -81,7 +81,7 @@ Docstrings:
 
 Stil:
 
-- Klare, sachliche, technische Sprache (Deutsch oder Englisch, innerhalb eines Moduls konsistent).
+- Klare, sachliche, technische Sprache ausschließlich auf Deutsch und innerhalb eines Moduls konsistent eingesetzt.
 - Strukturierte Docstrings (z. B. Google- oder NumPy-Stil).
 
 Kommentare:

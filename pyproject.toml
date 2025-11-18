@@ -9,7 +9,7 @@ description = "UFO/Drohnen-Simulation mit Autopilot-Schulungsvorlage für Anfän
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
-    { name = "tomtastisch", email = "tom@example.com" }
+    { name = "tomtastisch", email = "tomtastisch@icloud.com" }
 ]
 keywords = ["simulation", "education", "ufo", "autopilot", "python"]
 classifiers = [

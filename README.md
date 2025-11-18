@@ -72,7 +72,7 @@ Das Script macht automatisch:
 - ✅ Prüft die Installation
 - ✅ Zeigt nächste Schritte
 
-**Falls Fehler:** Siehe [Troubleshooting](#🆘-troubleshooting) unten.
+**Falls Fehler:** Siehe [Troubleshooting](#troubleshooting) unten.
 
 ---
 
@@ -101,3 +101,25 @@ Das UFO fliegt automatisch zum Ziel und landet. `USE_DEMO = True` in `autopilot.
 Das UFO soll **automatisch fliegen** können. Du musst 3 Funktionen implementieren:
 
 [... REST wie vorher ...]
+
+## Troubleshooting
+
+Hier einige häufige Probleme und Lösungen:
+
+- **Problem:** Python 3.11 nicht installiert
+    - **Lösung:** [Python 3.11+ herunterladen und installieren](https://www.python.org/downloads/)
+
+- **Problem:** Fehler bei der Ausführung von `setup.py`
+    - **Lösung:** Stelle sicher, dass du die neuesten Versionen von `pip` und `setuptools` hast:
+      ```bash
+      python -m pip install --upgrade pip setuptools
+      ```
+
+- **Problem:** PyQt5 oder NumPy installieren fehlgeschlagen
+    - **Lösung:** Überprüfe deine Internetverbindung und versuche es erneut.
+
+- **Problem:** Demo startet nicht
+    - **Lösung:** Stelle sicher, dass das Virtual Environment aktiviert ist.
+
+Für weitere Hilfe, konsultiere die [Dokumentation](https://github.com/tomtastisch/ufo-simulation-schulung) oder
+kontaktiere den Support.
