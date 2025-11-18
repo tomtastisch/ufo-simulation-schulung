@@ -165,15 +165,16 @@ Kritische Fixes & Optimierungen:
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, replace as dataclass_replace
-from typing import Optional, List, Tuple, Literal, overload, Callable, Any, TypeVar, final
-from pathlib import Path
-from functools import wraps
-from collections import deque
-from enum import Enum, auto
-import time
-import threading
+
 import logging
+import threading
+import time
+from collections import deque
+from dataclasses import dataclass, replace as dataclass_replace
+from enum import Enum, auto
+from functools import wraps
+from pathlib import Path
+from typing import Optional, List, Tuple, Literal, overload, Callable, Any, TypeVar, final
 
 import numpy as np
 from PyQt5 import QtWidgets, QtGui, QtCore
@@ -608,7 +609,6 @@ def compute_phase(s: 'UfoState', config: SimulationConfig = DEFAULT_CONFIG) -> P
     """
     has_flown = s.dist > config.zero_value or s.ftime > config.zero_value
 
-    # ToDo: Vereinheitlichen/Optimieren durch vergleich/analyse mit Inhalten aus Phasenmodell
     # Rules werden in Prioritätsreihenfolge geprüft
     rules: list[tuple[Phase, bool]] = [
         ("crashed", s.z < config.zero_value),
