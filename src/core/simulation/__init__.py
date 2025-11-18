@@ -5,13 +5,12 @@ Stellt die zentralen Klassen und Konfigurationen der Simulation bereit.
 """
 
 from .autopilot_base import AutopilotBase
+from .config import SimulationConfig, DEFAULT_CONFIG
 from .ufosim import (
     UfoSim,
     UfoState,
     Phase,
     ManeuverAnalysis,
-    SimulationConfig,
-    DEFAULT_CONFIG,
 )
 
 __version__ = "1.0.0"
