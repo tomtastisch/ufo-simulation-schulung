@@ -1,13 +1,36 @@
-steps:
-  - name: Install Setuptools
-    run: pip install setuptools
-  - name: Set up Python
-    uses: actions/setup-python@v2
-    with:
-      python-version: ${{ matrix.python-version }}
-  - name: Install Dependencies
-    run: |
-      pip install -r requirements.txt
-  - name: Run setup.py
-    run: |
-      python setup.py install
+name: Setup Verification
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test-setup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Setuptools
+        run: pip install setuptools
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run setup.py
+        run: |
+          python setup.py install
