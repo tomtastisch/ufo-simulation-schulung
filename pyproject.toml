@@ -41,7 +41,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 core = [
-    "simulation/ressources/*.png",
+    "simulation/resources/*.png",
 ]
 
 [tool.setuptools.dynamic]
