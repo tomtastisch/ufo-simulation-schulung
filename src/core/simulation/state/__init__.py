@@ -16,6 +16,7 @@ Rolle und Verantwortlichkeiten:
 Hauptklassen:
     UfoState: Dataclass mit slots für den physikalischen Zustand
               (18 Felder: Position, Geschwindigkeit, Beschleunigung, Statistik, Steuerkommandos)
+              Hinweis: Derzeit mutable; Immutability (frozen=True) für zukünftiges Refactoring geplant
 
 Architektur-Konformität:
     - Keine Abhängigkeiten zu höherwertigen Modulen (StateManager, PhysicsEngine,

@@ -12,6 +12,10 @@ Implementierungsdetails:
     - 3 Properties (position_vector, velocity_vector, acceleration_vector) für NumPy-basierte
       Vektoroperationen
     - Alle Felder mit Standardwerten (0.0 für Komponenten, 90.0 für Winkel d/i)
+    
+Hinweis:
+    Derzeit mutable (ohne frozen=True), da PhysicsEngine in-place Modifikationen durchführt.
+    Immutability (frozen=True) ist für zukünftiges Refactoring geplant.
 """
 
 from dataclasses import dataclass
