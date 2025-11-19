@@ -16,10 +16,10 @@ Implementierungsdetails:
     
 Hinweis:
     frozen=True implementiert, erfordert aber Refactoring von PhysicsEngine (in-place Modifikationen).
-    TODO: Siehe Ticket 3-1 für Migration zu immutable State-Updates.
 """
 
 from dataclasses import dataclass
+
 import numpy as np
 
 
