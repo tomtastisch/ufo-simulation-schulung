@@ -32,7 +32,7 @@ Dieses Dokument verfolgt den Implementierungsstatus der einzelnen Refactoring-Ti
 - ✅ `state/__init__.py` mit Export-API erstellt
 - ✅ `UfoState` aus `ufosim.py` entfernt
 - ✅ Alle Imports angepasst (`ufosim.py`, `ufo_main.py`, `__init__.py`)
-- ✅ Smoke-Tests in `tests/test_state_import.py` erstellt (8 Tests, alle bestanden)
+- ✅ Smoke-Tests in `tests/test_state_import.py` erstellt (6 Tests, alle bestanden)
 - ✅ Integration mit `UfoSim` getestet und funktionsfähig
 - ✅ Rückwärtskompatibilität gewährleistet (`from core.simulation import UfoState`)
 - ⏳ Dokumentation wird aktualisiert
