@@ -29,9 +29,10 @@ ENV/
 env/
 .venv
 
-# IDE
+# IDE/Editor artifacts
 .vscode/
 .idea/
+*.iml
 *.swp
 *.swo
 *~
