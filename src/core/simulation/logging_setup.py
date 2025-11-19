@@ -9,11 +9,13 @@ Logging-Verhalten ohne Nebenwirkungen auf andere Projekte im gleichen Prozess.
 """
 
 import logging
+import threading
 from typing import Optional
 
 
-# Flag um sicherzustellen, dass Konfiguration nur einmal gesetzt wird
+# Flag und Lock für thread-sichere Konfiguration
 _logging_configured = False
+_config_lock = threading.Lock()
 
 
 def configure_logging(
@@ -39,24 +41,27 @@ def configure_logging(
 
     Hinweise
     --------
-    - Die Funktion ist idempotent: mehrfache Aufrufe haben keine zusätzlichen Effekte
+    - Die Funktion ist idempotent und thread-sicher: mehrfache Aufrufe haben keine zusätzlichen Effekte
     - Verwendet moderate Einstellungen, um Interferenzen mit anderen Projekten zu vermeiden
-    - Konfiguriert nur den Root-Logger
+    - Konfiguriert den Root-Logger (wie in Spezifikation gefordert)
+    - Thread-sicher durch Lock-Mechanismus
     """
     global _logging_configured
 
-    if _logging_configured:
-        return
+    # Thread-sichere Prüfung und Konfiguration
+    with _config_lock:
+        if _logging_configured:
+            return
 
-    if format_string is None:
-        format_string = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        if format_string is None:
+            format_string = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
-    if datefmt is None:
-        datefmt = "%Y-%m-%d %H:%M:%S"
+        if datefmt is None:
+            datefmt = "%Y-%m-%d %H:%M:%S"
 
-    logging.basicConfig(level=level, format=format_string, datefmt=datefmt)
+        logging.basicConfig(level=level, format=format_string, datefmt=datefmt)
 
-    _logging_configured = True
+        _logging_configured = True
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -81,7 +86,7 @@ def get_logger(name: str) -> logging.Logger:
     >>> logger = get_logger(__name__)
     >>> logger.info("Simulation gestartet")
     """
-    # Stelle sicher, dass Logging konfiguriert ist
+    # Stelle sicher, dass Logging konfiguriert ist (thread-sicher durch Lock in configure_logging)
     if not _logging_configured:
         configure_logging()
 
