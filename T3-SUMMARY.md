@@ -77,21 +77,21 @@ Alle Anforderungen aus `docs/specs/architecture/core-simulation-zielbild.md` (Ab
 
 ### Smoke-Tests (tests/test_state_import.py)
 
-Alle 8 Tests bestanden (100%):
+Alle 6 Smoke-Tests bestanden (100%):
 
 | Test | Beschreibung | Status |
 |------|-------------|--------|
 | test_state_import | Import funktioniert | ✅ |
 | test_state_instantiation_defaults | Defaults korrekt | ✅ |
 | test_state_instantiation_custom | Custom values | ✅ |
-| test_state_has_required_attributes | 18 Felder vorhanden | ✅ |
 | test_state_vector_properties | numpy Properties | ✅ |
 | test_state_is_dataclass | Dataclass-Feature | ✅ |
 | test_state_uses_slots | Slots-Optimierung | ✅ |
-| (manuell) | Integration mit UfoSim | ✅ |
+
 
 ### Integration-Tests
 
+- (manuell) Integration mit UfoSim: ✅
 Alle kritischen Integrationspunkte getestet:
 
 - ✅ UfoSim.get_state_snapshot() liefert UfoState-Instanz
