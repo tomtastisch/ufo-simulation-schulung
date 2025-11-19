@@ -100,7 +100,54 @@ Das UFO fliegt automatisch zum Ziel und landet. `USE_DEMO = True` in `autopilot.
 
 Das UFO soll **automatisch fliegen** können. Du musst 3 Funktionen implementieren:
 
-[... REST wie vorher ...]
+- `takeoff()` - Das UFO startet und gewinnt Höhe.
+- `cruise()` - Das UFO fliegt mit konstanter Geschwindigkeit und Höhe.
+- `landing()` - Das UFO landet sicher.
+
+**Tipps:**
+- Nutze die bereitgestellten Hilfsfunktionen in `simulation/utils.py`.
+- Sieh dir die Demo-Implementierung in `simulation/autopilot_demo.py` an.
+
+Viel Erfolg! 🚀
+
+---
+
+## 🚧 Refactor: T3 — `UfoState` extraction (2025-11-19)
+
+Im Rahmen des Refactorings wurde der Simulationszustand (`UfoState`) in ein eigenes Paket ausgelagert
+und gleichzeitig die Visualisierungslogik entkoppelt:
+
+- `UfoState` wurde nach `src/core/simulation/state/state.py` verschoben und als immutable (`frozen=True`) dataclass definiert.
+- Für Rückwärtskompatibilität wurde ein `StateProxy` eingeführt: alte Skripte, die `sim.state.delta_v = ...` verwenden,
+  funktionieren weiterhin — intern werden Änderungen immutable über `StateManager.update_state()` angewendet.
+- Die PyQt-basierten GUI-Komponenten wurden in `src/core/simulation/view.py` ausgelagert und werden nur geladen,
+  wenn `sim.start(show_view=True)` aufgerufen wird (lazy import). Das erleichtert Headless-Tests.
+
+Kurz: API bleibt kompatibel, State ist jetzt immutable (sicherer), GUI ist lazy-loaded.
+
+### Schnelltests (lokal)
+
+```bash
+# 1) Virtualenv aktivieren
+source .venv/bin/activate
+
+# 2) Unit-Tests laufen lassen
+pytest -q
+
+# 3) Headless demo (Autopilot)
+python - <<'PY'
+from task.autopilot import Autopilot
+from core.simulation.ufosim import UfoSim
+sim = UfoSim()
+ap = Autopilot()
+sim.start(speedup=1, destinations=[(10.0,0.0)], show_view=False, enable_logging=True, log_every_step=False, autopilot_callback=ap)
+PY
+
+# 4) Voller Demo mit GUI (erfordert PyQt5 and X11/Window system)
+python -m core.simulation.ufo_main
+```
+
+---
 
 ## Troubleshooting
 

@@ -181,7 +181,6 @@ from PyQt5 import QtWidgets, QtGui, QtCore
 
 # Import UfoState from state package
 from .state import UfoState
-
 from .config import SimulationConfig, DEFAULT_CONFIG
 
 # Type variable for synchronized decorator
@@ -1266,13 +1265,15 @@ class UfoSim:
         return self.__running
 
     @property
-    def state(self) -> UfoState:
+    def state(self) -> StateProxy:
         """
-        Legacy-Kompatibilität: Direkter State-Zugriff.
+        Legacy-kompatibler Proxy: erlaubt `sim.state.x = ...` bei frozen UfoState.
 
-        WARNUNG: NICHT thread-sicher! Verwende get_state_snapshot() stattdessen.
+        Lesezugriffe geben Werte aus einem Snapshot zurück, Schreibzugriffe werden
+        an den StateManager delegiert und erzeugen einen neuen UfoState via
+        dataclass_replace.
         """
-        return self._state_manager.state
+        return StateProxy(self._state_manager)
 
     def get_phase(self) -> Phase:
         """
@@ -1871,6 +1872,38 @@ class UfoPView(QtWidgets.QGraphicsView):
         event.accept()
 
 
+class StateProxy:
+    """Legacy-kompatibler Proxy: erlaubt `sim.state.x = ...` bei frozen UfoState.
+
+    Lesezugriffe geben Werte aus einem Snapshot zurück, Schreibzugriffe werden
+    an den StateManager delegiert und erzeugen einen neuen UfoState via
+    dataclass_replace.
+    """
+
+    def __init__(self, manager: 'StateManager') -> None:
+        object.__setattr__(self, "_manager", manager)
+
+    def __getattr__(self, name: str):
+        snap = self._manager.get_snapshot()
+        if hasattr(snap, name):
+            return getattr(snap, name)
+        raise AttributeError(name)
+
+    def __setattr__(self, name: str, value) -> None:
+        def updater(state: UfoState) -> UfoState:
+            try:
+                return dataclass_replace(state, **{name: value})
+            except Exception:
+                # If replacement fails (unknown attribute), just return unchanged state
+                return state
+
+        self._manager.update_state(updater)
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        snap = self._manager.get_snapshot()
+        return f"StateProxy({snap})"
+
+
 __all__ = [
     # Simulation (Hauptklasse)
     "UfoSim",
@@ -1886,3 +1919,4 @@ __all__ = [
     # Manöver-Analyse (für Autopilot)
     "ManeuverAnalysis",
 ]
+
