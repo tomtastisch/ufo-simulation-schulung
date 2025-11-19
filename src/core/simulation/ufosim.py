@@ -166,7 +166,6 @@ Kritische Fixes & Optimierungen:
 
 from __future__ import annotations
 
-import logging
 import threading
 import time
 from collections import deque
@@ -182,6 +181,8 @@ from PyQt5 import QtWidgets, QtGui, QtCore
 # Import UfoState from state package
 from .state import UfoState
 from .config import SimulationConfig, DEFAULT_CONFIG
+from .logging_setup import get_logger
+from .exceptions import SimulationError, ConfigError
 
 # Type variable for synchronized decorator
 F = TypeVar('F', bound=Callable[..., Any])
@@ -203,16 +204,10 @@ def synchronized(method: F) -> F:
 
 
 # =============================================================================
-# LOGGING SETUP - Zentrale Konfiguration
+# LOGGING - Verwendet zentrale Konfiguration aus logging_setup
 # =============================================================================
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # =============================================================================
