@@ -7,22 +7,23 @@ Dieses Modul definiert die zentrale Datenstruktur `UfoState`, die den vollständ
 physikalischen Zustand des UFOs/der Drohne repräsentiert.
 
 Implementierungsdetails:
-    - `@dataclass(slots=True, kw_only=True)` für Performance und typsichere Initialisierung
+    - `@dataclass(slots=True, kw_only=True, frozen=True)` für Performance, typsichere
+      Initialisierung und Immutability
     - 18 Felder für Position, Geschwindigkeit, Beschleunigung, Statistik und Steuerkommandos
     - 3 Properties (position_vector, velocity_vector, acceleration_vector) für NumPy-basierte
       Vektoroperationen
     - Alle Felder mit Standardwerten (0.0 für Komponenten, 90.0 für Winkel d/i)
     
 Hinweis:
-    Derzeit mutable (ohne frozen=True), da PhysicsEngine in-place Modifikationen durchführt.
-    Immutability (frozen=True) ist für zukünftiges Refactoring geplant.
+    frozen=True implementiert, erfordert aber Refactoring von PhysicsEngine (in-place Modifikationen).
+    TODO: Siehe Ticket 3-1 für Migration zu immutable State-Updates.
 """
 
 from dataclasses import dataclass
 import numpy as np
 
 
-@dataclass(slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True, frozen=True)
 class UfoState:
     """
     Repräsentiert den aktuellen physikalischen Zustand des UFOs.

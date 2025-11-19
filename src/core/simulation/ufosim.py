@@ -732,6 +732,11 @@ class StateManager:
 
     Kapselt Zugriff auf UfoState und bietet Event-System für Änderungsbenachrichtigungen.
     Implementiert Observer-Pattern für Listener-Registrierung.
+    
+    TODO (Ticket 3-1): Refactoring für frozen UfoState erforderlich.
+          update_state() muss geändert werden zu:
+          update_state(update_func: Callable[[UfoState], UfoState])
+          Die update_func gibt neuen State zurück statt in-place zu ändern.
     """
 
     def __init__(self, initial_state: Optional['UfoState'] = None):
@@ -761,6 +766,10 @@ class StateManager:
     def update_state(self, update_func: Callable[['UfoState'], None]) -> None:
         """
         Führt atomare State-Aktualisierung aus und benachrichtigt Observer.
+        
+        TODO (Ticket 3-1): Mit frozen=True nicht kompatibel. Signature ändern zu:
+              update_state(self, update_func: Callable[[UfoState], UfoState]) -> None
+              Dann: self._state = update_func(self._state)
 
         Args:
             update_func: Funktion die State modifiziert (receives mutable state)
@@ -869,6 +878,10 @@ class PhysicsEngine:
     Enthält alle Berechnungen für Bewegung, Beschleunigung und Landung.
     Rein funktional - keine Seiteneffekte außer State-Modifikation.
     Thread-sicher durch externes Locking (über StateManager).
+    
+    TODO (Ticket 3-1): Refactoring zu immutable State-Updates erforderlich.
+          UfoState ist jetzt frozen=True. Methoden müssen neue UfoState-Instanzen
+          zurückgeben statt in-place zu modifizieren (dataclasses.replace nutzen).
     """
 
     def __init__(self, config: SimulationConfig = DEFAULT_CONFIG):
@@ -886,6 +899,10 @@ class PhysicsEngine:
         Führt einen vollständigen Physik-Integrationsschritt aus.
 
         Aktualisiert State in-place und gibt Flags zurück.
+        
+        TODO (Ticket 3-1): Mit frozen=True nicht mehr möglich. Muss refactored werden zu:
+              def integrate_step(self, state: UfoState) -> Tuple[UfoState, bool, bool]
+              Return: (updated_state, simulation_should_continue, landing_occurred)
 
         Args:
             state: Zu aktualisierender State (wird modifiziert!)
