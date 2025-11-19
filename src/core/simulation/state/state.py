@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Zustandsmodell für UFO-Simulation.
+UfoState - Datenmodell für den physikalischen Zustand des UFOs.
 
-Dieses Modul definiert die zentrale Zustandsrepräsentation `UfoState`,
-die den vollständigen physikalischen Zustand des UFOs/der Drohne kapselt.
+Dieses Modul definiert die zentrale Datenstruktur `UfoState`, die den vollständigen
+physikalischen Zustand des UFOs/der Drohne repräsentiert.
 
-`UfoState` ist als `dataclass` mit `slots=True` für Performance-Optimierung
-implementiert und nutzt numpy für effiziente Vektorberechnungen.
-
-Architektur-Konformität:
-- Keine Abhängigkeiten zu höherwertigen Modulen (StateManager, PhysicsEngine,
-  Controller, View, Command, Observer)
-- Nur Standardbibliothek, typing und numpy
-- Reine Datenstruktur mit abgeleiteten Properties
+Implementierungsdetails:
+    - `@dataclass(slots=True, kw_only=True)` für Performance und typsichere Initialisierung
+    - 18 Felder für Position, Geschwindigkeit, Beschleunigung, Statistik und Steuerkommandos
+    - 3 Properties (position_vector, velocity_vector, acceleration_vector) für NumPy-basierte
+      Vektoroperationen
+    - Alle Felder mit Standardwerten (0.0 für Komponenten, 90.0 für Winkel d/i)
 """
 
 from dataclasses import dataclass
