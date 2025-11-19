@@ -179,6 +179,8 @@ from typing import Optional, List, Tuple, Literal, overload, Callable, Any, Type
 import numpy as np
 from PyQt5 import QtWidgets, QtGui, QtCore
 
+# Import UfoState from state package
+from .state import UfoState
 from .config import SimulationConfig, DEFAULT_CONFIG
 
 # Type variable for synchronized decorator
@@ -449,8 +451,8 @@ class CommandExecutor:
             cmd: Command mit target und value
         """
 
-        def update(state: UfoState) -> None:
-            setattr(state, cmd.target, cmd.value)
+        def update(state: UfoState) -> UfoState:
+            return dataclass_replace(state, **{cmd.target: cmd.value})
 
         self._state_manager.update_state(update)
         logger.debug(f"Command executed: SET {cmd.target}={cmd.value}")
@@ -729,6 +731,8 @@ class StateManager:
 
     Kapselt Zugriff auf UfoState und bietet Event-System für Änderungsbenachrichtigungen.
     Implementiert Observer-Pattern für Listener-Registrierung.
+    
+    Refactored für frozen UfoState: update_state() akzeptiert Funktionen, die neuen State zurückgeben.
     """
 
     def __init__(self, initial_state: Optional['UfoState'] = None):
@@ -755,14 +759,14 @@ class StateManager:
         return dataclass_replace(self._state)
 
     @synchronized
-    def update_state(self, update_func: Callable[['UfoState'], None]) -> None:
+    def update_state(self, update_func: Callable[['UfoState'], 'UfoState']) -> None:
         """
         Führt atomare State-Aktualisierung aus und benachrichtigt Observer.
 
         Args:
-            update_func: Funktion die State modifiziert (receives mutable state)
+            update_func: Funktion die neuen State zurückgibt (immutable Pattern)
         """
-        update_func(self._state)
+        self._state = update_func(self._state)
         self._condition.notify_all()
 
         # Benachrichtige Observer (außerhalb Lock)
@@ -864,8 +868,11 @@ class PhysicsEngine:
     Physik-Engine für UFO-Simulation.
 
     Enthält alle Berechnungen für Bewegung, Beschleunigung und Landung.
-    Rein funktional - keine Seiteneffekte außer State-Modifikation.
+    Rein funktional - keine Seiteneffekte, arbeitet mit immutable State.
     Thread-sicher durch externes Locking (über StateManager).
+    
+    Refactored für frozen UfoState: Alle Methoden geben neue State-Instanzen zurück
+    statt in-place zu modifizieren (via dataclasses.replace).
     """
 
     def __init__(self, config: SimulationConfig = DEFAULT_CONFIG):
@@ -878,48 +885,51 @@ class PhysicsEngine:
         self.config = config
         logger.debug(f"PhysicsEngine initialized with dt={config.dt}s, vmax={config.vmax_kmh}km/h")
 
-    def integrate_step(self, state: UfoState) -> Tuple[bool, bool]:
+    def integrate_step(self, state: UfoState) -> Tuple[UfoState, bool, bool]:
         """
         Führt einen vollständigen Physik-Integrationsschritt aus.
 
-        Aktualisiert State in-place und gibt Flags zurück.
+        Gibt neuen State und Flags zurück (immutable Pattern).
 
         Args:
-            state: Zu aktualisierender State (wird modifiziert!)
+            state: Aktueller State (wird nicht modifiziert)
 
         Returns:
-            Tupel (simulation_should_continue, landing_occurred)
+            Tupel (updated_state, simulation_should_continue, landing_occurred)
         """
         simulation_continues = True
         landing_occurred = False
+        
+        # Working copy für Updates
+        current_state = state
 
         # Flugzeit hochzählen wenn in der Luft
-        if state.z > self.config.zero_value:
-            state.ftime += self.config.dt
+        if current_state.z > self.config.zero_value:
+            current_state = dataclass_replace(current_state, ftime=current_state.ftime + self.config.dt)
 
         # Automatische Landungsassistenz aktivieren wenn nötig
-        self._apply_landing_assistance(state)
+        current_state = self._apply_landing_assistance(current_state)
 
         # Zustandsgrößen aktualisieren
-        self._update_velocity(state)
-        self._update_direction(state)
-        self._update_inclination(state)
+        current_state = self._update_velocity(current_state)
+        current_state = self._update_direction(current_state)
+        current_state = self._update_inclination(current_state)
 
         # Geschwindigkeit umrechnen und Distanz akkumulieren
-        vel = state.v * self.config.kmh_to_ms
-        state.vel = vel
-        state.dist += vel * self.config.dt
+        vel = current_state.v * self.config.kmh_to_ms
+        dist = current_state.dist + vel * self.config.dt
+        current_state = dataclass_replace(current_state, vel=vel, dist=dist)
 
         # Position und Beschleunigung aktualisieren
-        position_result = self._update_position(state)
+        current_state, position_result = self._update_position(current_state)
 
         if position_result == "landed":
             landing_occurred = True
             simulation_continues = False
 
-        return simulation_continues, landing_occurred
+        return current_state, simulation_continues, landing_occurred
 
-    def _apply_landing_assistance(self, state: UfoState) -> None:
+    def _apply_landing_assistance(self, state: UfoState) -> UfoState:
         """
         Automatische Landungsassistenz für sichere Landungen.
 
@@ -931,14 +941,17 @@ class PhysicsEngine:
         Wird NICHT aktiv wenn der Benutzer manuell steuert (delta_v, delta_i, delta_d != 0).
 
         Args:
-            state: Zu korrigierender State
+            state: Aktueller State
+
+        Returns:
+            Aktualisierter State (oder unverändert falls keine Assistenz nötig)
         """
         # Nur aktivieren wenn:
         # 1. In Landehöhe (z < 2.0m)
         # 2. Noch nicht gelandet (z > 0)
         # 3. In Bewegung (v > 0)
         if not (self.config.zero_value < state.z <= self.config.landing_detection_height_m and state.v > 0):
-            return
+            return state
 
         # Prüfe ob Benutzer aktiv steuert
         user_is_controlling = (
@@ -949,16 +962,18 @@ class PhysicsEngine:
 
         if user_is_controlling:
             # Benutzer hat Kontrolle - keine Assistenz
-            return
+            return state
 
         # === ASSISTENZ AKTIV ===
+        
+        updates = {}
 
         # 1. Geschwindigkeitsreduktion auf sichere Landungsgeschwindigkeit
         safe_v_kmh = self.config.safe_landing_v_threshold_kmh
         if state.v > safe_v_kmh:
             # Sanft abbremsen (1 km/h pro Schritt)
             reduction = min(self.config.acceleration_kmh_per_step, state.v - safe_v_kmh)
-            state.delta_v = -reduction
+            updates['delta_v'] = -reduction
             logger.debug(f"Landing assist: reducing velocity {state.v:.1f} -> {state.v - reduction:.1f} km/h")
 
         # 2. Neigungskorrektur für sichere Landung
@@ -980,63 +995,83 @@ class PhysicsEngine:
 
             if current_i > -10.0:
                 # Zu flach -> steiler machen (Richtung -15°)
-                state.delta_i = -self.config.inclination_step_deg
+                updates['delta_i'] = -self.config.inclination_step_deg
                 logger.debug(f"Landing assist: increasing descent angle {current_i:.1f}° -> steeper")
 
             elif -70.0 < current_i < -self.config.safe_landing_inclination_max_deg:
                 # Zu steil aber nicht vertikal -> abflachen (Richtung -20°)
-                state.delta_i = self.config.inclination_step_deg
+                updates['delta_i'] = self.config.inclination_step_deg
                 logger.debug(f"Landing assist: reducing descent angle {current_i:.1f}° -> shallower")
+        
+        if updates:
+            return dataclass_replace(state, **updates)
+        return state
 
-    def _update_velocity(self, state: UfoState) -> None:
+    def _update_velocity(self, state: UfoState) -> UfoState:
         """
         Aktualisiert Geschwindigkeit basierend auf Sollwert-Änderung.
 
         Args:
-            state: Zu aktualisierender State
+            state: Aktueller State
+
+        Returns:
+            Aktualisierter State
         """
         dv = state.delta_v
         step = (dv > 0) - (dv < 0)
 
         if step != 0:
             new_v = state.v + step * self.config.acceleration_kmh_per_step
-            state.v = max(0.0, min(new_v, self.config.vmax_kmh))
-            state.delta_v -= step * self.config.acceleration_kmh_per_step
+            clamped_v = max(0.0, min(new_v, self.config.vmax_kmh))
+            new_delta_v = state.delta_v - step * self.config.acceleration_kmh_per_step
+            return dataclass_replace(state, v=clamped_v, delta_v=new_delta_v)
+        
+        return state
 
-    def _update_direction(self, state: UfoState) -> None:
+    def _update_direction(self, state: UfoState) -> UfoState:
         """
         Aktualisiert Richtung mit Wrap-Around bei 360°.
 
         Args:
-            state: Zu aktualisierender State
+            state: Aktueller State
+
+        Returns:
+            Aktualisierter State
         """
         if state.delta_d != 0.0:
-            state.d = (state.d + state.delta_d) % self.config.direction_full_circle_deg
-            state.delta_d = 0.0
+            new_d = (state.d + state.delta_d) % self.config.direction_full_circle_deg
+            return dataclass_replace(state, d=new_d, delta_d=0.0)
+        return state
 
-    def _update_inclination(self, state: UfoState) -> None:
+    def _update_inclination(self, state: UfoState) -> UfoState:
         """
         Aktualisiert Neigung mit Clamping auf zulässigen Bereich.
 
         Args:
-            state: Zu aktualisierender State
+            state: Aktueller State
+
+        Returns:
+            Aktualisierter State
         """
         step = (state.delta_i > 0) - (state.delta_i < 0)
-        new_i = state.i + step * self.config.inclination_step_deg
-        state.i = max(self.config.inclination_min_deg, min(int(new_i), self.config.inclination_max_deg))
-        state.delta_i -= step * self.config.inclination_step_deg
+        if step != 0:
+            new_i = state.i + step * self.config.inclination_step_deg
+            clamped_i = max(self.config.inclination_min_deg, min(int(new_i), self.config.inclination_max_deg))
+            new_delta_i = state.delta_i - step * self.config.inclination_step_deg
+            return dataclass_replace(state, i=clamped_i, delta_i=new_delta_i)
+        return state
 
-    def _update_position(self, state: UfoState) -> Literal["continue", "landed"]:
+    def _update_position(self, state: UfoState) -> Tuple[UfoState, Literal["continue", "landed"]]:
         """
         Aktualisiert Position, Geschwindigkeiten und Beschleunigungen.
 
         Verwendet NumPy für effiziente 3D-Vektormathematik.
 
         Args:
-            state: Zu aktualisierender State
+            state: Aktueller State
 
         Returns:
-            "continue" wenn Simulation weiterläuft, "landed" bei Bodenkontakt
+            Tupel (updated_state, result) wobei result "continue" oder "landed" ist
         """
         result: Literal["continue", "landed"] = "continue"
 
@@ -1059,50 +1094,65 @@ class PhysicsEngine:
 
             # Neue Geschwindigkeiten
             new_velocity = state.vel * direction_unit
-            state.vx, state.vy, state.vz = new_velocity
+            vx, vy, vz = new_velocity
 
             # Position aktualisieren
             position_delta = new_velocity * self.config.dt
-            state.x += position_delta[0]
-            state.y += position_delta[1]
-            state.z += position_delta[2]
+            x = state.x + position_delta[0]
+            y = state.y + position_delta[1]
+            z = state.z + position_delta[2]
 
             # Beschleunigung berechnen
             if self.config.dt > self.config.zero_value:
                 acceleration = (new_velocity - prev_velocity) / self.config.dt
-                state.accel_x, state.accel_y, state.accel_z = acceleration
+                accel_x, accel_y, accel_z = acceleration
+            else:
+                accel_x, accel_y, accel_z = state.accel_x, state.accel_y, state.accel_z
+
+            # State mit neuen Werten aktualisieren
+            state = dataclass_replace(
+                state,
+                vx=vx, vy=vy, vz=vz,
+                x=x, y=y, z=z,
+                accel_x=accel_x, accel_y=accel_y, accel_z=accel_z
+            )
 
             # Landungs-Check
             if state.z <= self.config.zero_value:
                 result = "landed"
-                self._handle_landing(state)
+                state = self._handle_landing(state)
         else:
             # Stillstand
-            state.vx = self.config.zero_value
-            state.vy = self.config.zero_value
-            state.vz = self.config.zero_value
-            state.accel_x = self.config.zero_value
-            state.accel_y = self.config.zero_value
-            state.accel_z = self.config.zero_value
+            updates = {
+                'vx': self.config.zero_value,
+                'vy': self.config.zero_value,
+                'vz': self.config.zero_value,
+                'accel_x': self.config.zero_value,
+                'accel_y': self.config.zero_value,
+                'accel_z': self.config.zero_value
+            }
 
             # Touchdown bei geringer Höhe
             if self.config.zero_value < state.z <= self.config.landing_touchdown_z_eps:
-                state.z = self.config.zero_value
-                state.vel = self.config.zero_value
-                state.v = 0.0
+                updates['z'] = self.config.zero_value
+                updates['vel'] = self.config.zero_value
+                updates['v'] = 0.0
                 result = "landed"
+            
+            state = dataclass_replace(state, **updates)
 
-        return result
+        return state, result
 
-    def _handle_landing(self, state: UfoState) -> None:
+    def _handle_landing(self, state: UfoState) -> UfoState:
         """
         Behandelt Landung: Prüft Kriterien und setzt Crash-Marker wenn nötig.
 
         Args:
-            state: Zu aktualisierender State
-        """
-        state.z = self.config.zero_value
+            state: Aktueller State
 
+        Returns:
+            Aktualisierter State mit Landungsverarbeitung
+        """
         # Sichere Landungskriterien prüfen
         safe_velocity = state.vel <= self.config.safe_landing_v_threshold_ms
         safe_vertical = abs(state.vz) <= self.config.safe_landing_max_vz_ms
@@ -1115,80 +1165,26 @@ class PhysicsEngine:
         is_safe_landing = safe_velocity and safe_vertical and safe_inclination
 
         if not is_safe_landing:
-            state.z = -self.config.one_value  # Crash-Marker
+            z_value = -self.config.one_value  # Crash-Marker
             logger.warning(
                 f"CRASH: safe_v={safe_velocity} (vel={state.vel:.2f}m/s, max={self.config.safe_landing_v_threshold_ms:.2f}m/s), "
                 f"safe_vz={safe_vertical} (vz={state.vz:.2f}m/s, max={self.config.safe_landing_max_vz_ms:.2f}m/s), "
                 f"safe_i={safe_inclination} (i={state.i:.1f}°)"
             )
         else:
+            z_value = self.config.zero_value
             logger.info(f"Safe landing at position ({state.x:.1f}, {state.y:.1f})")
 
         # Alle Bewegungsgrößen nullen
-        state.vel = self.config.zero_value
-        state.v = 0.0
-        state.vx = self.config.zero_value
-        state.vy = self.config.zero_value
-        state.vz = self.config.zero_value
-
-
-# =============================================================================
-# STATE
-# =============================================================================
-
-@dataclass(slots=True, kw_only=True)
-class UfoState:
-    """
-    Repräsentiert den aktuellen physikalischen Zustand des UFOs.
-
-    Alle Felder sind vollständig typisiert und dokumentiert.
-    Verwendet numpy für effiziente Vektorberechnungen.
-    """
-
-    # Position [m]
-    x: float = 0.0
-    y: float = 0.0
-    z: float = 0.0
-
-    # Geschwindigkeit (v in km/h für Legacy-API, vel in m/s für Physik)
-    v: float = 0.0  # Zielgeschwindigkeit in km/h
-    vel: float = 0.0  # Aktuelle Geschwindigkeit in m/s
-    d: float = 90.0  # Richtung in Grad (0=Nord, 90=Ost)
-    i: float = 90.0  # Neigung in Grad (90=vertikal hoch, 0=horizontal, -90=vertikal runter)
-
-    # Geschwindigkeitskomponenten [m/s]
-    vx: float = 0.0  # Geschwindigkeit in x-Richtung (Ost/West)
-    vy: float = 0.0  # Geschwindigkeit in y-Richtung (Nord/Süd)
-    vz: float = 0.0  # Geschwindigkeit in z-Richtung (Höhe)
-
-    # Beschleunigung [m/s²]
-    accel_x: float = 0.0
-    accel_y: float = 0.0
-    accel_z: float = 0.0
-
-    # Statistik
-    dist: float = 0.0
-    ftime: float = 0.0
-
-    # Steuerkommandos
-    delta_v: float = 0.0
-    delta_d: float = 0.0
-    delta_i: float = 0.0
-
-    @property
-    def position_vector(self) -> np.ndarray:
-        """3D-Positionsvektor [x, y, z] in m."""
-        return np.array([self.x, self.y, self.z], dtype=np.float64)
-
-    @property
-    def velocity_vector(self) -> np.ndarray:
-        """3D-Geschwindigkeitsvektor [vx, vy, vz] in m/s."""
-        return np.array([self.vx, self.vy, self.vz], dtype=np.float64)
-
-    @property
-    def acceleration_vector(self) -> np.ndarray:
-        """3D-Beschleunigungsvektor [ax, ay, az] in m/s²."""
-        return np.array([self.accel_x, self.accel_y, self.accel_z], dtype=np.float64)
+        return dataclass_replace(
+            state,
+            z=z_value,
+            vel=self.config.zero_value,
+            v=0.0,
+            vx=self.config.zero_value,
+            vy=self.config.zero_value,
+            vz=self.config.zero_value
+        )
 
 
 # =============================================================================
@@ -1269,13 +1265,15 @@ class UfoSim:
         return self.__running
 
     @property
-    def state(self) -> UfoState:
+    def state(self) -> StateProxy:
         """
-        Legacy-Kompatibilität: Direkter State-Zugriff.
+        Legacy-kompatibler Proxy: erlaubt `sim.state.x = ...` bei frozen UfoState.
 
-        WARNUNG: NICHT thread-sicher! Verwende get_state_snapshot() stattdessen.
+        Lesezugriffe geben Werte aus einem Snapshot zurück, Schreibzugriffe werden
+        an den StateManager delegiert und erzeugen einen neuen UfoState via
+        dataclass_replace.
         """
-        return self._state_manager.state
+        return StateProxy(self._state_manager)
 
     def get_phase(self) -> Phase:
         """
@@ -1454,10 +1452,11 @@ class UfoSim:
         """
         while self.__running:
             # Physik-Step ausführen über StateManager
-            def physics_update(state: UfoState) -> None:
-                should_continue, _ = self._physics_engine.integrate_step(state)
+            def physics_update(state: UfoState) -> UfoState:
+                updated_state, should_continue, _ = self._physics_engine.integrate_step(state)
                 if not should_continue:
                     self.__running = False
+                return updated_state
 
             self._state_manager.update_state(physics_update)
 
@@ -1873,6 +1872,38 @@ class UfoPView(QtWidgets.QGraphicsView):
         event.accept()
 
 
+class StateProxy:
+    """Legacy-kompatibler Proxy: erlaubt `sim.state.x = ...` bei frozen UfoState.
+
+    Lesezugriffe geben Werte aus einem Snapshot zurück, Schreibzugriffe werden
+    an den StateManager delegiert und erzeugen einen neuen UfoState via
+    dataclass_replace.
+    """
+
+    def __init__(self, manager: 'StateManager') -> None:
+        object.__setattr__(self, "_manager", manager)
+
+    def __getattr__(self, name: str):
+        snap = self._manager.get_snapshot()
+        if hasattr(snap, name):
+            return getattr(snap, name)
+        raise AttributeError(name)
+
+    def __setattr__(self, name: str, value) -> None:
+        def updater(state: UfoState) -> UfoState:
+            try:
+                return dataclass_replace(state, **{name: value})
+            except Exception:
+                # If replacement fails (unknown attribute), just return unchanged state
+                return state
+
+        self._manager.update_state(updater)
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        snap = self._manager.get_snapshot()
+        return f"StateProxy({snap})"
+
+
 __all__ = [
     # Simulation (Hauptklasse)
     "UfoSim",
@@ -1888,3 +1919,4 @@ __all__ = [
     # Manöver-Analyse (für Autopilot)
     "ManeuverAnalysis",
 ]
+
