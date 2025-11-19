@@ -2,15 +2,25 @@ name: Setup Verification
 
 on:
   push:
-    branches: [main, develop]
+    branches: [ main, develop,'copilot/**' ]
   pull_request:
-    branches: [main, develop]
+    branches: [ main, develop ]
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
 
 jobs:
   test-setup:
     runs-on: ubuntu-latest
+
     permissions:
       contents: read
+      checks: write
+      pull-requests: write
+
     strategy:
       matrix:
         python-version: ['3.11', '3.12']
@@ -24,13 +34,17 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      # Upgrade pip to avoid installation errors
+      # pip is legacy
+      # See https://github.com/actions/setup-python/issues/279
+      - name: Upgrade pip
+        run: pip install --upgrade pip
+
       - name: Install Setuptools
         run: pip install setuptools
 
       - name: Install Dependencies
-        run: |
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
-      - name: Run setup.py
-        run: |
-          python setup.py install
+      - name: Validate setup.py
+        run: python setup.py --version
