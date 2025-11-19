@@ -14,7 +14,7 @@ Rolle und Verantwortlichkeiten:
       (StateManager ist in einem separaten Modul state/manager.py)
 
 Hauptklassen:
-    UfoState: Immutable dataclass mit slots für den physikalischen Zustand
+    UfoState: Dataclass mit slots für den physikalischen Zustand
               (18 Felder: Position, Geschwindigkeit, Beschleunigung, Statistik, Steuerkommandos)
 
 Architektur-Konformität:

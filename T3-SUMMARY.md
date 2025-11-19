@@ -125,7 +125,6 @@ Alle kritischen Integrationspunkte getestet:
 ### Code-Metriken
 
 - **Zeilen Code (state.py):** ~95 Zeilen (inkl. Docstrings)
-- **Zeilen Tests:** ~210 Zeilen
 - **Test-Abdeckung:** Import, Instanziierung, Properties, Integration
 - **Cyclomatic Complexity:** Minimal (nur Properties)
 - **Abhängigkeiten:** 2 (dataclasses, numpy)
