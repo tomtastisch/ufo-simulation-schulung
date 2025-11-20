@@ -94,9 +94,9 @@ Wert-Begrenzung:
 Integration in Simulation:
     >>> from core.simulation.utils.maths import wrap_angle_deg, clamp
     >>>
-    >>> # Physik-Engine: Geschwindigkeit begrenzen
-    >>> new_velocity = acceleration_step()
-    >>> clamped_v = clamp(new_velocity, 0.0, vmax_kmh)
+    >>> # Physik-Engine: Geschwindigkeit begrenzen (Pseudocode)
+    >>> # new_velocity = calculate_velocity(...)
+    >>> # clamped_v = clamp(new_velocity, 0.0, vmax_kmh)
     >>>
     >>> # Observer: Heading-Delta über 360°-Grenze berechnen
     >>> heading1 = wrap_angle_deg(350.0, 0.0, 360.0)  # 350.0

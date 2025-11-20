@@ -106,9 +106,9 @@ def wrap_angle_rad(angle: float) -> float:
         >>> abs(wrap_angle_rad(3 * math.pi) - (-math.pi)) < 1e-10
         True
     """
-    angle_deg = rad_to_deg(angle)
-    normalized_deg = wrap_angle_deg(angle_deg, -180.0, 180.0)
-    return deg_to_rad(normalized_deg)
+    period = 2 * math.pi
+    normalized = (angle + math.pi) % period - math.pi
+    return normalized
 
 
 def clamp(value: float, min_value: float, max_value: float) -> float:
