@@ -86,8 +86,9 @@ def get_logger(name: str) -> logging.Logger:
     >>> logger = get_logger(__name__)
     >>> logger.info("Simulation gestartet")
     """
-    # Stelle sicher, dass Logging konfiguriert ist (thread-sicher durch Lock in configure_logging)
-    if not _logging_configured:
-        configure_logging()
+    # Stelle sicher, dass Logging konfiguriert ist (thread-sicher durch Lock in get_logger)
+    with _config_lock:
+        if not _logging_configured:
+            configure_logging()
 
     return logging.getLogger(name)
