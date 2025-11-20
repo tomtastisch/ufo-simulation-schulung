@@ -429,11 +429,15 @@ class TestPhysicsEngineIntegrateStep:
                 break
             state = new_state
 
-        # Landung sollte erfolgt sein
-        # (kann je nach exaktem Zustand variieren)
-        assert landed is True or new_state.z <= 0.0
+        # Landung sollte erfolgt sein - je nach exaktem Zustand kann dies
+        # entweder durch landed-Flag oder durch Boden-Kontakt (z <= 0) angezeigt werden
+        # Prüfe zuerst das landed-Flag
         if landed:
+            # Wenn landed-Flag gesetzt ist, sollte Simulation auch stoppen
             assert continues is False
+        else:
+            # Wenn nicht landed, muss UFO zumindest den Boden berührt haben
+            assert new_state.z <= 0.0
 
     def test_integrate_step_increments_flight_time_when_airborne(self):
         """Flugzeit wird erhöht wenn in der Luft."""

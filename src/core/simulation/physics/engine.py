@@ -213,7 +213,7 @@ class PhysicsEngine:
         step = (state.delta_i > 0) - (state.delta_i < 0)
         if step != 0:
             new_i = state.i + step * self.config.inclination_step_deg
-            clamped_i = max(self.config.inclination_min_deg, min(int(new_i), self.config.inclination_max_deg))
+            clamped_i = max(self.config.inclination_min_deg, min(new_i, self.config.inclination_max_deg))
             new_delta_i = state.delta_i - step * self.config.inclination_step_deg
             return dataclass_replace(state, i=clamped_i, delta_i=new_delta_i)
         return state
