@@ -10,7 +10,7 @@ import time
 from dataclasses import replace as dataclass_replace
 from typing import Callable, List, Optional
 
-from ..state.state import UfoState
+from .state import UfoState
 from ..utils.threads import synchronized
 
 logger = logging.getLogger(__name__)

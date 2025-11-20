@@ -89,7 +89,7 @@ def test_state_manager_has_no_forbidden_dependencies():
     
     # Stelle sicher, dass nur erlaubte Imports vorhanden sind
     allowed_imports = [
-        'from ..state.state import UfoState',
+        'from .state import UfoState',
         'from ..utils.threads import synchronized',
         'import threading',
         'import time',
@@ -99,7 +99,7 @@ def test_state_manager_has_no_forbidden_dependencies():
     ]
     
     # Mindestens die Kern-Dependencies sollten vorhanden sein
-    assert 'from ..state.state import UfoState' in content
+    assert 'from .state import UfoState' in content
     assert 'from ..utils.threads import synchronized' in content
     assert 'import threading' in content
 
