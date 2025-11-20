@@ -171,9 +171,8 @@ import time
 from collections import deque
 from dataclasses import dataclass, replace as dataclass_replace
 from enum import Enum, auto
-from functools import wraps
 from pathlib import Path
-from typing import Optional, List, Tuple, Literal, overload, Callable, Any, TypeVar, final
+from typing import Optional, List, Tuple, Literal, overload, Callable, Any, final
 
 import numpy as np
 from PyQt5 import QtWidgets, QtGui, QtCore
@@ -182,25 +181,8 @@ from PyQt5 import QtWidgets, QtGui, QtCore
 from .state import UfoState
 from .config import SimulationConfig, DEFAULT_CONFIG
 from .logging_setup import get_logger
+from .synchronization.instance_lock import synchronized
 # from .exceptions import SimulationError, ConfigError  # Für zukünftige Verwendung reserviert
-
-# Type variable for synchronized decorator
-F = TypeVar('F', bound=Callable[..., Any])
-
-
-# =============================================================================
-# DECORATOR - Threadsicherheit
-# =============================================================================
-
-def synchronized(method: F) -> F:
-    """Decorator für threadsichere Methoden."""
-
-    @wraps(method)
-    def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
-        with self._lock:
-            return method(self, *args, **kwargs)
-
-    return wrapper  # type: ignore[return-value]
 
 
 # =============================================================================
@@ -331,10 +313,10 @@ class CommandQueue:
         ))
         return self
 
+    @synchronized
     def is_completed(self) -> bool:
         """Prüft ob alle Commands ausgeführt wurden."""
-        with self._lock:
-            return self.current_index >= len(self.commands)
+        return self.current_index >= len(self.commands)
 
     def wait_for_completion(self, timeout: Optional[float] = None) -> bool:
         """
@@ -391,6 +373,7 @@ class CommandExecutor:
         self._active_queue = None
         logger.debug("CommandQueue cleared")
 
+    @synchronized
     def process_commands(self, current_state: UfoState) -> None:
         """
         Verarbeitet Commands der aktiven Queue basierend auf aktuellem State.
@@ -398,45 +381,44 @@ class CommandExecutor:
         Args:
             current_state: Aktueller State für Bedingungsprüfung
         """
-        with (self._lock):
-            if self._active_queue is None or self._active_queue.is_completed():
-                return
+        if self._active_queue is None or self._active_queue.is_completed():
+            return
 
-            queue = self._active_queue
+        queue = self._active_queue
 
-            with queue.lock:
-                # Verarbeite aktuellen Command
-                if queue.current_index < len(queue.commands):
-                    cmd = queue.commands[queue.current_index]
+        with queue.lock:
+            # Verarbeite aktuellen Command
+            if queue.current_index < len(queue.commands):
+                cmd = queue.commands[queue.current_index]
 
-                    # SET_STATE: Direkt ausführen
-                    if cmd.type == CommandType.SET_STATE:
-                        self._execute_set_state(cmd)
+                # SET_STATE: Direkt ausführen
+                if cmd.type == CommandType.SET_STATE:
+                    self._execute_set_state(cmd)
+                    queue.current_index += 1
+
+                # LOG_MESSAGE: Direkt ausführen
+                elif cmd.type == CommandType.LOG_MESSAGE:
+                    print(cmd.message)
+                    logger.debug(f"Command executed: LOG {cmd.message}")
+                    queue.current_index += 1
+
+                # EXECUTE_FUNC: Direkt ausführen
+                elif cmd.type == CommandType.EXECUTE_FUNC:
+                    if cmd.func: cmd.func()
+                    logger.debug("Command executed: FUNC")
+                    queue.current_index += 1
+
+                # WAIT_CONDITION: Prüfe Bedingung
+                elif cmd.type == CommandType.WAIT_CONDITION:
+                    if cmd.condition is not None and cmd.condition(current_state):
+                        logger.debug("Command executed: WAIT condition fulfilled")
                         queue.current_index += 1
 
-                    # LOG_MESSAGE: Direkt ausführen
-                    elif cmd.type == CommandType.LOG_MESSAGE:
-                        print(cmd.message)
-                        logger.debug(f"Command executed: LOG {cmd.message}")
-                        queue.current_index += 1
-
-                    # EXECUTE_FUNC: Direkt ausführen
-                    elif cmd.type == CommandType.EXECUTE_FUNC:
-                        if cmd.func: cmd.func()
-                        logger.debug("Command executed: FUNC")
-                        queue.current_index += 1
-
-                    # WAIT_CONDITION: Prüfe Bedingung
-                    elif cmd.type == CommandType.WAIT_CONDITION:
-                        if cmd.condition is not None and cmd.condition(current_state):
-                            logger.debug("Command executed: WAIT condition fulfilled")
-                            queue.current_index += 1
-
-                # Prüfe ob Queue fertig
-                if queue.current_index >= len(queue.commands):
-                    queue.mark_completed()
-                    logger.info("CommandQueue completed")
-                    self._active_queue = None
+            # Prüfe ob Queue fertig
+            if queue.current_index >= len(queue.commands):
+                queue.mark_completed()
+                logger.info("CommandQueue completed")
+                self._active_queue = None
 
     def _execute_set_state(self, cmd: Command) -> None:
         """

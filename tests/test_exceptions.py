@@ -45,9 +45,6 @@ def test_simulation_error_can_be_raised():
     except SimulationError as e:
         assert str(e) == "Test-Fehler"
         assert isinstance(e, Exception)
-    except Exception:
-        # Sollte nicht hierher kommen
-        assert False, "SimulationError sollte als SimulationError gefangen werden"
 
 
 def test_config_error_can_be_raised():
@@ -59,9 +56,6 @@ def test_config_error_can_be_raised():
     except ConfigError as e:
         assert str(e) == "Ungültige Konfiguration"
         assert isinstance(e, Exception)
-    except Exception:
-        # Sollte nicht hierher kommen
-        assert False, "ConfigError sollte als ConfigError gefangen werden"
 
 
 def test_config_error_caught_as_simulation_error():
@@ -75,9 +69,6 @@ def test_config_error_caught_as_simulation_error():
         assert isinstance(e, ConfigError)
         assert isinstance(e, SimulationError)
         assert str(e) == "Test"
-    except Exception:
-        # Sollte nicht hierher kommen
-        assert False, "ConfigError sollte als SimulationError gefangen werden können"
 
 
 def test_exception_with_no_message():
@@ -96,9 +87,8 @@ def test_exception_with_no_message():
 
 
 if __name__ == "__main__":
-    # Manueller Test-Lauf (ohne pytest)
-    print("Running smoke tests for core.simulation.exceptions...")
-    
+    from conftest import run_manual_tests
+
     tests = [
         test_exceptions_import,
         test_simulation_error_is_exception,
@@ -108,14 +98,5 @@ if __name__ == "__main__":
         test_config_error_caught_as_simulation_error,
         test_exception_with_no_message,
     ]
-    
-    for test in tests:
-        try:
-            test()
-            print(f"✓ {test.__name__}")
-        except AssertionError as e:
-            print(f"✗ {test.__name__}: {e}")
-        except Exception as e:
-            print(f"✗ {test.__name__}: {type(e).__name__}: {e}")
-    
-    print("\nAll smoke tests completed.")
+
+    run_manual_tests("core.simulation.exceptions", tests)

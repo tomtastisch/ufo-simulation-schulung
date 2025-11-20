@@ -6,8 +6,8 @@ Smoke-Test für core.simulation.logging_setup Modul.
 Testet grundlegende Import- und Funktionalität der Logging-Setup-Funktionen.
 """
 
-import sys
 import logging
+import sys
 from pathlib import Path
 
 # Sicherstellen, dass src/ im Python-Pfad ist
@@ -113,9 +113,8 @@ def test_same_logger_name_returns_same_instance():
 
 
 if __name__ == "__main__":
-    # Manueller Test-Lauf (ohne pytest)
-    print("Running smoke tests for core.simulation.logging_setup...")
-    
+    from conftest import run_manual_tests
+
     tests = [
         test_logging_setup_import,
         test_get_logger_returns_logger,
@@ -128,14 +127,5 @@ if __name__ == "__main__":
         test_multiple_loggers_independent,
         test_same_logger_name_returns_same_instance,
     ]
-    
-    for test in tests:
-        try:
-            test()
-            print(f"✓ {test.__name__}")
-        except AssertionError as e:
-            print(f"✗ {test.__name__}: {e}")
-        except Exception as e:
-            print(f"✗ {test.__name__}: {type(e).__name__}: {e}")
-    
-    print("\nAll smoke tests completed.")
+
+    run_manual_tests("core.simulation.logging_setup", tests)

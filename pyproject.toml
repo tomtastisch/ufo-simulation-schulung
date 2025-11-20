@@ -46,3 +46,28 @@ core = [
 
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
+
+[tool.pytest.ini_options]
+# Pytest-Konfiguration für die UFO-Simulation
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+# Timeout-Konfiguration für Deadlock-Erkennung
+timeout = 300
+timeout_method = "thread"
+
+# Test-Output-Einstellungen
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+]
+
+# Marker für unterschiedliche Test-Typen
+markers = [
+    "slow: Tests die länger als 1 Sekunde dauern",
+    "integration: Integration-Tests",
+    "threading: Tests mit Threading/Locks",
+]

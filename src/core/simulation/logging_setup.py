@@ -12,12 +12,15 @@ import logging
 import threading
 from typing import Optional
 
+from .synchronization.module_lock import synchronized_module
+
 
 # Flag und Lock für thread-sichere Konfiguration
 _logging_configured = False
 _config_lock = threading.RLock()
 
 
+@synchronized_module(_config_lock)
 def configure_logging(
     level: int = logging.INFO,
     format_string: Optional[str] = None,
@@ -44,26 +47,26 @@ def configure_logging(
     - Die Funktion ist idempotent und thread-sicher: mehrfache Aufrufe haben keine zusätzlichen Effekte
     - Verwendet moderate Einstellungen, um Interferenzen mit anderen Projekten zu vermeiden
     - Konfiguriert den Root-Logger (wie in Spezifikation gefordert)
-    - Thread-sicher durch Lock-Mechanismus
+    - Thread-sicher durch @synchronized_module Decorator
     """
     global _logging_configured
 
-    # Thread-sichere Prüfung und Konfiguration
-    with _config_lock:
-        if _logging_configured:
-            return
+    # Thread-sichere Prüfung und Konfiguration (Lock wird durch Decorator verwaltet)
+    if _logging_configured:
+        return
 
-        if format_string is None:
-            format_string = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    if format_string is None:
+        format_string = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
-        if datefmt is None:
-            datefmt = "%Y-%m-%d %H:%M:%S"
+    if datefmt is None:
+        datefmt = "%Y-%m-%d %H:%M:%S"
 
-        logging.basicConfig(level=level, format=format_string, datefmt=datefmt)
+    logging.basicConfig(level=level, format=format_string, datefmt=datefmt)
 
-        _logging_configured = True
+    _logging_configured = True
 
 
+@synchronized_module(_config_lock)
 def get_logger(name: str) -> logging.Logger:
     """
     Gibt einen Logger mit dem angegebenen Namen zurück.
@@ -86,9 +89,8 @@ def get_logger(name: str) -> logging.Logger:
     >>> logger = get_logger(__name__)
     >>> logger.info("Simulation gestartet")
     """
-    # Stelle sicher, dass Logging konfiguriert ist (thread-sicher durch Lock in get_logger)
-    with _config_lock:
-        if not _logging_configured:
-            configure_logging()
+    # Stelle sicher, dass Logging konfiguriert ist (thread-sicher durch Decorator)
+    if not _logging_configured:
+        configure_logging()
 
     return logging.getLogger(name)
