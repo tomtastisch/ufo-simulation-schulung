@@ -15,7 +15,7 @@ from typing import Optional
 
 # Flag und Lock für thread-sichere Konfiguration
 _logging_configured = False
-_config_lock = threading.Lock()
+_config_lock = threading.RLock()
 
 
 def configure_logging(
