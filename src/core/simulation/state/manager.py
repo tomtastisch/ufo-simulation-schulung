@@ -295,11 +295,6 @@ class StateManager:
         self._condition.notify_all()
         snapshot = dataclass_replace(self._state)
         logger.debug("State reset")
-        
-        # Observer benachrichtigen (außerhalb @synchronized-Scope würde hier Lock verlassen)
-        # Da wir bereits im Lock sind, temporär speichern und nach Release benachrichtigen
-        # würde zusätzliche Komplexität bedeuten. Da reset() selten aufgerufen wird,
-        # ist die Benachrichtigung innerhalb des Locks hier akzeptabel.
         self._notify_observers(snapshot)
 
     @property
