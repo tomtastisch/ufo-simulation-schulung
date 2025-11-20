@@ -12,7 +12,7 @@ import logging
 import threading
 from typing import Optional
 
-from .utils.module_lock import synchronized_module
+from .synchronization.module_lock import synchronized_module
 
 
 # Flag und Lock für thread-sichere Konfiguration

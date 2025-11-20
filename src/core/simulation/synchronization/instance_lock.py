@@ -8,7 +8,7 @@ Der Decorator verwendet das `self._lock`-Attribut der Klasseninstanz.
 
 Verwendungsbeispiel:
     >>> import threading
-    >>> from core.simulation.utils.instance_lock import synchronized
+    >>> from core.simulation.synchronization.instance_lock import synchronized
     >>>
     >>> class SafeCounter:
     ...     def __init__(self):
