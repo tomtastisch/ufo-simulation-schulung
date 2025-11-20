@@ -88,16 +88,6 @@ def test_state_manager_has_no_forbidden_dependencies():
         assert forbidden not in content, f"StateManager sollte nicht '{forbidden}' verwenden"
     
     # Stelle sicher, dass nur erlaubte Imports vorhanden sind
-    allowed_imports = [
-        'from .state import UfoState',
-        'from ..utils.threads import synchronized',
-        'import threading',
-        'import time',
-        'import logging',
-        'from typing',
-        'from dataclasses',
-    ]
-    
     # Mindestens die Kern-Dependencies sollten vorhanden sein
     assert 'from .state import UfoState' in content
     assert 'from ..utils.threads import synchronized' in content
