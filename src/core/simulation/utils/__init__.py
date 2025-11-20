@@ -35,8 +35,20 @@ maths.py:
     - Winkel-Normalisierung (wrap_angle_deg, wrap_angle_rad)
     - Wert-Begrenzung (clamp)
 
+validation.py:
+    Validierungsfunktionen für Wertebereichs-Prüfungen:
+    - validate_range: Wirft ValueError wenn Wert außerhalb des Bereichs
+    - is_in_range: Boolean-Check für Wertebereich
+
+geometry.py:
+    Geometrische Transformationsfunktionen für 3D-Koordinaten:
+    - cartesian_to_spherical: Kartesisch → Sphärisch (x,y,z → r,θ,φ)
+    - spherical_to_cartesian: Sphärisch → Kartesisch (r,θ,φ → x,y,z)
+
 Öffentliche API
 ---------------
+**Mathematische Funktionen (maths.py):**
+
 deg_to_rad(degrees):
     Konvertiert Winkel von Grad zu Radiant mit math.radians.
 
@@ -53,6 +65,22 @@ wrap_angle_rad(angle):
 clamp(value, min_value, max_value):
     Begrenzt Wert auf Bereich [min_value, max_value].
     Validiert min_value <= max_value.
+
+**Validierungsfunktionen (validation.py):**
+
+validate_range(value, min_val, max_val, name):
+    Validiert Wertebereich, wirft ValueError bei Verletzung.
+
+is_in_range(value, min_val, max_val):
+    Prüft ob Wert in Bereich liegt (Boolean).
+
+**Geometrische Transformationen (geometry.py):**
+
+cartesian_to_spherical(x, y, z):
+    Konvertiert kartesische zu sphärischen Koordinaten (r, θ, φ).
+
+spherical_to_cartesian(r, theta, phi):
+    Konvertiert sphärische zu kartesischen Koordinaten (x, y, z).
 
 Verwendungsbeispiele
 --------------------
@@ -117,6 +145,10 @@ Architektur-Prinzipien
 - Generisch wiederverwendbar in beliebigen Projekten
 """
 
+from .geometry import (
+    cartesian_to_spherical,
+    spherical_to_cartesian,
+)
 from .maths import (
     clamp,
     deg_to_rad,
@@ -124,11 +156,22 @@ from .maths import (
     wrap_angle_deg,
     wrap_angle_rad,
 )
+from .validation import (
+    is_in_range,
+    validate_range,
+)
 
 __all__ = [
+    # maths
     "clamp",
     "deg_to_rad",
     "rad_to_deg",
     "wrap_angle_deg",
     "wrap_angle_rad",
+    # validation
+    "is_in_range",
+    "validate_range",
+    # geometry
+    "cartesian_to_spherical",
+    "spherical_to_cartesian",
 ]
