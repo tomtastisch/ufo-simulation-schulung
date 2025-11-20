@@ -16,7 +16,7 @@ from typing import List
 
 import pytest
 
-from core.simulation.utils.module_lock import synchronized_module
+from core.simulation.synchronization.module_lock import synchronized_module
 
 
 def test_module_lock_module_import():
@@ -25,7 +25,7 @@ def test_module_lock_module_import():
     
     Prüft, dass keine Import-, Lazy-Loading- oder Initialisierungsfehler auftreten.
     """
-    from core.simulation.utils import module_lock
+    from core.simulation.synchronization import module_lock
     assert module_lock is not None
     assert hasattr(module_lock, 'synchronized_module')
 

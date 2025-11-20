@@ -11,7 +11,7 @@ dieses Modul mit expliziten, oft modul-globalen Locks.
 
 Verwendungsbeispiel:
     >>> import threading
-    >>> from core.simulation.utils.module_lock import synchronized_module
+    >>> from core.simulation.synchronization.module_lock import synchronized_module
     >>>
     >>> # Modul-globaler Lock
     >>> _my_lock = threading.RLock()

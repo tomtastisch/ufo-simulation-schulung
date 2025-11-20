@@ -181,7 +181,7 @@ from PyQt5 import QtWidgets, QtGui, QtCore
 from .state import UfoState
 from .config import SimulationConfig, DEFAULT_CONFIG
 from .logging_setup import get_logger
-from .utils.instance_lock import synchronized
+from .synchronization.instance_lock import synchronized
 # from .exceptions import SimulationError, ConfigError  # Für zukünftige Verwendung reserviert
 
 

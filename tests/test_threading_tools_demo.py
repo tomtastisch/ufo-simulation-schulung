@@ -87,7 +87,7 @@ def test_synchronized_decorator_under_load():
     - pytest-timeout als Sicherheitsnetz
     - Korrekte Lock-Verwendung
     """
-    from core.simulation.utils import synchronized
+    from core.simulation.synchronization import synchronized
     
     class TestCounter:
         def __init__(self):
@@ -138,7 +138,7 @@ def test_module_lock_decorator_works():
     """
     Test für @synchronized_module Decorator mit timeout-Schutz.
     """
-    from core.simulation.utils import synchronized_module
+    from core.simulation.synchronization import synchronized_module
     
     _test_lock = threading.RLock()
     _counter = {"value": 0}
@@ -196,7 +196,7 @@ def test_complex_threading_scenario():
     Tests mit @pytest.mark.threading können selektiv ausgeführt werden:
     pytest -m threading     # Nur threading tests
     """
-    from core.simulation.utils import synchronized
+    from core.simulation.synchronization import synchronized
     
     class Resource:
         def __init__(self, name: str):

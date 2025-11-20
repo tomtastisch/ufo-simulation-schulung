@@ -1,5 +1,5 @@
 """
-Lock-Decorators für die UFO-Simulation.
+Thread-Synchronisations-Decorators für die UFO-Simulation.
 
 Dieses Paket enthält wiederverwendbare Decorators für Thread-Sicherheit,
 die keine direkten Abhängigkeiten zu den Simulationsklassen haben.
@@ -11,7 +11,7 @@ Verfügbare Decorators:
 Verwendung:
 
     **Instanzmethoden:**
-        >>> from core.simulation.utils import synchronized
+        >>> from core.simulation.synchronization import synchronized
         >>> class MyClass:
         ...     def __init__(self):
         ...         self._lock = threading.RLock()
@@ -19,7 +19,7 @@ Verwendung:
         ...     def method(self): pass
 
     **Modul-Level-Funktionen:**
-        >>> from core.simulation.utils import synchronized_module
+        >>> from core.simulation.synchronization import synchronized_module
         >>> _lock = threading.RLock()
         >>> @synchronized_module(_lock)
         ... def function(): pass
