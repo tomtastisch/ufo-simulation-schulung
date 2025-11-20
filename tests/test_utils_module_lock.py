@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Tests für core.simulation.utils.global_lock.
+Tests für core.simulation.utils.module_lock.
 
 Diese Tests prüfen:
 1. Smoke-Test: Modul kann ohne Fehler importiert werden
-2. Funktionalität: @synchronized_global Decorator funktioniert korrekt
+2. Funktionalität: @synchronized_module Decorator funktioniert korrekt
 3. Thread-Safety: Keine Race-Conditions bei parallelen Zugriffen
 4. Kompatibilität: Funktioniert mit Lock und RLock
 """
@@ -16,28 +16,28 @@ from typing import List
 
 import pytest
 
-from core.simulation.utils.global_lock import synchronized_global
+from core.simulation.utils.module_lock import synchronized_module
 
 
-def test_global_lock_module_import():
+def test_module_lock_module_import():
     """
     Smoke-Test: Modul kann importiert werden.
     
     Prüft, dass keine Import-, Lazy-Loading- oder Initialisierungsfehler auftreten.
     """
-    from core.simulation.utils import global_lock
-    assert global_lock is not None
-    assert hasattr(global_lock, 'synchronized_global')
+    from core.simulation.utils import module_lock
+    assert module_lock is not None
+    assert hasattr(module_lock, 'synchronized_module')
 
 
-def test_synchronized_global_decorator_exists():
-    """Prüft, dass der synchronized_global Decorator existiert und aufrufbar ist."""
-    assert callable(synchronized_global)
+def test_synchronized_module_decorator_exists():
+    """Prüft, dass der synchronized_module Decorator existiert und aufrufbar ist."""
+    assert callable(synchronized_module)
 
 
-def test_synchronized_global_basic_functionality():
+def test_synchronized_module_basic_functionality():
     """
-    Prüft Basisfunktionalität des @synchronized_global Decorators.
+    Prüft Basisfunktionalität des @synchronized_module Decorators.
     
     Testet:
     - Decorator kann auf Funktion angewendet werden
@@ -49,15 +49,15 @@ def test_synchronized_global_basic_functionality():
     lock = threading.RLock()
     counter = {"value": 0}
     
-    @synchronized_global(lock)
+    @synchronized_module(lock)
     def increment():
         counter["value"] += 1
     
-    @synchronized_global(lock)
+    @synchronized_module(lock)
     def get_value():
         return counter["value"]
     
-    @synchronized_global(lock)
+    @synchronized_module(lock)
     def add(amount: int):
         counter["value"] += amount
         return counter["value"]
@@ -72,19 +72,19 @@ def test_synchronized_global_basic_functionality():
     assert get_value() == 6
 
 
-def test_synchronized_global_with_lock():
+def test_synchronized_module_with_lock():
     """
-    Prüft, dass @synchronized_global mit threading.Lock funktioniert.
+    Prüft, dass @synchronized_module mit threading.Lock funktioniert.
     """
     
     lock = threading.Lock()
     counter = {"value": 0}
     
-    @synchronized_global(lock)
+    @synchronized_module(lock)
     def increment():
         counter["value"] += 1
     
-    @synchronized_global(lock)
+    @synchronized_module(lock)
     def get_value():
         return counter["value"]
     
@@ -92,27 +92,27 @@ def test_synchronized_global_with_lock():
     assert get_value() == 1
 
 
-def test_synchronized_global_thread_safety_no_race_conditions():
+def test_synchronized_module_thread_safety_no_race_conditions():
     """
     Multithread-Test: Prüft, dass keine Race-Conditions bei parallelen Zugriffen auftreten.
     
     Testet:
     - 100 Threads führen jeweils 100 Inkremente durch
     - Erwartetes Ergebnis: 10.000 (keine Race-Conditions)
-    - Ohne @synchronized_global würde das Ergebnis typischerweise < 10.000 sein
+    - Ohne @synchronized_module würde das Ergebnis typischerweise < 10.000 sein
     """
     
     lock = threading.RLock()
     counter = {"value": 0}
     
-    @synchronized_global(lock)
+    @synchronized_module(lock)
     def increment():
         # Simuliere kritischen Abschnitt mit Read-Modify-Write
         old_value = counter["value"]
         time.sleep(0.0001)  # Kurze Verzögerung um Race-Conditions zu provozieren
         counter["value"] = old_value + 1
     
-    @synchronized_global(lock)
+    @synchronized_module(lock)
     def get_value():
         return counter["value"]
     
@@ -141,7 +141,7 @@ def test_synchronized_global_thread_safety_no_race_conditions():
         f"Race-Condition detected: Expected {expected_result}, got {get_value()}"
 
 
-def test_synchronized_global_reentrant_with_rlock():
+def test_synchronized_module_reentrant_with_rlock():
     """
     Prüft Wiedereintrittsfähigkeit bei RLock.
     
@@ -152,17 +152,17 @@ def test_synchronized_global_reentrant_with_rlock():
     lock = threading.RLock()
     counter = {"value": 0}
     
-    @synchronized_global(lock)
+    @synchronized_module(lock)
     def increment():
         counter["value"] += 1
     
-    @synchronized_global(lock)
+    @synchronized_module(lock)
     def increment_twice():
         # Ruft eine andere synchronisierte Funktion auf
         increment()
         increment()
     
-    @synchronized_global(lock)
+    @synchronized_module(lock)
     def get_value():
         return counter["value"]
     
@@ -170,7 +170,7 @@ def test_synchronized_global_reentrant_with_rlock():
     assert get_value() == 2
 
 
-def test_synchronized_global_preserves_exceptions():
+def test_synchronized_module_preserves_exceptions():
     """
     Prüft, dass Exceptions aus dekorierten Funktionen korrekt durchgereicht werden
     und das Lock trotzdem freigegeben wird.
@@ -178,11 +178,11 @@ def test_synchronized_global_preserves_exceptions():
     
     lock = threading.RLock()
     
-    @synchronized_global(lock)
+    @synchronized_module(lock)
     def throw_error():
         raise ValueError("Test exception")
     
-    @synchronized_global(lock)
+    @synchronized_module(lock)
     def check_lock_free():
         # Wenn Lock nicht freigegeben wurde, würde dies blockieren
         return True
@@ -195,7 +195,7 @@ def test_synchronized_global_preserves_exceptions():
     assert check_lock_free() is True
 
 
-def test_synchronized_global_preserves_function_signature():
+def test_synchronized_module_preserves_function_signature():
     """
     Prüft, dass der Decorator die Funktionssignatur erhält.
     
@@ -204,7 +204,7 @@ def test_synchronized_global_preserves_function_signature():
     
     lock = threading.RLock()
     
-    @synchronized_global(lock)
+    @synchronized_module(lock)
     def documented_function(x: int, y: str) -> str:
         """Eine gut dokumentierte Funktion."""
         return f"{y}: {x}"
@@ -218,14 +218,14 @@ def test_synchronized_global_preserves_function_signature():
     assert result == "Answer: 42"
 
 
-def test_synchronized_global_with_kwargs():
+def test_synchronized_module_with_kwargs():
     """
-    Prüft, dass @synchronized_global mit Keyword-Argumenten funktioniert.
+    Prüft, dass @synchronized_module mit Keyword-Argumenten funktioniert.
     """
     
     lock = threading.RLock()
     
-    @synchronized_global(lock)
+    @synchronized_module(lock)
     def flexible_function(a: int, b: int = 10, c: int = 20) -> int:
         return a + b + c
     
@@ -235,7 +235,7 @@ def test_synchronized_global_with_kwargs():
     assert flexible_function(1, b=2, c=3) == 6
 
 
-def test_synchronized_global_multiple_locks():
+def test_synchronized_module_multiple_locks():
     """
     Prüft, dass verschiedene Locks unabhängig voneinander funktionieren.
     """
@@ -246,23 +246,23 @@ def test_synchronized_global_multiple_locks():
     counter1 = {"value": 0}
     counter2 = {"value": 0}
     
-    @synchronized_global(lock1)
+    @synchronized_module(lock1)
     def increment1():
         old = counter1["value"]
         time.sleep(0.001)
         counter1["value"] = old + 1
     
-    @synchronized_global(lock2)
+    @synchronized_module(lock2)
     def increment2():
         old = counter2["value"]
         time.sleep(0.001)
         counter2["value"] = old + 1
     
-    @synchronized_global(lock1)
+    @synchronized_module(lock1)
     def get_value1():
         return counter1["value"]
     
-    @synchronized_global(lock2)
+    @synchronized_module(lock2)
     def get_value2():
         return counter2["value"]
     
@@ -284,14 +284,14 @@ def test_synchronized_global_multiple_locks():
     assert get_value2() == 10
 
 
-def test_synchronized_global_with_args_and_kwargs():
+def test_synchronized_module_with_args_and_kwargs():
     """
     Prüft komplexe Parameterkombinationen.
     """
     
     lock = threading.RLock()
     
-    @synchronized_global(lock)
+    @synchronized_module(lock)
     def complex_function(*args, **kwargs):
         return {"args": args, "kwargs": kwargs}
     

@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Global Lock Utilities für die UFO-Simulation.
+Module-Lock Decorator für die UFO-Simulation.
 
-Dieses Modul stellt Decorators für Thread-Sicherheit bei Modul-Level-Funktionen
-bereit, die mit globalen Locks arbeiten.
+Dieses Modul stellt einen Decorator für Thread-Sicherheit bei Modul-Level-Funktionen bereit.
+Der Decorator erwartet ein explizit übergebenes Lock-Objekt als Parameter.
 
-Im Gegensatz zu `threads.py` (für Instanzmethoden mit `self._lock`) arbeitet
-dieses Modul mit globalen/modulweiten Locks.
+Im Gegensatz zu `instance_lock` (für Instanzmethoden mit `self._lock`) arbeitet
+dieses Modul mit expliziten, oft modul-globalen Locks.
 
 Verwendungsbeispiel:
     >>> import threading
-    >>> from core.simulation.utils.global_lock import synchronized_global
+    >>> from core.simulation.utils.module_lock import synchronized_module
     >>>
-    >>> # Globaler Lock auf Modul-Ebene
+    >>> # Modul-globaler Lock
     >>> _my_lock = threading.RLock()
     >>>
-    >>> @synchronized_global(_my_lock)
+    >>> @synchronized_module(_my_lock)
     >>> def critical_function():
     ...     # Thread-sichere Funktion
     ...     pass
@@ -28,20 +28,20 @@ import threading
 from functools import wraps
 from typing import Any, Callable, TypeVar
 
-# Type variable für den synchronized_global Decorator
+# Type variable für den synchronized_module Decorator
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-def synchronized_global(lock: threading.Lock | threading.RLock) -> Callable[[F], F]:
+def synchronized_module(lock: threading.Lock | threading.RLock) -> Callable[[F], F]:
     """
-    Decorator für threadsichere Funktionsaufrufe mit globalem Lock.
+    Decorator für threadsichere Modul-Level-Funktionen mit explizitem Lock.
 
-    Dieser Decorator schützt eine Funktion durch automatisches Locking
+    Dieser Decorator schützt eine Modul-Level-Funktion durch automatisches Locking
     über das übergebene Lock-Objekt. Das Lock wird beim Funktionseintritt
     erworben und beim Verlassen (auch bei Exceptions) automatisch freigegeben.
 
-    Im Gegensatz zu `@synchronized` (für Instanzmethoden) erwartet dieser
-    Decorator ein explizit übergebenes Lock-Objekt.
+    Im Gegensatz zu `@synchronized` (für Instanzmethoden mit `self._lock`) erwartet
+    dieser Decorator ein explizit übergebenes Lock-Objekt als Parameter.
 
     Args:
         lock: Das zu verwendende Lock-Objekt (threading.Lock oder threading.RLock)
@@ -65,7 +65,7 @@ def synchronized_global(lock: threading.Lock | threading.RLock) -> Callable[[F],
         >>> _config_lock = threading.RLock()
         >>> _configured = False
         >>>
-        >>> @synchronized_global(_config_lock)
+        >>> @synchronized_module(_config_lock)
         >>> def configure():
         ...     global _configured
         ...     if not _configured:
@@ -74,9 +74,8 @@ def synchronized_global(lock: threading.Lock | threading.RLock) -> Callable[[F],
         >>>
         >>> configure()  # Thread-sicher durch Decorator
 
-    Hinweis:
-        Für Instanzmethoden mit `self._lock` verwenden Sie stattdessen
-        den `@synchronized` Decorator aus `threads.py`.
+    Siehe auch:
+        - `synchronized`: Für Instanzmethoden mit `self._lock`
     """
 
     def decorator(func: F) -> F:

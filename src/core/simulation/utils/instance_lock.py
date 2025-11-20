@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Threading-Utilities für die UFO-Simulation.
+Instance-Lock Decorator für die UFO-Simulation.
 
-Dieses Modul stellt generische, wiederverwendbare Decorators und Hilfsfunktionen
-für Thread-Sicherheit bereit, ohne Annahmen über konkrete Simulationsklassen zu treffen.
-
-Voraussetzung:
-- Dekorierte Methoden müssen Teil einer Klasse sein, die ein `self._lock`-Attribut besitzt
-  (typischerweise `threading.RLock()` oder `threading.Lock()`).
+Dieses Modul stellt einen Decorator für Thread-Sicherheit bei Instanzmethoden bereit.
+Der Decorator verwendet das `self._lock`-Attribut der Klasseninstanz.
 
 Verwendungsbeispiel:
     >>> import threading
-    >>> from core.simulation.utils.threads import synchronized
+    >>> from core.simulation.utils.instance_lock import synchronized
     >>>
     >>> class SafeCounter:
     ...     def __init__(self):
@@ -40,9 +36,9 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 def synchronized(method: F) -> F:
     """
-    Decorator für threadsichere Methodenaufrufe.
+    Decorator für threadsichere Instanzmethoden.
 
-    Dieser Decorator schützt eine Methode durch automatisches Locking
+    Dieser Decorator schützt eine Instanzmethode durch automatisches Locking
     über das `self._lock`-Attribut der Instanz. Das Lock wird beim
     Methodeneintritt erworben und beim Verlassen (auch bei Exceptions)
     automatisch freigegeben.
@@ -52,7 +48,7 @@ def synchronized(method: F) -> F:
         - Die Klasse muss ein `self._lock`-Attribut besitzen (z.B. `threading.RLock()`)
 
     Args:
-        method: Die zu schützende Methode
+        method: Die zu schützende Instanzmethode
 
     Returns:
         Die dekorierte Methode mit identischer Signatur
@@ -84,6 +80,9 @@ def synchronized(method: F) -> F:
         >>> counter = Counter()
         >>> counter.increment()
         >>> assert counter.get_count() == 1
+
+    Siehe auch:
+        - `synchronized_module`: Für Modul-Level-Funktionen mit explizitem Lock
     """
 
     @wraps(method)

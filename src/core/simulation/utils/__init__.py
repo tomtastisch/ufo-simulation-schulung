@@ -1,18 +1,34 @@
 """
-Utilities für die UFO-Simulation.
+Lock-Decorators für die UFO-Simulation.
 
-Dieses Paket enthält wiederverwendbare Hilfsfunktionen und Decorators,
+Dieses Paket enthält wiederverwendbare Decorators für Thread-Sicherheit,
 die keine direkten Abhängigkeiten zu den Simulationsklassen haben.
 
-Verfügbare Module:
-- threads: Threading-Utilities (@synchronized Decorator für Instanzmethoden)
-- global_lock: Threading-Utilities (@synchronized_global Decorator für Modul-Level-Funktionen)
+Verfügbare Decorators:
+    - `synchronized`: Für Instanzmethoden (verwendet `self._lock`)
+    - `synchronized_module`: Für Modul-Level-Funktionen (expliziter Lock-Parameter)
+
+Verwendung:
+
+    **Instanzmethoden:**
+        >>> from core.simulation.utils import synchronized
+        >>> class MyClass:
+        ...     def __init__(self):
+        ...         self._lock = threading.RLock()
+        ...     @synchronized
+        ...     def method(self): pass
+
+    **Modul-Level-Funktionen:**
+        >>> from core.simulation.utils import synchronized_module
+        >>> _lock = threading.RLock()
+        >>> @synchronized_module(_lock)
+        ... def function(): pass
 """
 
-from .threads import synchronized
-from .global_lock import synchronized_global
+from .instance_lock import synchronized
+from .module_lock import synchronized_module
 
 __all__ = [
     "synchronized",
-    "synchronized_global",
+    "synchronized_module",
 ]

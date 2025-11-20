@@ -16,18 +16,18 @@ from typing import List
 
 import pytest
 
-from core.simulation.utils.threads import synchronized
+from core.simulation.utils.instance_lock import synchronized
 
 
-def test_threads_module_import():
+def test_instance_lock_module_import():
     """
     Smoke-Test: Modul kann importiert werden.
     
     Prüft, dass keine Import-, Lazy-Loading- oder Initialisierungsfehler auftreten.
     """
-    from core.simulation.utils import threads
-    assert threads is not None
-    assert hasattr(threads, 'synchronized')
+    from core.simulation.utils import instance_lock
+    assert instance_lock is not None
+    assert hasattr(instance_lock, 'synchronized')
 
 
 def test_synchronized_decorator_exists():

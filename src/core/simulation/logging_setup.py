@@ -12,7 +12,7 @@ import logging
 import threading
 from typing import Optional
 
-from .utils.global_lock import synchronized_global
+from .utils.module_lock import synchronized_module
 
 
 # Flag und Lock für thread-sichere Konfiguration
@@ -20,7 +20,7 @@ _logging_configured = False
 _config_lock = threading.RLock()
 
 
-@synchronized_global(_config_lock)
+@synchronized_module(_config_lock)
 def configure_logging(
     level: int = logging.INFO,
     format_string: Optional[str] = None,
@@ -47,7 +47,7 @@ def configure_logging(
     - Die Funktion ist idempotent und thread-sicher: mehrfache Aufrufe haben keine zusätzlichen Effekte
     - Verwendet moderate Einstellungen, um Interferenzen mit anderen Projekten zu vermeiden
     - Konfiguriert den Root-Logger (wie in Spezifikation gefordert)
-    - Thread-sicher durch @synchronized_global Decorator
+    - Thread-sicher durch @synchronized_module Decorator
     """
     global _logging_configured
 
@@ -66,7 +66,7 @@ def configure_logging(
     _logging_configured = True
 
 
-@synchronized_global(_config_lock)
+@synchronized_module(_config_lock)
 def get_logger(name: str) -> logging.Logger:
     """
     Gibt einen Logger mit dem angegebenen Namen zurück.
