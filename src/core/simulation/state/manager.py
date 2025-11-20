@@ -123,7 +123,6 @@ class StateManager:
         """
         return dataclass_replace(self._state)
 
-    @synchronized
     def update_state(self, update_func: Callable[[UfoState], UfoState]) -> None:
         """
         Führt atomare State-Aktualisierung aus und benachrichtigt Observer.
@@ -137,7 +136,7 @@ class StateManager:
                         Signatur: (current_state: UfoState) -> UfoState
 
         Thread-Safety:
-            - Atomare Ausführung: Update und Observer-Benachrichtigung sind atomar
+            - Atomare Ausführung: Update ist atomar unter Lock
             - Observer werden außerhalb des Locks benachrichtigt (Deadlock-Vermeidung)
             - Exception in Observer beeinflussen nicht andere Observer
 
@@ -151,11 +150,13 @@ class StateManager:
             ...     return dataclass_replace(state, z=new_z)
             >>> manager.update_state(apply_physics)
         """
-        self._state = update_func(self._state)
-        self._condition.notify_all()
-
-        # Benachrichtige Observer (außerhalb Lock)
-        snapshot = dataclass_replace(self._state)
+        # Kritischer Abschnitt: State-Update und Snapshot-Erstellung
+        with self._lock:
+            self._state = update_func(self._state)
+            self._condition.notify_all()
+            snapshot = dataclass_replace(self._state)
+        
+        # Observer außerhalb Lock benachrichtigen (nicht-kritischer Abschnitt)
         self._notify_observers(snapshot)
 
     def _notify_observers(self, snapshot: UfoState) -> None:
@@ -292,7 +293,14 @@ class StateManager:
         """
         self._state = UfoState()
         self._condition.notify_all()
+        snapshot = dataclass_replace(self._state)
         logger.debug("State reset")
+        
+        # Observer benachrichtigen (außerhalb @synchronized-Scope würde hier Lock verlassen)
+        # Da wir bereits im Lock sind, temporär speichern und nach Release benachrichtigen
+        # würde zusätzliche Komplexität bedeuten. Da reset() selten aufgerufen wird,
+        # ist die Benachrichtigung innerhalb des Locks hier akzeptabel.
+        self._notify_observers(snapshot)
 
     @property
     def state(self) -> UfoState:

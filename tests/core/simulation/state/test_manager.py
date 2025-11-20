@@ -343,6 +343,28 @@ class TestReset:
         assert len(result_container) == 1
         assert result_container[0] is True
 
+    def test_reset_notifies_observers(self):
+        """reset() benachrichtigt alle Observer."""
+        manager = StateManager()
+        notifications = []
+        
+        def observer(state: UfoState) -> None:
+            notifications.append(state.z)
+        
+        manager.register_observer(observer)
+        
+        # Erste Änderung
+        manager.update_state(lambda s: replace(s, z=100.0))
+        
+        # Reset sollte Observer benachrichtigen
+        manager.reset()
+        
+        # Observer sollte zweimal benachrichtigt worden sein (update + reset)
+        assert len(notifications) == 2
+        assert notifications[0] == 100.0
+        assert notifications[1] == 0.0  # Nach reset ist z wieder 0
+
+
 
 class TestThreadSafety:
     """Tests für Thread-Safety."""

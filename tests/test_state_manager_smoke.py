@@ -2,8 +2,6 @@
 # -*- coding: utf-8 -*-
 """Smoke-Test für StateManager-Modul - Standalone-Lauffähigkeit."""
 
-import pytest
-
 
 def test_state_manager_module_import():
     """StateManager-Modul kann standalone importiert werden."""
@@ -86,17 +84,6 @@ def test_state_manager_has_no_forbidden_dependencies():
     
     for forbidden in forbidden_imports:
         assert forbidden not in content, f"StateManager sollte nicht '{forbidden}' verwenden"
-    
-    # Stelle sicher, dass nur erlaubte Imports vorhanden sind
-    allowed_imports = [
-        'from .state import UfoState',
-        'from ..utils.threads import synchronized',
-        'import threading',
-        'import time',
-        'import logging',
-        'from typing',
-        'from dataclasses',
-    ]
     
     # Mindestens die Kern-Dependencies sollten vorhanden sein
     assert 'from .state import UfoState' in content
