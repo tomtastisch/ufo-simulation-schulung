@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """Smoke-Test für StateManager-Modul - Standalone-Lauffähigkeit."""
 
-import pytest
 
 
 def test_state_manager_module_import():
