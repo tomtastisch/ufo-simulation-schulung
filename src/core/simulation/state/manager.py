@@ -292,8 +292,9 @@ class StateManager:
         """
         self._state = UfoState()
         self._condition.notify_all()
+        snapshot = dataclass_replace(self._state)
         logger.debug("State reset")
-
+        self._notify_observers(snapshot)
     @property
     def state(self) -> UfoState:
         """
