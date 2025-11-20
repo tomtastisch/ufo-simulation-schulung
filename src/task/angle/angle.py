@@ -43,7 +43,8 @@ Lies die vollständige Aufgabenbeschreibung bevor du beginnst!
 #         Winkel in Grad (0° bis 90°)
 #     """
 #     # ← HIER KOMMT DEIN CODE AUS SCHRITT 2-5 (ohne input/print)
-#     pass
+#
+#     return ergebnis_grad
 
 # ============================================================================
 # AUFGABENBEREICH FÜR AUFGABE 1 - IMPLEMENTIERE HIER DEIN SKRIPT
@@ -174,7 +175,6 @@ pass  # ← HIER DEIN CODE FÜR TAYLOR-REIHE!
 #   - Runde das Ergebnis auf 6 Nachkommastellen
 #   - Gib das Ergebnis mit print() aus
 #
-# ⚠️ math.pi ist NICHT erlaubt in Teil 2 der Aufgabe!
 # ============================================================================
 
 pass  # ← HIER DEIN CODE FÜR UMRECHNUNG UND AUSGABE!
@@ -261,6 +261,11 @@ pass  # ← HIER DEIN CODE FÜR UMRECHNUNG UND AUSGABE!
 #       delta_x = x2 - x1          ← Code bleibt gleich
 #       ...
 #       return ergebnis_grad       ← return statt print()
+#
+# ℹ️ WIESO? : Ein sogenanntes return-statement gibt das ergebnis der Funktion
+#             zurück an den Aufrufer (statt es direkt auszugeben).
+#             So kann die Funktion in anderen Programmen (wie dem UFO-Autopilot)
+#             verwendet werden.
 #
 # ⚠️ NOCHMAL: Für Aufgabe 1 brauchst du das NICHT!
 #             Implementiere jetzt erst dein funktionierendes Skript.
