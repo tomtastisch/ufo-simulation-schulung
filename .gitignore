@@ -45,3 +45,6 @@ htmlcov/
 
 # Package
 *.whl
+
+# Setup/Bootstrap
+setup.log

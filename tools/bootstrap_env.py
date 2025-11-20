@@ -1,5 +1,17 @@
 #!/usr/bin/env python3
-"""Setup/Bootstrap-Skript für die UFO-Simulation (vormals setup.py)."""
+"""Automatisiertes Setup-Skript mit Progress-Tracking und Error-Logging.
+
+Dieses Skript führt alle notwendigen Setup-Schritte aus:
+- Virtual Environment Erstellung
+- Dependency-Installation (Runtime + Dev)
+- Projekt-Installation (Editable Mode)
+- Automatische Test-Validierung
+
+Ausgabe wird minimiert durch Progress-Bars. Fehler werden in setup.log protokolliert.
+Kann direkt ausgeführt werden oder via setup.py aufgerufen.
+
+Siehe tools/__init__.py für vollständige Modul-Dokumentation.
+"""
 
 from __future__ import annotations
 
@@ -39,6 +51,167 @@ def print_info(text: str) -> None:
 
 def print_fix(text: str) -> None:
     print(f"   🔧 {text}")
+
+
+# --- Error Logging & Subprocess Helpers -----------------------------------
+
+# Globales Flag um zu tracken ob dies der erste Fehler im aktuellen Setup ist
+_first_error_in_setup = True
+
+
+def extract_subprocess_error_details(exc: subprocess.CalledProcessError) -> str:
+    """Extrahiert Fehlerdetails aus einer CalledProcessError.
+
+    Args:
+        exc: Die CalledProcessError Exception
+
+    Returns:
+        Formatierter String mit stdout und stderr
+    """
+    details = []
+
+    if hasattr(exc, 'stdout') and exc.stdout:
+        details.append(str(exc.stdout))
+
+    if hasattr(exc, 'stderr') and exc.stderr:
+        details.append(f"\nSTDERR:\n{exc.stderr}")
+
+    return ''.join(details) if details else str(exc)
+
+
+def get_error_message(exc: subprocess.CalledProcessError) -> str:
+    """Gibt eine lesbare Fehlermeldung für Subprocess-Fehler zurück.
+
+    Args:
+        exc: Die CalledProcessError Exception
+
+    Returns:
+        Fehlermeldung (bevorzugt stderr, sonst Fallback)
+    """
+    if hasattr(exc, 'stderr') and exc.stderr:
+        return str(exc.stderr)
+    return str(exc)
+
+
+def _extract_test_summary(stdout: str) -> str | None:
+    """Extrahiert die Test-Zusammenfassung aus pytest stdout.
+
+    Args:
+        stdout: Die stdout-Ausgabe von pytest
+
+    Returns:
+        Zusammenfassungs-Zeile oder None
+    """
+    lines = stdout.strip().split("\n")
+    for line in reversed(lines):
+        if "passed" in line.lower():
+            return line.strip()
+    return None
+
+
+def _extract_test_failure_summary(stdout: str) -> list[str]:
+    """Extrahiert die Fehler-Zusammenfassung aus pytest stdout.
+
+    Args:
+        stdout: Die stdout-Ausgabe von pytest
+
+    Returns:
+        Liste der relevanten Zusammenfassungs-Zeilen
+    """
+    lines = stdout.strip().split("\n")
+    summary_started = False
+    summary_lines = []
+
+    for line in lines:
+        if "FAILED" in line or "ERROR" in line or "passed" in line.lower():
+            summary_started = True
+        if summary_started and line.strip():
+            summary_lines.append(line)
+
+    return summary_lines
+
+
+def log_error_to_file(log_file: Path, section: str, error_info: str, details: str = "") -> None:
+    """Schreibt Fehlerinformationen in die Log-Datei (nur bei Fehlern).
+
+    Beim ersten Fehler wird die Datei neu erstellt (überschrieben falls vorhanden).
+    Weitere Fehler im selben Setup-Durchlauf werden angehängt.
+
+    Args:
+        log_file: Pfad zur Log-Datei
+        section: Name des Abschnitts (z.B. "Installation: PyQt5")
+        error_info: Kurze Fehlerbeschreibung
+        details: Detaillierte Ausgabe (stdout/stderr)
+    """
+    global _first_error_in_setup
+
+    # Beim ersten Fehler: Datei neu erstellen (überschreiben)
+    if _first_error_in_setup:
+        log_file.write_text("# Setup Error Log\n# Nur Fehler werden hier protokolliert\n\n")
+        _first_error_in_setup = False
+
+    # Fehler anhängen (append)
+    with log_file.open("a", encoding="utf-8") as log:
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log.write(f"\n{'=' * 70}\n")
+        log.write(f"[{timestamp}] FEHLER: {section}\n")
+        log.write(f"{'=' * 70}\n")
+        log.write(f"{error_info}\n")
+        if details:
+            log.write(f"\nDetails:\n{details}\n")
+
+
+# --- Progress Bar ---------------------------------------------------------
+
+
+class ProgressBar:
+    """Einfacher ASCII-Progress-Bar ohne externe Dependencies."""
+
+    def __init__(self, total: int, width: int = 40, prefix: str = "") -> None:
+        """Initialisiert den Progress-Bar.
+
+        Args:
+            total: Gesamtanzahl der Schritte
+            width: Breite des Balkens in Zeichen
+            prefix: Optional: Prefix-Text vor dem Balken
+        """
+        self.total = total
+        self.width = width
+        self.prefix = prefix
+        self.current = 0
+        self._last_line_length = 0
+
+    def update(self, current: int, status: str = "") -> None:
+        """Aktualisiert den Progress-Bar.
+
+        Args:
+            current: Aktueller Fortschritt (0 bis total)
+            status: Statustext (z.B. aktuelles Paket)
+        """
+        self.current = min(current, self.total)
+        percent = int((self.current / self.total) * 100) if self.total > 0 else 0
+        filled = int((self.current / self.total) * self.width) if self.total > 0 else 0
+        bar = "█" * filled + "░" * (self.width - filled)
+
+        # Status-Text kürzen falls zu lang
+        max_status_len = 40
+        if len(status) > max_status_len:
+            status = status[:max_status_len - 3] + "..."
+
+        line = f"\r{self.prefix}[{bar}] {percent:3d}% {status}"
+
+        # Überschreibe vorherige Zeile komplett
+        if len(line) < self._last_line_length:
+            line += " " * (self._last_line_length - len(line))
+        self._last_line_length = len(line)
+
+        print(line, end="", flush=True)
+
+    def finish(self, final_status: str = "Fertig!") -> None:
+        """Schließt den Progress-Bar ab."""
+        self.update(self.total, final_status)
+        print()  # Neue Zeile
 
 
 # --- Platform helpers ------------------------------------------------------
@@ -200,10 +373,15 @@ def update_pip(platform_info: dict[str, str]) -> bool:
     python_venv = platform_info["python_venv"]
     print("⬆️  Aktualisiere pip, setuptools und wheel...")
     try:
-        subprocess.run([python_venv, "-m", "pip", "install", "--upgrade", "pip"], check=True)
         subprocess.run(
-            [python_venv, "-m", "pip", "install", "--upgrade", "setuptools>=66.1.0", "wheel"],
+            [python_venv, "-m", "pip", "install", "--upgrade", "pip", "--quiet"],
             check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            [python_venv, "-m", "pip", "install", "--upgrade", "setuptools>=66.1.0", "wheel", "--quiet"],
+            check=True,
+            capture_output=True,
         )
         print_success("pip, setuptools und wheel aktualisiert\n")
         return True
@@ -220,6 +398,7 @@ def configure_pip_index(platform_info: dict[str, str]) -> None:
         subprocess.run(
             [python_venv, "-m", "pip", "config", "set", "global.index-url", "https://pypi.org/simple"],
             check=False,
+            capture_output=True,
         )
         print_success("PyPI Index konfiguriert")
     except Exception as exc:  # noqa: BLE001
@@ -254,49 +433,176 @@ def check_pyqt5_macos(platform_info: dict[str, str]) -> None:
 # --- Dependency installation ----------------------------------------------
 
 
-def install_runtime_requirements(platform_info: dict[str, str]) -> bool:
-    """Installiert Laufzeitabhängigkeiten aus requirements.txt."""
+def install_runtime_requirements(platform_info: dict[str, str], requirements: dict[str, str]) -> bool:
+    """Installiert Laufzeitabhängigkeiten aus requirements.txt mit Progress-Bar."""
     python_venv = platform_info["python_venv"]
-    print("📥 Installiere Runtime-Dependencies (aus requirements.txt)...")
-    try:
-        subprocess.run([python_venv, "-m", "pip", "install", "-r", "requirements.txt"], check=True)
-        print_success("Alle Runtime-Dependencies installiert\n")
-        return True
-    except subprocess.CalledProcessError as exc:  # noqa: TRY003
-        print_error(f"Fehler bei der Installation der Runtime-Dependencies: {exc}")
+    print("📥 Installiere Runtime-Dependencies (aus requirements.txt)...\n")
+
+    if not requirements:
+        print_warning("Keine Requirements gefunden!")
         return False
+
+    log_file = Path("setup.log")
+    total = len(requirements)
+    progress = ProgressBar(total, prefix="   ")
+
+    installed_count = 0
+    for idx, (name, version_spec) in enumerate(requirements.items(), start=1):
+        spec = f"{name}{version_spec}"
+        progress.update(idx - 1, f"Installiere {name}...")
+
+        try:
+            subprocess.run(
+                [python_venv, "-m", "pip", "install", spec, "--progress-bar", "off"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            installed_count += 1
+
+        except subprocess.CalledProcessError as exc:
+            progress.finish(f"❌ Fehler bei {name}")
+            print_error(f"Fehler bei der Installation von {spec}:")
+            print(get_error_message(exc))
+
+            # Nur bei Fehler in Log schreiben
+            log_error_to_file(
+                log_file,
+                f"Runtime-Dependency Installation: {spec}",
+                f"Fehler beim Installieren von {spec}",
+                extract_subprocess_error_details(exc)
+            )
+
+            print_info(f"Fehlerdetails in {log_file} gespeichert")
+            return False
+
+    progress.finish(f"✓ {installed_count}/{total} Pakete installiert")
+    print_success("Alle Runtime-Dependencies installiert\n")
+    return True
 
 
 def install_dev_requirements(platform_info: dict[str, str], dev_requirements: dict[str, str]) -> bool:
-    """Installiert optionale Entwicklungsabhängigkeiten sequenziell."""
+    """Installiert optionale Entwicklungsabhängigkeiten mit Progress-Bar."""
     if not dev_requirements:
         return True
 
     python_venv = platform_info["python_venv"]
-    print("📥 Installiere Dev-Dependencies (pytest, black, flake8, ...)...")
-    try:
-        for name, version_spec in dev_requirements.items():
-            spec = f"{name}{version_spec}"
-            print_info(f"Installiere {spec}...")
-            subprocess.run([python_venv, "-m", "pip", "install", spec], check=True)
-        print_success("Alle Dev-Dependencies installiert\n")
-        return True
-    except subprocess.CalledProcessError as exc:  # noqa: TRY003
-        print_error(f"Fehler bei der Installation der Dev-Dependencies: {exc}")
-        return False
+    print("📥 Installiere Dev-Dependencies (pytest, black, flake8, ...)...\n")
+
+    log_file = Path("setup.log")
+    total = len(dev_requirements)
+    progress = ProgressBar(total, prefix="   ")
+
+    installed_count = 0
+    for idx, (name, version_spec) in enumerate(dev_requirements.items(), start=1):
+        spec = f"{name}{version_spec}"
+        progress.update(idx - 1, f"Installiere {name}...")
+
+        try:
+            subprocess.run(
+                [python_venv, "-m", "pip", "install", spec, "--progress-bar", "off"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            installed_count += 1
+
+        except subprocess.CalledProcessError as exc:
+            progress.finish(f"❌ Fehler bei {name}")
+            print_error(f"Fehler bei der Installation von {spec}:")
+            print(get_error_message(exc))
+
+            # Nur bei Fehler in Log schreiben
+            log_error_to_file(
+                log_file,
+                f"Dev-Dependency Installation: {spec}",
+                f"Fehler beim Installieren von {spec}",
+                extract_subprocess_error_details(exc)
+            )
+
+            print_info(f"Fehlerdetails in {log_file} gespeichert")
+            return False
+
+    progress.finish(f"✓ {installed_count}/{total} Pakete installiert")
+    print_success("Alle Dev-Dependencies installiert\n")
+    return True
 
 
 def install_project_editable(platform_info: dict[str, str]) -> bool:
-    """Registriert das Projekt mittels pip install -e . im Virtualenv."""
+    """Registriert das Projekt mittels pip install -e . im Virtualenv (mit Progress-Simulation)."""
     python_venv = platform_info["python_venv"]
-    print("📦 Installiere Projekt (Editable-Modus, -e .) im Virtual Environment...")
-    try:
-        subprocess.run([python_venv, "-m", "pip", "install", "-e", "."], check=True)
-        print_success("Projekt als Editable installiert (core.* ist als Paket verfügbar)\n")
-        return True
-    except subprocess.CalledProcessError as exc:  # noqa: TRY003
-        print_error(f"Fehler bei der Installation des Projekts (-e .): {exc}")
+    print("📦 Installiere Projekt (Editable-Modus, -e .) im Virtual Environment...\n")
+
+    log_file = Path("setup.log")
+
+    # Simuliere Progress während der Installation läuft
+    import threading
+    import time
+
+    progress = ProgressBar(100, prefix="   ")
+    install_done = threading.Event()
+    install_error: subprocess.CalledProcessError | None = None
+
+    def run_install() -> None:
+        nonlocal install_error
+        try:
+            subprocess.run(
+                [python_venv, "-m", "pip", "install", "-e", ".", "--progress-bar", "off"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            install_error = exc
+        finally:
+            install_done.set()
+
+    # Starte Installation in Thread
+    install_thread = threading.Thread(target=run_install)
+    install_thread.start()
+
+    # Simuliere Progress durch bekannte Phasen
+    phases = [
+        (20, "Prüfe Build-Backend..."),
+        (40, "Ermittle Requirements..."),
+        (60, "Erstelle Metadata..."),
+        (80, "Installiere Package..."),
+        (95, "Finalisiere Installation..."),
+    ]
+
+    for target, status in phases:
+        while not install_done.is_set():
+            for i in range(progress.current, min(target, 100)):
+                if install_done.is_set():
+                    break
+                progress.update(i, status)
+                time.sleep(0.05)
+            if progress.current >= target or install_done.is_set():
+                break
+
+    # Warte auf Abschluss
+    install_thread.join()
+
+    # Nur bei Fehler in Log schreiben
+    if install_error is not None:
+        progress.finish("❌ Fehler bei Installation")
+        print_error("Fehler bei der Installation des Projekts (-e .):")
+        print(get_error_message(install_error))
+
+        # Fehler in Log schreiben
+        log_error_to_file(
+            log_file,
+            "Projekt-Installation (Editable Mode): -e .",
+            "Fehler beim Installieren des Projekts",
+            extract_subprocess_error_details(install_error)
+        )
+
+        print_info(f"Fehlerdetails in {log_file} gespeichert")
         return False
+
+    progress.finish("✓ Projekt installiert")
+    print_success("Projekt als Editable installiert (core.* ist als Paket verfügbar)\n")
+    return True
 
 
 # --- Verification ----------------------------------------------------------
@@ -308,6 +614,7 @@ def verify_installation(
 ) -> bool:
     """Überprüft installierte Pakete via importlib.metadata und ergänzt fehlende Komponenten."""
     failed: list[tuple[str, str, str]] = []
+    log_file = Path("setup.log")
 
     def check_and_fix(scope: str, name: str, version_spec: str) -> None:
         display = f"{name}{version_spec}"
@@ -326,6 +633,14 @@ def verify_installation(
             print_error(f"   ❌ [{scope}] {display} - Installation fehlgeschlagen: {exc}")
             failed.append((scope, name, version_spec))
 
+            # Fehler in Log schreiben
+            log_error_to_file(
+                log_file,
+                f"Verifikation: {scope} - {name}{version_spec}",
+                f"Paket konnte nicht installiert/verifiziert werden",
+                str(exc)
+            )
+
     print("✔️  Prüfe Installation (Runtime-Dependencies)...")
     for name, spec in runtime_requirements.items():
         check_and_fix("runtime", name, spec)
@@ -340,6 +655,7 @@ def verify_installation(
         print_error("   ❌ Folgende Pakete konnten nicht verifiziert werden:")
         for scope, name, spec in failed:
             print_error(f"      - [{scope}] {name}{spec}")
+        print_info(f"Details siehe {log_file}")
         return False
     print()
     return True
@@ -377,13 +693,156 @@ def print_troubleshooting() -> None:
     print("4. Falls weiterhin Fehler auftreten, prüfe die vollständige Fehlermeldung oben.")
 
 
+# --- Test execution --------------------------------------------------------
+
+
+def run_tests(platform_info: dict[str, str]) -> bool:
+    """Führt pytest aus um Installation zu validieren (mit Progress-Bar).
+
+    Args:
+        platform_info: Plattform-Informationen mit python_venv Pfad
+
+    Returns:
+        True wenn alle Tests erfolgreich waren, False sonst
+    """
+    python_venv = platform_info["python_venv"]
+    print_header("🧪 Führe Tests aus (Validierung der Installation)")
+
+    # Prüfe ob pytest verfügbar ist
+    try:
+        result = subprocess.run(
+            [python_venv, "-m", "pytest", "--version"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        print_info(f"pytest Version: {result.stdout.strip()}\n")
+    except subprocess.CalledProcessError:
+        print_error("pytest nicht gefunden - überspringe Tests")
+        return False
+
+    # Führe Tests im Hintergrund aus und zeige Progress
+    print("Starte Tests...\n")
+
+    import threading
+    import time
+
+    tests_done = threading.Event()
+    test_result: subprocess.CompletedProcess[str] | None = None
+    test_error: Exception | None = None
+
+    def run_pytest() -> None:
+        nonlocal test_result, test_error
+        try:
+            test_result = subprocess.run(
+                [python_venv, "-m", "pytest", "-v", "--tb=short", "-q"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except Exception as exc:
+            test_error = exc
+        finally:
+            tests_done.set()
+
+    # Starte Tests in Thread
+    test_thread = threading.Thread(target=run_pytest)
+    test_thread.start()
+
+    # Simuliere Progress während Tests laufen
+    progress = ProgressBar(100, prefix="   ")
+    elapsed = 0
+    while not tests_done.is_set():
+        if elapsed < 90:
+            elapsed = min(90, elapsed + 2)
+        progress.update(elapsed, "Führe Tests aus...")
+        time.sleep(0.1)
+
+    # Warte auf Abschluss
+    test_thread.join()
+
+    log_file = Path("setup.log")
+
+    # Error Handling
+    if test_error is not None:
+        progress.finish("❌ Fehler bei Test-Ausführung")
+        print_error(f"Fehler beim Ausführen der Tests: {test_error}")
+
+        log_error_to_file(
+            log_file,
+            "Test-Ausführung",
+            "Exception beim Ausführen von pytest",
+            str(test_error)
+        )
+        return False
+
+    if test_result is None:
+        progress.finish("❌ Keine Test-Ergebnisse")
+        return False
+
+    progress.finish("✓ Tests abgeschlossen")
+    print()
+
+    # Analysiere Ergebnis
+    if test_result.returncode == 0:
+        summary_line = _extract_test_summary(test_result.stdout)
+        if summary_line:
+            print_success(f"Alle Tests erfolgreich: {summary_line}")
+        else:
+            print_success("Alle Tests erfolgreich bestanden! ✓")
+        print()
+        return True
+
+    # Tests fehlgeschlagen
+    print_warning(f"Einige Tests sind fehlgeschlagen (Exit-Code: {test_result.returncode})")
+
+    summary_lines = _extract_test_failure_summary(test_result.stdout)
+    if summary_lines:
+        print("\n📊 Test-Zusammenfassung:")
+        for line in summary_lines[-5:]:
+            print(f"   {line}")
+    else:
+        print_info("Details siehe pytest-Ausgabe (führe manuell aus: pytest -v)")
+
+    # Fehler in Log schreiben
+    log_error_to_file(
+        log_file,
+        "Test-Ausführung",
+        f"Tests fehlgeschlagen (Exit-Code: {test_result.returncode})",
+        test_result.stdout
+    )
+
+    print()
+    print_warning("Tests fehlgeschlagen - bitte prüfe die Ausgabe oben.")
+    print_info("Das Setup ist dennoch funktionsfähig, aber es könnten Probleme auftreten.")
+    print_info(f"Vollständige Test-Ausgabe: pytest -v oder siehe {log_file}")
+    print()
+    return False
+
+
 # --- Entry point -----------------------------------------------------------
 
 
 def main() -> int:
+    """Hauptfunktion für Setup/Bootstrap.
+
+    Unterstützt folgende Kommandozeilen-Argumente:
+        --skip-tests: Überspringt die Test-Ausführung nach Installation
+
+    Hinweis: setup.log wird nur bei Fehlern erstellt/beschrieben.
+    Bei jedem Setup-Durchlauf wird eine vorhandene setup.log überschrieben.
+    """
+    # Setze Error-Logging-Flag zurück für diesen Setup-Durchlauf
+    global _first_error_in_setup
+    _first_error_in_setup = True
+
+    # Parse einfache CLI-Args
+    skip_tests = "--skip-tests" in sys.argv
+
     print_header("🛸 UFO-Simulation Schulung - Setup")
     platform_info = get_platform_info()
     print_info(f"Betriebssystem: {platform_info['system']}\n")
+
 
     pyproject_info = parse_pyproject_toml()
     pyproject_raw = pyproject_info.get("raw", {}) if pyproject_info else {}
@@ -404,7 +863,8 @@ def main() -> int:
     configure_pip_index(platform_info)
     check_pyqt5_macos(platform_info)
 
-    if not install_runtime_requirements(platform_info):
+    # Übergebe requirements dict an install-Funktion
+    if not install_runtime_requirements(platform_info, runtime_requirements):
         print_troubleshooting()
         return 1
 
@@ -420,6 +880,15 @@ def main() -> int:
     if not verify_installation(runtime_requirements, dev_requirements):
         print_troubleshooting()
         return 1
+
+    # Tests ausführen (falls nicht übersprungen)
+    if not skip_tests:
+        test_success = run_tests(platform_info)
+        if not test_success:
+            print_warning("Setup abgeschlossen, aber Tests sind fehlgeschlagen.")
+            print_info("Du kannst das Projekt trotzdem verwenden, aber es könnten Probleme auftreten.\n")
+    else:
+        print_info("Tests übersprungen (--skip-tests Flag gesetzt)\n")
 
     print_next_steps(platform_info)
     return 0

@@ -1,14 +1,23 @@
 """
-🎓 AUTOPILOT-VORLAGE FÜR SCHÜLER
+🎓 PRAKTIKUMSAUFGABE 2 – UFO-AUTOPILOT
+
+AUFGABENBESCHREIBUNG:
+→ docs/description/tasks/aufgabe-2-ufo-autopilot.md
 
 Deine Aufgaben:
-1. Implementiere takeoff(), cruise(), landing()
-2. Setze USE_DEMO = False wenn fertig
+1. Implementiere die drei Flugphasen: takeoff(), cruise(), landing()
+2. Setze USE_DEMO = False wenn deine Implementierung fertig ist
 3. Starte die Simulation und teste deinen Autopiloten
+
+Hinweis:
+Diese Datei ist Teil der größeren Aufgabe 2. Für die vollständige
+Aufgabenstellung (inkl. ufo_autopilot.py mit Hilfsfunktionen) lies
+bitte die Aufgabenbeschreibung!
 
 NICHT ändern:
 - Die Struktur dieser Klasse
-- Irgendwas anderes als die 3 Funktionen
+- Die Imports
+- Alles außer den 3 Funktionen
 """
 from __future__ import annotations
 
@@ -18,6 +27,31 @@ from core.simulation.autopilot_base import AutopilotBase
 
 if TYPE_CHECKING:
     from core.simulation.ufosim import UfoSim
+
+
+# ============================================================================
+# 📥 IMPORT FÜR WINKELBERECHNUNG AUS AUFGABE 1
+# ============================================================================
+# ⚠️ WICHTIG: Entferne die Kommentarzeichen (#) erst NACHDEM du in
+#            angle.py die Funktion angle_q1() implementiert hast!
+#
+# VORAUSSETZUNG:
+#   1. Du hast Aufgabe 1 abgeschlossen (angle.py funktioniert)
+#   2. Du hast in angle.py die Funktion angle_q1() implementiert
+#      (siehe "FUNKTIONS-VORLAGE FÜR AUFGABE 2" in angle.py)
+#   3. Du hast die Kommentarzeichen dort entfernt
+#
+# DANN HIER:
+#   Entferne die # vor "from task.angle.angle import angle_q1"
+#
+# VERWENDUNG IN cruise():
+#   winkel = angle_q1(sim.state.x, sim.state.y, target_x, target_y)
+#
+# ============================================================================
+
+# from task.angle.angle import angle_q1
+
+# ============================================================================
 
 class Autopilot(AutopilotBase):
     """
@@ -41,22 +75,17 @@ class Autopilot(AutopilotBase):
 
         Verfügbare Steuerung:
             - sim.state.delta_v: Geschwindigkeitsänderung (positiv = schneller)
-            - sim.state.i: Neigung in Grad (90=vertikal hoch, 45=steil, 0=horizontal)
-            - sim.wait_for_condition(lambda, timeout): Wartet bis Bedingung erfüllt
-            - sim.state.z: Aktuelle Höhe (lesen)
+            - sim.state.i: Neigung in Grad (90=vertikal, 45=steil, 0=horizontal)
+            - sim.wait_for_condition(bedingung, timeout): Wartet bis Bedingung erfüllt
+            - sim.state.z: Aktuelle Höhe
 
-        Tipps:
-            1. Setze delta_v auf einen positiven Wert (z.B. 10.0)
-            2. Setze i auf ca. 45° (steil aufwärts)
-            3. Warte mit wait_for_condition bis z >= target_alt
-            4. Teste deine Implementierung mit USE_DEMO = False
+        Fragen zum Nachdenken:
+            1. Wie erhöhe ich die Geschwindigkeit?
+            2. Welche Neigung brauche ich zum Steigen?
+            3. Wann habe ich die Zielflughöhe erreicht?
+            4. Wie warte ich bis die Bedingung erfüllt ist?
 
-        Beispiel-Struktur:
-            sim.state.delta_v = 10.0
-            sim.state.i = 45
-            sim.wait_for_condition(lambda s: s.z >= target_alt, timeout=30.0)
-
-        ⚠️ Nicht kopieren - das bringt dir nichts zum Lernen!
+        ⚠️ Lies die Aufgabenbeschreibung für Details!
         """
         pass  # ← HIER DEIN CODE!
 
@@ -71,28 +100,33 @@ class Autopilot(AutopilotBase):
             - sim.state.d: Richtung in Grad (0=Nord, 90=Ost, 180=Süd, 270=West)
             - sim.state.i: Neigung in Grad (0=horizontal)
             - sim.state.delta_v: Geschwindigkeitsänderung
-            - sim.state.x, sim.state.y: Aktuelle Position (lesen)
-            - math.atan2(dx, dy): Berechne Winkel
-            - math.sqrt(x**2 + y**2): Berechne Distanz
+            - sim.state.x, sim.state.y: Aktuelle Position
 
-        Tipps:
-            1. Berechne dx = target_x - sim.state.x
-            2. Berechne dy = target_y - sim.state.y
-            3. Nutze math.degrees(math.atan2(dx, dy)) für Richtung
-            4. Setze sim.state.d auf diese Richtung
-            5. Setze sim.state.i = 0 für horizontalen Flug
-            6. Warte bis Distanz zum Ziel < 5m
+        💡 VERWENDUNG DEINER angle_q1() FUNKTION:
+            Wenn du oben den Import entkommentiert hast, kannst du
+            deine Winkelberechnung aus Aufgabe 1 hier nutzen!
 
-        Beispiel-Struktur:
-            dx = target_x - sim.state.x
-            dy = target_y - sim.state.y
-            direction = math.degrees(math.atan2(dx, dy))
-            if direction < 0: direction += 360
-            sim.state.d = direction
-            sim.state.i = 0
-            # ... warte bis nahe am Ziel ...
+            Beispiel:
+                winkel = angle_q1(sim.state.x, sim.state.y, target_x, target_y)
+                sim.state.d = winkel
 
-        ⚠️ Nicht kopieren - das bringt dir nichts zum Lernen!
+            ⚠️ ABER: angle_q1() funktioniert nur für den 1. Quadranten!
+                     Für negative Koordinaten brauchst du eine Anpassung.
+
+        Fragen zum Nachdenken:
+            1. Wie berechne ich die Differenz zum Ziel (dx, dy)?
+            2. Wie berechne ich den Winkel zum Ziel?
+               → Mit angle_q1() wenn du sie implementiert hast
+               → Oder mit math.atan2(dx, dy) als Alternative
+            3. Welche Neigung brauche ich für horizontalen Flug?
+            4. Wann bin ich nah genug am Ziel?
+
+        Hinweis zu Winkeln:
+            - math.atan2(dx, dy) gibt Winkel in Radiant zurück
+            - math.degrees() rechnet in Grad um
+            - Negative Winkel müssen auf 0-360° umgerechnet werden
+
+        ⚠️ Lies die Aufgabenbeschreibung für Details zur vollständigen Aufgabe!
         """
         pass  # ← HIER DEIN CODE!
 
@@ -109,17 +143,16 @@ class Autopilot(AutopilotBase):
             - sim.state.v: Aktuelle Geschwindigkeit (lesen)
             - sim.state.z: Aktuelle Höhe (lesen)
 
-        Tipps:
-            1. Reduziere Geschwindigkeit mit negativem delta_v
-            2. Setze i auf ca. -20° (sanfter Sinkflug)
-            3. Warte bis z <= 0.1
-            4. Zu hohe Geschwindigkeit/Neigung → CRASH! ⚠️
+        Fragen zum Nachdenken:
+            1. Wie bremse ich das UFO ab?
+            2. Welche Neigung brauche ich für sanften Sinkflug?
+            3. Wann habe ich den Boden erreicht?
+            4. Was passiert bei zu schneller Landung?
 
-        Beispiel-Struktur:
-            sim.state.delta_v = -sim.state.v  # Bremse auf 0
-            sim.state.i = -20  # Sinkflug
-            sim.wait_for_condition(lambda s: s.z <= 0.1, timeout=30.0)
+        ⚠️ WARNUNG:
+            Zu hohe Geschwindigkeit oder zu steile Neigung → CRASH!
+            Teste mit kleinen Werten und beobachte was passiert!
 
-        ⚠️ Nicht kopieren - das bringt dir nichts zum Lernen!
+        ⚠️ Lies die Aufgabenbeschreibung für Details!
         """
         pass  # ← HIER DEIN CODE!

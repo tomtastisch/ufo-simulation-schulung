@@ -1,228 +1,364 @@
-bitte analysiere die #file:setup.py diese ist eigentlich auch darauf ausgelegt aufzuräumen (alte .venv etc) und
-anschließend zu prüfen, welche der packete die benötigt werden bereits installiert sind und/oder gegebenenfalls
-nachinstallieren. Es soll aufgrund dessen verwendet werden, damit schüler sich um das im lehrrahmen geplanten
-Aufgaben (=>die tasks welche zukünftig noch weiter ausgebaut werden und mehr sub-tasks erhalten, aufbauend auf den im
-core enthaltenen inhalten) konzentreieren können. dies stellt sicher das er sich zielgerichtet mit dem themen
-auseinandersetzt, welche relevant sind. Das #setup.py soll deshalb vorbereitende maßnahmen, wie beispielsweise der
-installation und konfiguration, welche notwendig zur ausführung sind umsetzen und sicherstellen, dass durch verwenden
-mithilfe von .venv sichergestellt ist, das ide und os unabhängig immer, jeder schüler crossplattform/unabhängig seine
-aufgaben umsetzen und ausführen kann. Zur sicherstellung der Erweiterbarkeit ohne große umbauten sollen packete in
-#file:requirements.txt zentral verwaltet und dynamisch während des setups geladen werden.
+# Schulungsablauf – UFO-Simulation
 
--
+Übersicht über den kompletten Schulungsablauf von der Einführung bis zur eigenständigen Autopilot-Programmierung.
 
-# Geplanter Vorgang und Ablauf
+---
 
-Der geplante Vorgang und Ablauf zur Einrichtung und Vorbereitung des Schülers für die
-es gibt darum dem Schüler das grundlegende Wissen zu vermitteln und dabei sicher zu stellen,
-das er im Rahmen der Umsetzung des Wissens auf die realitätsnahe Arbeit vorbereitet ist.
-Der gesamte Ablauf setzt voraus, das jegliche Umsetzung so erfolgt, dass der Rahmen, in welchem
-er sein Wissen anwendet, klar und ohne hohe Komplexität unnötig zur Verwirrung sorgt.
-Deshalb werden bestimmte Inhalte, wie beispielsweise das Setup von uns übernommen (setup.py) und
-somit Sichergestellt dass der Schüler sich auf das wesentliche konzentrieren kann.
-zukünftigen Aufgaben und Projekte gliedert sich in folgende Phasen:
+## Zielgruppe
 
-*Wichtig*: Programmiersprache wird python sein
+Schüler mit Grundkenntnissen in Python, die praktisch lernen möchten:
 
-## Vorausgehende Maßnahmen zur Vorbereitung
+- **Programmierung** anhand realistischer Szenarien
+- **Physik** durch 3D-Vektorrechnung
+- **Clean Architecture** durch modularen Code
+- **Testing** durch automatisierte Tests
 
-Diese sind irrelevant für uns und wir gehen immer von einer umfassenden und entsprechend
-ausgearbeiteten Vorbereitung der schüler aus. Jedoch dient diese Information um dir den
-Kompletten Vorgang zu erläutern
+---
 
--
+## Voraussetzungen
 
-### Grundlegende Einführung zum thema
+### Technische Voraussetzungen
 
-(beispiele):
--> Themen der programmierung
--> Github/Versionsverwaltung
--> etc.
+- **Python 3.11+** installiert
+- **Internet** für Package-Installation
+- **IDE** (empfohlen: PyCharm, VS Code)
+- **Git** für Versionskontrolle (optional)
 
-### Weitere Themen und Informationen...
+### Vorwissen
 
-    ...
+- Python-Grundlagen (Variablen, Funktionen, Klassen)
+- Grundlegende Mathematik (Vektoren, Trigonometrie)
+- Terminal/Kommandozeilen-Grundlagen
 
-## Projekteinführung und Einrichtung der Entwicklungsumgebung
+---
 
-Hierbei werden Möglichkeiten zum Erstellen von Projekten und deren Einrichtung vorgestellt.
-Hierbei werden Mögliche IDE's, Spezifikationen und Anforderungen erläutert. Dabei wird der
-Schüler angeleitet, wie er seine Entwicklungsumgebung einrichtet und konfiguriert, um die
-notwendigen Voraussetzungen für die Arbeit an den Projekten zu erfüllen.
+## Schulungsablauf
 
-### Angeleitete Installation und Einrichtung der Entwicklungsumgebung
+### Phase 1: Projekt-Setup (30 Minuten)
 
-Als Basis zur Umsetzung muss auch die Installation der Entwicklungsumgebung angeleitet werden.
-Da diese aufgrund der verschiedenen Betriebssysteme und deren Unterschiede sehr komplex sind,
-soll hierbei eine angeleitete Installation und Einrichtung der Entwicklungsumgebung vorgenommen werden.
-Zusätzlich gibt es zur Vereinfachung und besseren Klarheit auch die Optionen der zu verwendenden IDE's
-vorgegeben, aus der jeder Schüler seine Wahl treffen kann.
+**Ziel**: Projekt einrichten und lauffähig machen
 
-    - Anhand vorgegebener Möglichkeiten zur Auwahl eienr IDE (Wichtig um Ausnahmefälle zu vermeiden)
-    - Anleiten des Schülers und Hilöfestellung bei aufkommenden Fragen
-    - Fertigstellung und Prüfung ob alle den selben Stand haben
+**Schritte**:
 
-### Vorbereitende Maßnahmen zur Projekteinrichtung
+1. Repository klonen oder Download
+2. Setup ausführen: `python setup.py`
+3. Virtual Environment aktivieren
+4. Demo starten: `python -m core.simulation.ufo_main`
 
-Hierbei werden Details zur Einrichtung der Projekte vorgestellt. Es geht darum, sicherzustellen,
-dass der Schüler alle notwendigen Werkzeuge und Zugänge hat, um effektiv am Projekt arbeiten zu können.
+**Lernziele**:
 
-    - Klärung offener Fragen
-    - Sicherstellung das alle notwendigen Werkzeuge installiert sind
-    - Sicherstellung das alle notwendigen Zugänge (z.B. GitHub) vorhanden sind
-    - Berechtigungen zur Verwendung der Projekte
+- Virtual Environments verstehen
+- Dependency-Management
+- Projekt-Struktur kennenlernen
 
-### Einstieg in die Projektsarbeit
+**Dokumentation**: [setup-anleitung.md](setup-anleitung.md)
 
-Diese Maßnahmen sind die Schnittstelle zwischen dem theoretischen Vorwissen und der praktischen
-Arbeit am Projekt. Hierbei wird der Schüler in die Lage versetzt, das Projekt zu verstehen und
-die notwendigen Schritte zur Arbeit am Projekt zu kennen.
+---
 
-    - Einführung in die Versionsverwaltung mit Git/GitHub (Projektbezogene Infos)
-    - Laden des Repositories aus GitHub
-    - Gemeinsames Verständnis der Projektziele und -anforderungen
-    - Erklärung der Projektstruktur und deren Zwecke/Inhalte
+### Phase 2: Simulation verstehen (1 Stunde)
 
-## Detaillierte Phasen der Projektdurchführung
+**Ziel**: Verstehen wie die Simulation funktioniert
 
-Die detaillierten Phasen der Projektdurchführung umfassen spezifische Aufgaben und Meilensteine,
-die der Schüler im Verlauf des Projekts erreichen soll. Jede Phase ist darauf ausgelegt,
-bestimmte Fähigkeiten zu entwickeln und das Verständnis für die Projektarbeit zu vertiefen.
+**Themen**:
 
-### Phase 1: Versionsverwaltung/Projekte starten
+- **3D-Koordinatensystem**: x, y, z-Achsen
+- **Physikalische Größen**: Position, Geschwindigkeit, Beschleunigung
+- **Steuerung**: Schub, Rotation
+- **Phasen**: Start, Reiseflug, Landung
 
-Hier wird die Basis für die Arbeit am Projekt gelegt. Weitestgehend soll der Schüler nur verstehen und
-klar erkennen, wie er das Projekt startet und die notwendigen Werkzeuge verwendet. Es ist wichtig das
-er durch den realitätsnahen Aufbau des Projekts und Ablaufs, sich auf die zukünftigen Aufgaben und Projekte
-vorbereitet fühlt und die notwendigen Kenntnisse besitzt um diese umzusetzen.
+**Aktivitäten**:
 
-*Wichtig:* Der Schüler wird angeleitet, das Projekt mithilfe der `setup.py` zu starten, um sicherzustellen, dass alle
-notwendigen Abhängigkeiten installiert sind und die Entwicklungsumgebung korrekt eingerichtet ist. Diese Aufgabe ist
-nicht von ihm manuell auszuführen, da es den geplanten Lernprozess durch dessen (teilweise hoher) Komplexität stören
-würde
+1. Demo-Autopilot beobachten
+2. Simulation pausieren/fortsetzen
+3. Parameter in GUI ändern
+4. Crash provozieren (verstehen was schief geht)
 
-    - Erstellen eines neuen Branches - nach Vorgabe - um das Projekt zu starten
-    - Gemeinsames Starten des Projekts
-    - Ausführen der `setup.py` zur Sicherstellung, dass alle notwendigen Abhängigkeiten installiert sind (!)
-    - Klärung eventueller Probleme bei der Einrichtung (z.B. Fehlermeldungen)
+**Lernziele**:
 
-### Phase 2: Arbeit am Projektbitte analysiere die #file:setup.py diese ist eigentlich auch darauf ausgelegt aufzuräumen (alte .venv etc) und anschließend zu prüfen, welche der packete die benötigt werden bereits installiert sind und/oder gegebenenfalls nachinstallieren. Es soll aufgrund dessen verwendet werden, damit schüler sich um das im lehrrahmen geplanten Aufgaben (=>die tasks welche zukünftig noch weiter ausgebaut werden und mehr sub-tasks erhalten, aufbauend auf den im core enthaltenen inhalten) konzentreieren können. dies stellt sicher das er sich zielgerichtet mit dem themen auseinandersetzt, welche relevant sind. Das #setup.py soll deshalb vorbereitende maßnahmen, wie beispielsweise der installation und konfiguration, welche notwendig zur ausführung sind umsetzen und sicherstellen, dass durch verwenden mithilfe von .venv sichergestellt ist, das ide und os unabhängig immer, jeder schüler crossplattform/unabhängig seine aufgaben umsetzen und ausführen kann. Zur sicherstellung der Erweiterbarkeit ohne große umbauten sollen packete in #file:requirements.txt  zentral verwaltet und dynamisch während des setups geladen werden.
+- Physik-Simulation verstehen
+- GUI-Bedienung
+- Debug-Ausgaben lesen
 
--
+---
 
-# Geplanter Vorgang und Ablauf
+### Phase 3: Erster eigener Code (2 Stunden)
 
-Der geplante Vorgang und Ablauf zur Einrichtung und Vorbereitung des Schülers für die
-es gibt darum dem Schüler das grundlegende Wissen zu vermitteln und dabei sicher zu stellen,
-das er im Rahmen der Umsetzung des Wissens auf die realitätsnahe Arbeit vorbereitet ist.
-Der gesamte Ablauf setzt voraus, das jegliche Umsetzung so erfolgt, dass der Rahmen, in welchem
-er sein Wissen anwendet, klar und ohne hohe Komplexität unnötig zur Verwirrung sorgt.
-Deshalb werden bestimmte Inhalte, wie beispielsweise das Setup von uns übernommen (setup.py) und
-somit Sichergestellt dass der Schüler sich auf das wesentliche konzentrieren kann.
-zukünftigen Aufgaben und Projekte gliedert sich in folgende Phasen:
+**Ziel**: Einfache Autopilot-Funktionen schreiben
 
-*Wichtig*: Programmiersprache wird python sein
+**Aufgaben**:
 
-## Vorausgehende Maßnahmen zur Vorbereitung
+#### Aufgabe 1: Vertikaler Start
 
-Diese sind irrelevant für uns und wir gehen immer von einer umfassenden und entsprechend
-ausgearbeiteten Vorbereitung der schüler aus. Jedoch dient diese Information um dir den
-Kompletten Vorgang zu erläutern
+```python
+def takeoff(ufo_state):
+    """Lasse das UFO vertikal starten."""
+    return Command(CommandType.THRUST, vertical_thrust=1.0)
+```
 
--
+**Lernziele**:
 
-### Grundlegende Einführung zum thema
+- Command-Pattern verstehen
+- Schub-Steuerung
+- Return-Werte
 
-(beispiele):
--> Themen der programmierung
--> Github/Versionsverwaltung
--> etc.
+#### Aufgabe 2: Ziel ansteuern
 
-### Weitere Themen und Informationen...
+```python
+def cruise(ufo_state, destination):
+    """Fliege zum Ziel."""
+    # Berechne Richtung zum Ziel
+    # Rotiere UFO in Richtung
+    # Gib Schub
+```
 
-    ...
+**Lernziele**:
 
-## Projekteinführung und Einrichtung der Entwicklungsumgebung
+- Vektor-Berechnung
+- Winkel-Berechnung
+- Rotation-Steuerung
 
-Hierbei werden Möglichkeiten zum Erstellen von Projekten und deren Einrichtung vorgestellt.
-Hierbei werden Mögliche IDE's, Spezifikationen und Anforderungen erläutert. Dabei wird der
-Schüler angeleitet, wie er seine Entwicklungsumgebung einrichtet und konfiguriert, um die
-notwendigen Voraussetzungen für die Arbeit an den Projekten zu erfüllen.
+#### Aufgabe 3: Sanfte Landung
 
-### Angeleitete Installation und Einrichtung der Entwicklungsumgebung
+```python
+def landing(ufo_state):
+    """Lande sanft."""
+    # Prüfe Höhe
+    # Reduziere Geschwindigkeit
+    # Sanft aufsetzen
+```
 
-Als Basis zur Umsetzung muss auch die Installation der Entwicklungsumgebung angeleitet werden.
-Da diese aufgrund der verschiedenen Betriebssysteme und deren Unterschiede sehr komplex sind,
-soll hierbei eine angeleitete Installation und Einrichtung der Entwicklungsumgebung vorgenommen werden.
-Zusätzlich gibt es zur Vereinfachung und besseren Klarheit auch die Optionen der zu verwendenden IDE's
-vorgegeben, aus der jeder Schüler seine Wahl treffen kann.
+**Lernziele**:
 
-    - Anhand vorgegebener Möglichkeiten zur Auwahl eienr IDE (Wichtig um Ausnahmefälle zu vermeiden)
-    - Anleiten des Schülers und Hilöfestellung bei aufkommenden Fragen
-    - Fertigstellung und Prüfung ob alle den selben Stand haben
+- Geschwindigkeits-Kontrolle
+- Verzögerung berechnen
+- Crash vermeiden
 
-### Vorbereitende Maßnahmen zur Projekteinrichtung
+**Dokumentation**: Aufgaben-Dokumente (folgen)
 
-Hierbei werden Details zur Einrichtung der Projekte vorgestellt. Es geht darum, sicherzustellen,
-dass der Schüler alle notwendigen Werkzeuge und Zugänge hat, um effektiv am Projekt arbeiten zu können.
+---
 
-    - Klärung offener Fragen
-    - Sicherstellung das alle notwendigen Werkzeuge installiert sind
-    - Sicherstellung das alle notwendigen Zugänge (z.B. GitHub) vorhanden sind
-    - Berechtigungen zur Verwendung der Projekte
+### Phase 4: Fortgeschrittene Themen (3 Stunden)
 
-### Einstieg in die Projektsarbeit
+**Ziel**: Komplexe Autopilot-Logik implementieren
 
-Diese Maßnahmen sind die Schnittstelle zwischen dem theoretischen Vorwissen und der praktischen
-Arbeit am Projekt. Hierbei wird der Schüler in die Lage versetzt, das Projekt zu verstehen und
-die notwendigen Schritte zur Arbeit am Projekt zu kennen.
+**Themen**:
 
-    - Einführung in die Versionsverwaltung mit Git/GitHub (Projektbezogene Infos)
-    - Laden des Repositories aus GitHub
-    - Gemeinsames Verständnis der Projektziele und -anforderungen
-    - Erklärung der Projektstruktur und deren Zwecke/Inhalte
+#### 4.1 Winkelberechnung
 
-## Detaillierte Phasen der Projektdurchführung
+- Winkel zwischen Vektoren
+- Richtungs-Korrektur
+- Drehgeschwindigkeit
 
-Die detaillierten Phasen der Projektdurchführung umfassen spezifische Aufgaben und Meilensteine,
-die der Schüler im Verlauf des Projekts erreichen soll. Jede Phase ist darauf ausgelegt,
-bestimmte Fähigkeiten zu entwickeln und das Verständnis für die Projektarbeit zu vertiefen.
+#### 4.2 Geschwindigkeits-Kontrolle
 
-### Phase 1: Versionsverwaltung/Projekte starten
+- PID-Regler (vereinfacht)
+- Schub-Berechnung
+- Brems-Manöver
 
-Hier wird die Basis für die Arbeit am Projekt gelegt. Weitestgehend soll der Schüler nur verstehen und
-klar erkennen, wie er das Projekt startet und die notwendigen Werkzeuge verwendet. Es ist wichtig das
-er durch den realitätsnahen Aufbau des Projekts und Ablaufs, sich auf die zukünftigen Aufgaben und Projekte
-vorbereitet fühlt und die notwendigen Kenntnisse besitzt um diese umzusetzen.
+#### 4.3 Höhen-Management
 
-*Wichtig:* Der Schüler wird angeleitet, das Projekt mithilfe der `setup.py` zu starten, um sicherzustellen, dass alle
-notwendigen Abhängigkeiten installiert sind und die Entwicklungsumgebung korrekt eingerichtet ist. Diese Aufgabe ist
-nicht von ihm manuell auszuführen, da es den geplanten Lernprozess durch dessen (teilweise hoher) Komplexität stören
-würde
+- Höhen-Profil planen
+- Steig-/Sinkraten
+- Sicherheits-Abstände
 
-    - Erstellen eines neuen Branches - nach Vorgabe - um das Projekt zu starten
-    - Gemeinsames Starten des Projekts
-    - Ausführen der `setup.py` zur Sicherstellung, dass alle notwendigen Abhängigkeiten installiert sind (!)
-    - Klärung eventueller Probleme bei der Einrichtung (z.B. Fehlermeldungen)
+#### 4.4 State-Management
 
-### Phase 2: Arbeit am Projekt
+- Phasen-Erkennung
+- Zustandsübergänge
+- Fehler-Behandlung
 
-Hier beginnt die eigentliche Arbeit am Projekt. Der Schüler wird angeleitet, wie er erste Änderungen vornimmt und diese
-in das Versionsverwaltungssystem einpflegt. Dies umfasst das Verständnis der grundlegenden Git-Befehle und die Anwendung
-dieser im Kontext des Projekts
-Mithilfe von vordefinierten Aufgaben werden erste Grundlegende Programmiererfahrungen gesammelt, welche durch erstellen
-einzelner Skripts (also weder verwendung von Klassen oder funktionen) ermöglicht werden sollen.
+**Lernziele**:
 
-    - Erste Änderungen vornehmen und committen
-    - Committen der Änderungen und Pushen (Remote-Repository selbst bleibt sauber) 
+- Komplexe Algorithmen
+- Fehler-Behandlung
+- Edge-Cases
 
-Hier beginnt die eigentliche Arbeit am Projekt. Der Schüler wird angeleitet, wie er erste Änderungen vornimmt und diese
-in das Versionsverwaltungssystem einpflegt. Dies umfasst das Verständnis der grundlegenden Git-Befehle und die Anwendung
-dieser im Kontext des Projekts
-Mithilfe von vordefinierten Aufgaben werden erste Grundlegende Programmiererfahrungen gesammelt, welche durch erstellen
-einzelner Skripts (also weder verwendung von Klassen oder funktionen) ermöglicht werden sollen.
+---
 
-    - Erste Änderungen vornehmen und committen
-    - Committen der Änderungen und Pushen (Remote-Repository selbst bleibt sauber) 
+### Phase 5: Testing & Debugging (1 Stunde)
 
-... continue
+**Ziel**: Code testen und debuggen
+
+**Aktivitäten**:
+
+1. Unit-Tests schreiben
+2. Edge-Cases testen
+3. Debugging mit Print-Statements
+4. Logging nutzen
+
+**Lernziele**:
+
+- Test-Driven Development
+- Debugging-Strategien
+- Logging best practices
+
+---
+
+### Phase 6: Optimierung & Erweiterung (2 Stunden)
+
+**Ziel**: Code verbessern und erweitern
+
+**Themen**:
+
+- Code-Refactoring
+- Performance-Optimierung
+- Neue Features (z.B. Hindernisse)
+- Dokumentation schreiben
+
+**Lernziele**:
+
+- Clean Code Prinzipien
+- Performanz-Analyse
+- Feature-Entwicklung
+
+---
+
+## Zeitplan (Beispiel)
+
+### Tag 1 (4 Stunden)
+
+- **09:00-09:30**: Einführung & Setup (Phase 1)
+- **09:30-10:30**: Simulation verstehen (Phase 2)
+- **10:30-12:30**: Erste Aufgaben (Phase 3, Aufgabe 1-2)
+
+### Tag 2 (4 Stunden)
+
+- **09:00-10:00**: Aufgabe 3 abschließen (Phase 3)
+- **10:00-13:00**: Fortgeschrittene Themen (Phase 4)
+
+### Tag 3 (3 Stunden)
+
+- **09:00-10:00**: Testing (Phase 5)
+- **10:00-12:00**: Optimierung (Phase 6)
+- **12:00-13:00**: Präsentation & Abschluss
+
+---
+
+## Lernziel-Katalog
+
+Nach Abschluss der Schulung können Schüler:
+
+### Programmierung
+
+- ✓ Python-Funktionen mit Type Hints schreiben
+- ✓ Command-Pattern anwenden
+- ✓ State-Management implementieren
+- ✓ Fehlerbehandlung umsetzen
+
+### Mathematik/Physik
+
+- ✓ 3D-Vektoren berechnen
+- ✓ Winkel zwischen Vektoren bestimmen
+- ✓ Physikalische Größen (v, a, F) verstehen
+- ✓ Bewegungsgleichungen anwenden
+
+### Software-Engineering
+
+- ✓ Clean Architecture Prinzipien
+- ✓ Unit-Tests schreiben
+- ✓ Code dokumentieren
+- ✓ Debugging-Strategien
+
+### Tools
+
+- ✓ Virtual Environments nutzen
+- ✓ Git Basics (optional)
+- ✓ IDE effektiv nutzen
+- ✓ pytest für Testing
+
+---
+
+## Bewertungs-Kriterien (Optional)
+
+Falls Bewertung gewünscht:
+
+### Funktionalität (40%)
+
+- Start funktioniert
+- Ziel wird erreicht
+- Landung erfolgreich
+- Keine Crashes
+
+### Code-Qualität (30%)
+
+- Lesbarkeit
+- Dokumentation
+- Type Hints
+- Fehlerbehandlung
+
+### Mathematik (20%)
+
+- Korrekte Berechnungen
+- Winkel richtig
+- Geschwindigkeit kontrolliert
+
+### Tests (10%)
+
+- Unit-Tests vorhanden
+- Edge-Cases abgedeckt
+- Tests passieren
+
+---
+
+## Tipps für Lehrer
+
+### Vorbereitung
+
+1. Setup selbst durchlaufen
+2. Alle Aufgaben selbst lösen
+3. Häufige Fehler identifizieren
+4. Hilfestellungen vorbereiten
+
+### Während der Schulung
+
+1. Live-Coding Sessions
+2. Pair Programming fördern
+3. Regelmäßige Code-Reviews
+4. Debugging gemeinsam
+
+### Nach der Schulung
+
+1. Code der Schüler reviewen
+2. Feedback geben
+3. Best Practices zeigen
+4. Weiterführende Themen vorschlagen
+
+---
+
+## Weiterführende Themen
+
+Nach Abschluss der Schulung:
+
+- **Erweiterte Physik**: Luftwiderstand, Wind
+- **Mehrere UFOs**: Formation flying
+- **Hindernisse**: Kollisions-Vermeidung
+- **GUI-Entwicklung**: Eigene Controls
+- **Netzwerk**: Multiplayer
+- **AI**: Machine Learning für Autopilot
+
+---
+
+## Ressourcen
+
+### Dokumentation
+
+- [Setup-Anleitung](setup-anleitung.md)
+- [Architektur-Spezifikationen](../specs/architecture/)
+- [Coding-Guidelines](../guidelines/general-gd.md)
+
+### Externe Links
+
+- [Python Tutorial](https://docs.python.org/3/tutorial/)
+- [NumPy Tutorial](https://numpy.org/doc/stable/user/quickstart.html)
+- [PyQt5 Documentation](https://www.riverbankcomputing.com/static/Docs/PyQt5/)
+
+### Troubleshooting
+
+- [Setup-Probleme](setup-anleitung.md#probleme-beheben)
+- [Testing-Tools](../dev/testing-tools.md)
+- [Setup-System](../dev/setup-system.md)
+
+---
+
+**Viel Erfolg bei der Schulung! 🚀**
+

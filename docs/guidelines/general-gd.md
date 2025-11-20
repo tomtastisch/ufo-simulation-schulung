@@ -72,6 +72,17 @@ Attribute vs. Getter/Setter:
 
 ## 4. Dokumentation & Kommentare
 
+Modul-Dokumentation (`__init__.py`):
+
+- In jedem Modul übernimmt die zugehörige `__init__.py` eine zentrale, übergeordnete Beschreibung des gesamten
+  Modulzwecks, seiner Bestandteile und seiner strukturellen Verantwortlichkeiten.
+- Die einzelnen Dateien und Klassen innerhalb des Moduls enthalten anschließend ausschließlich präzise, spezifische
+  Docstrings, die nur die Logik und Verantwortung der jeweiligen Klasse oder Funktion erläutern.
+- Redundante oder mehrfach vorhandene Erklärungstexte entfallen vollständig, da alle allgemeinen Informationen
+  konsolidiert im Modul-Docstring der `__init__.py` abgelegt sind.
+- Dies sorgt für klare Trennung zwischen Modulbeschreibung und objektspezifischer Dokumentation, reduziert Pflegeaufwand
+  und erhöht die Konsistenz innerhalb der Codebasis.
+
 Docstrings:
 
 - Jede öffentliche Klasse, Funktion und jedes Modul erhält einen präzisen Docstring mit:
@@ -224,3 +235,313 @@ Stilspielräume:
 - Algorithmen dürfen verbessert werden (präzisere Numerik, bessere Konvergenz, bessere Performance), sofern:
   - die API stabil bleibt,
   - definierte fachliche Erwartungen und Tests weiterhin erfüllt werden.
+
+---
+
+## 11. Markdown-Dokumentation
+
+### Grundprinzipien
+
+- **Einzige README.md**: Nur im Projekt-Hauptverzeichnis existiert eine `README.md`
+- **Keine Unter-READMEs**: Unterordner (docs/, docs/dev/, etc.) enthalten **keine** eigenen README.md-Dateien
+- **Zentrale Navigation**: Die Haupt-README.md verlinkt zu allen relevanten Dokumentations-Kategorien
+- **Klare Ordnerstruktur**: Dokumente werden ausschließlich in `docs/` und dessen Unterordnern abgelegt
+
+### Ordnerstruktur und Dokumenten-Kategorien
+
+Alle Markdown-Dokumente (außer der Haupt-README.md) werden in `docs/` abgelegt:
+
+```
+docs/
+├── dev/               # Entwickler-Dokumentation
+├── description/       # Schüler-Dokumentation  
+├── planning/          # Planungs- und Tracking-Dokumente
+├── specs/             # Architektur-Spezifikationen
+└── guidelines/        # Coding-Guidelines
+```
+
+#### docs/dev/ – Entwickler-Dokumentation
+
+**Zweck**: Technische Dokumentation für Entwickler und Maintainer
+
+**Dokument-Typen**:
+
+- `changelog.md` – Chronologische Änderungshistorie (einheitliches Format)
+- `setup-system.md` – Setup-System-Dokumentation
+- `testing-tools.md` – Testing- und Debugging-Tools
+- `architecture-decisions.md` – Architektur-Entscheidungen (ADRs)
+
+**Namenskonvention**:
+
+- Kleinbuchstaben mit Bindestrichen: `setup-system.md`, `testing-tools.md`
+- Beschreibende Namen, die Inhalt klar kommunizieren
+- Keine Abkürzungen, die nicht selbsterklärend sind
+
+**Inhaltliche Struktur**:
+
+```markdown
+# Titel des Dokuments
+
+Kurze Beschreibung (1-2 Sätze) des Dokument-Zwecks.
+
+---
+
+## Übersicht
+
+Zusammenfassung des Dokuments.
+
+## Hauptabschnitte
+
+Detaillierte Inhalte mit klarer Gliederung.
+
+## Referenzen
+
+Links zu verwandten Dokumenten.
+```
+
+#### docs/description/ – Schüler-Dokumentation
+
+**Zweck**: Anleitungen und Informationen für Schüler/Anwender
+
+**Dokument-Typen**:
+
+- `setup-anleitung.md` – Setup-Anleitung für Schüler
+- `schulungsablauf.md` – Übersicht des Schulungsablaufs
+- `aufgaben-*.md` – Einzelne Schulungsaufgaben
+
+**Namenskonvention**:
+
+- Kleinbuchstaben mit Bindestrichen
+- Deutsche Namen für Schüler-Dokumente
+- Präfixe für Aufgaben: `aufgaben-winkelberechnung.md`
+
+**Stil**:
+
+- Anfänger-freundlich, einfache Sprache
+- Schritt-für-Schritt Anleitungen
+- Viele Beispiele und Screenshots
+- Problemlösungs-orientiert
+
+#### docs/planning/ – Planungs-Dokumente
+
+**Zweck**: Ticket-Tracking und Projektplanung
+
+**Dokument-Typen**:
+
+- `implementation-status.md` – Detaillierter Implementierungsstatus
+- `refactoring-tracker.md` – Kompakte Ticket-Übersicht
+- `_archived/` – Archivierte/obsolete Dokumente
+
+**Namenskonvention**:
+
+- Kleinbuchstaben mit Bindestrichen
+- Status-orientierte Namen: `implementation-status.md`
+
+#### docs/specs/ – Spezifikationen
+
+**Zweck**: Architektur-Spezifikationen und Design-Dokumente
+
+**Unterordner**:
+
+- `architecture/` – Architektur-Dokumentation
+- `notes/` – Design-Notizen und Konzepte
+
+**Namenskonvention**:
+
+- Beschreibende Namen mit Kontext: `core-simulation-zielbild.md`
+- Modul- oder Komponenten-Präfixe
+
+#### docs/guidelines/ – Richtlinien
+
+**Zweck**: Coding-Standards und Projektrichtlinien
+
+**Dokument-Typen**:
+
+- `general-gd.md` – Allgemeine Python-Guidelines (dieses Dokument)
+- `project/` – Projekt-spezifische Richtlinien
+
+### Namenskonventionen (Zusammenfassung)
+
+**Einheitliche Regeln für alle Dokumente**:
+
+1. **Nur Kleinbuchstaben**: `mein-dokument.md` (nicht `Mein-Dokument.md`)
+2. **Bindestriche statt Unterstriche**: `setup-anleitung.md` (nicht `setup_anleitung.md`)
+3. **Keine Leerzeichen**: `mein-dokument.md` (nicht `mein dokument.md`)
+4. **Beschreibende Namen**: Name muss Inhalt klar kommunizieren
+5. **Präfixe für Zugehörigkeit**: `core-simulation-zielbild.md` (Modul-Präfix)
+6. **Suffix nur bei Bedarf**: `-guide.md`, `-tutorial.md`, `-reference.md`
+
+**Verbotene Namen**:
+
+- `README.md` in Unterordnern (nur im Projekt-Root erlaubt)
+- `TODO.md`, `NOTES.md` (zu vage)
+- `doc.md`, `file.md` (nicht beschreibend)
+- Versionsnummern im Namen: `setup-v1.md` (Versionierung über Git)
+
+### Inhaltliche Struktur-Vorgaben
+
+**Jedes Dokument folgt diesem Aufbau**:
+
+```markdown
+# Titel (# = H1, nur einmal pro Dokument)
+
+Kurze Einleitung (1-3 Sätze): Was ist der Zweck dieses Dokuments?
+
+---
+
+## Abschnitt 1 (## = H2)
+
+Inhalt...
+
+### Unterabschnitt (### = H3)
+
+Inhalt...
+
+## Referenzen / Siehe auch
+
+- [Verwandtes Dokument](pfad/zum/dokument.md)
+- [Externes Link](https://example.com)
+```
+
+**Pflichtabschnitte**:
+
+1. **Titel (H1)**: Eindeutiger, beschreibender Titel
+2. **Einleitung**: 1-3 Sätze zum Dokument-Zweck
+3. **Trennlinie** (`---`): Zwischen Einleitung und Hauptinhalt
+4. **Hauptinhalt**: Strukturiert in H2-Abschnitte
+5. **Referenzen** (optional): Links zu verwandten Dokumenten
+
+**Formatierungs-Standards**:
+
+- **Konsistente Überschriften**: H1 → H2 → H3 (keine Ebenen überspringen)
+- **Code-Blöcke**: Immer mit Sprach-Tag: ` ```python `, ` ```bash `
+- **Listen**: Konsistent mit `-` für ungeordnet, `1.` für geordnet
+- **Hervorhebungen**:
+    - `**fett**` für wichtige Begriffe
+    - `*kursiv*` für Betonungen
+    - `` `code` `` für Code-Snippets
+- **Tabellen**: Markdown-Tabellen mit Header-Zeile
+
+### Changelog-Spezifisches Format
+
+Für `docs/dev/changelog.md` gilt ein standardisiertes Format:
+
+```markdown
+# Changelog – Projektname
+
+Chronologische Auflistung aller Änderungen (neueste zuerst).
+
+---
+
+## [YYYY-MM-DD] - Kurztitel der Änderung
+
+### Zusammenfassung
+
+Kurze Beschreibung (1-2 Sätze).
+
+### Problem/Motivation
+
+Welches Problem wurde gelöst?
+
+### Lösung/Implementierung
+
+Konkrete technische Umsetzung.
+
+### Betroffene Dateien
+
+- `pfad/zu/datei.py`: Kurzbeschreibung
+- `pfad/zu/anderer.py`: Kurzbeschreibung
+
+### Impact
+
+- **Entwickler**: Was müssen Entwickler beachten?
+- **Schüler**: Was ändert sich für Schüler?
+- **Breaking Changes**: Ja/Nein
+
+### Referenzen
+
+- Related Tickets: T1, T2
+- Dokumentation: docs/dev/xxx.md
+```
+
+### Qualitätskriterien
+
+**Vor dem Commit eines Dokuments prüfen**:
+
+- ✅ **Dateiname**: Kleinbuchstaben, Bindestriche, beschreibend
+- ✅ **Ablageort**: Korrekt in docs/-Unterordner einsortiert
+- ✅ **Struktur**: Titel (H1), Einleitung, Trennlinie, Hauptinhalt
+- ✅ **Überschriften**: Hierarchie korrekt (H1 → H2 → H3)
+- ✅ **Code-Blöcke**: Mit Sprach-Tag versehen
+- ✅ **Links**: Relativ und funktionsfähig
+- ✅ **Markdown-Validierung**: Keine Syntax-Fehler
+- ✅ **Redundanz**: Keine Duplikate zu anderen Dokumenten
+
+### Dokumentations-Workflow
+
+**Neue Dokumentation erstellen**:
+
+1. **Zweck definieren**: Entwickler, Schüler, Planung, Spec, Guideline?
+2. **Ordner wählen**: Entsprechend docs/-Unterordner
+3. **Namen vergeben**: Nach Namenskonventionen
+4. **Struktur aufbauen**: Template mit H1, Einleitung, Hauptinhalt
+5. **Inhalt schreiben**: Gemäß Zielgruppe und Stil
+6. **Referenzen hinzufügen**: Links zu verwandten Dokumenten
+7. **Qualitätsprüfung**: Checkliste durchgehen
+8. **Haupt-README aktualisieren**: Link zur neuen Dokumentation hinzufügen (falls relevant)
+
+**Bestehende Dokumentation aktualisieren**:
+
+1. **Changelog-Eintrag**: Bei Code-Änderungen in `docs/dev/changelog.md`
+2. **Betroffene Docs identifizieren**: Welche Dokumente sind betroffen?
+3. **Inhalte aktualisieren**: Änderungen einpflegen
+4. **Datum aktualisieren**: "Letzte Aktualisierung" falls vorhanden
+5. **Referenzen prüfen**: Links noch gültig?
+
+**Dokumentation konsolidieren**:
+
+1. **Duplikate identifizieren**: Welche Dokumente behandeln das Gleiche?
+2. **Bestes Dokument wählen**: Welches ist strukturell am besten?
+3. **Inhalte zusammenführen**: Einzigartige Inhalte übernehmen
+4. **Obsolete löschen**: Alte Dokumente nach `_archived/` verschieben
+5. **Links aktualisieren**: Verweise auf alte Dokumente anpassen
+
+### Haupt-README.md
+
+Die einzige `README.md` im Projekt-Root dient als Einstiegspunkt:
+
+**Zweck**:
+
+- Projekt kurz beschreiben (für Schüler verständlich)
+- Quick Start mit minimalem Setup
+- Links zu detaillierten Dokumentations-Kategorien
+- Troubleshooting für häufige Probleme
+
+**Inhalt (nicht zu überfrachten)**:
+
+1. **Projekt-Titel und Kurzbeschreibung** (2-3 Sätze)
+2. **Quick Start** (5 Schritte maximal)
+3. **Installation** (Links zu `docs/description/setup-anleitung.md`)
+4. **Weiterführende Dokumentation** (Links zu docs/-Kategorien)
+5. **Troubleshooting** (Nur häufigste 3-5 Probleme)
+
+**Was NICHT in die Haupt-README gehört**:
+
+- Detaillierte Entwickler-Dokumentation → `docs/dev/`
+- Architektur-Details → `docs/specs/`
+- Vollständige Anleitung → `docs/description/`
+- Changelogs → `docs/dev/changelog.md`
+
+### Migration bestehender Dokumente
+
+**Wenn alte Struktur vorhanden (z.B. Unter-READMEs)**:
+
+1. **Inventar erstellen**: Alle bestehenden MD-Dateien auflisten
+2. **Kategorisieren**: Entwickler / Schüler / Planung / Spec / Guideline?
+3. **Umbenennen**: Nach Namenskonventionen
+4. **Verschieben**: In korrekten docs/-Unterordner
+5. **Konsolidieren**: Duplikate zusammenführen
+6. **Haupt-README anpassen**: Links aktualisieren
+7. **Unter-READMEs löschen**: Nur eine README.md im Root behalten
+
+---
