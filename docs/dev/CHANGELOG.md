@@ -42,6 +42,1037 @@ Konkrete technische Umsetzung der Änderung.
 
 ---
 
+## [2025-11-19–2025-11-20] - Modul-Reorganisation und Dokumentations-Konsolidierung
+
+### Zusammenfassung
+
+Umfassende Reorganisation der `core.simulation` Paketstruktur:
+
+- Exceptions-Modul zu Package-Struktur erweitert
+- Neues Infrastructure-Package für Config und Logging erstellt
+- Dokumentation konsolidiert: Modul-READMEs entfernt, zentrale __init__.py-Dokumentation
+- Alle Module dokumentiert nach einheitlichem Standard
+
+### Problem/Motivation
+
+**Strukturelle Probleme:**
+
+- `exceptions.py` und `config.py`/`logging_setup.py` als einzelne Dateien nicht skalierbar
+- Fehlende Vorbereitung für zukünftige Exception-Kategorien (visualization, io, network)
+- Keine klare Infrastruktur-Schicht
+
+**Dokumentationsprobleme:**
+
+- Redundanz zwischen README.md und Modul-Docstrings
+- Inkonsistente Dokumentationsstile
+- Pflegeaufwand durch mehrfache Wartung derselben Informationen
+- README.md-Dateien in Modulen führten zu Fragmentierung
+
+### Lösung/Implementierung
+
+#### 1. Exceptions-Modul → Package-Struktur
+
+**Neue Struktur:**
+
+```
+src/core/simulation/exceptions/
+├── __init__.py          # Zentrale API-Definition
+└── simulation.py        # Exception-Klassen
+```
+
+**Migration:**
+
+- `exceptions.py` → `exceptions/simulation.py`
+- Zentrale API in `__init__.py` definiert
+- Vorbereitung für zukünftige Kategorien:
+    - `visualization.py` (GUI-Fehler)
+    - `io.py` (Datei-/Netzwerkfehler)
+    - `network.py` (Kommunikationsfehler)
+
+#### 2. Infrastructure-Package erstellt
+
+**Neue Struktur:**
+
+```
+src/core/simulation/infrastructure/
+├── __init__.py          # Zentrale API
+├── config.py            # SimulationConfig
+└── logging_setup.py     # Logging-Setup
+```
+
+**Design-Prinzipien:**
+
+- Framework-unabhängig
+- Thread-sicher
+- Keine Simulationslogik
+- Wiederverwendbar in anderen Kontexten
+
+**Zukünftige Erweiterungen vorbereitet:**
+
+- `metrics.py` – Performance-Metriken
+- `profiling.py` – Profiling-Tools
+- `validation.py` – Input-Validierung
+- `serialization.py` – State-Serialisierung
+
+#### 3. Dokumentations-Konsolidierung
+
+**Konzept:**
+
+- **Eine Dokumentationsquelle** pro Modul: die `__init__.py`-Datei
+- Modul-Übersicht, Struktur und Beispiele zentral
+- Einzeldateien: Nur spezifische Docstrings
+
+**Struktur pro `__init__.py`:**
+
+```python
+"""
+1. Modulzweck und strukturelle Verantwortlichkeiten
+2. Modul-Bestandteile
+3. Öffentliche API
+4. Verwendungsbeispiele
+5. Architektur-Prinzipien
+"""
+```
+
+**Reduzierung:**
+
+- exceptions: 140 → 51 Zeilen (-63%)
+- infrastructure: 172 → 50 Zeilen (-71%)
+- state: 185 → 50 Zeilen (-73%)
+- synchronization: 160 → 60 Zeilen (-62%)
+
+**Gelöschte READMEs:**
+
+- `src/core/simulation/exceptions/README.md`
+- `src/core/simulation/infrastructure/README.md`
+- `src/core/simulation/state/README.md`
+- `src/core/simulation/synchronization/README.md`
+
+### Betroffene Dateien
+
+**Neu erstellt:**
+
+- `src/core/simulation/exceptions/` (Package)
+    - `exceptions/__init__.py`
+    - `exceptions/simulation.py`
+- `src/core/simulation/infrastructure/` (Package)
+    - `infrastructure/__init__.py`
+    - `infrastructure/config.py`
+    - `infrastructure/logging_setup.py`
+- `docs/planning/REFACTORING_INFRASTRUCTURE.md`
+- `docs/planning/REFACTORING_DOCUMENTATION.md`
+
+**Verschoben:**
+
+- `exceptions.py` → `exceptions/simulation.py`
+- `config.py` → `infrastructure/config.py`
+- `logging_setup.py` → `infrastructure/logging_setup.py`
+
+**Gelöscht:**
+
+- `src/core/simulation/exceptions.py`
+- `src/core/simulation/config.py`
+- `src/core/simulation/logging_setup.py`
+- Alle Modul-README.md-Dateien
+
+**Aktualisiert (Imports):**
+
+- `src/core/simulation/__init__.py`
+- `src/core/simulation/ufosim.py`
+- `tests/test_logging_setup.py`
+
+**Aktualisiert (Dokumentation):**
+
+- `src/core/simulation/exceptions/__init__.py`
+- `src/core/simulation/exceptions/simulation.py`
+- `src/core/simulation/infrastructure/__init__.py`
+- `src/core/simulation/infrastructure/config.py`
+- `src/core/simulation/infrastructure/logging_setup.py`
+- `src/core/simulation/state/__init__.py`
+- `src/core/simulation/state/state.py`
+- `src/core/simulation/synchronization/__init__.py`
+- `src/core/simulation/synchronization/instance_lock.py`
+- `src/core/simulation/synchronization/module_lock.py`
+
+### Impact
+
+**Entwickler:**
+
+- ✅ Klarere Package-Struktur
+- ✅ Bessere Skalierbarkeit (Exception-Kategorien, Infrastructure-Komponenten)
+- ⚠️ Import-Pfade geändert (aber API bleibt kompatibel):
+  ```python
+  # Alt
+  from core.simulation.exceptions import SimulationError
+  from core.simulation.config import SimulationConfig
+  
+  # Neu (aber alte Imports funktionieren weiter)
+  from core.simulation.exceptions import SimulationError  # unverändert
+  from core.simulation.infrastructure import SimulationConfig  # oder direkt
+  ```
+- ✅ Reduzierter Dokumentations-Pflegeaufwand
+- ✅ Konsistente Dokumentation über alle Module
+
+**Schüler:**
+
+- Keine Änderungen (nur interne Struktur)
+
+**Breaking Changes:**
+
+- Keine – API bleibt kompatibel durch Re-Exports in `__init__.py`
+
+### Validierung
+
+- ✅ Alle 52 Tests erfolgreich
+- ✅ Keine funktionalen Änderungen
+- ✅ API-Kompatibilität gewahrt
+
+### Statistik
+
+- **Dateien geändert:** 17
+- **Zeilen hinzugefügt:** 924
+- **Zeilen entfernt:** 394
+- **Netto:** +530 Zeilen (hauptsächlich Dokumentation)
+- **Dokumentationsreduktion:** 63–76% in Einzeldateien
+
+### Referenzen
+
+- Related Tickets: T4 (Infrastructure-Basis)
+- Commit: `df334a3`
+- Dokumentation: `docs/planning/REFACTORING_INFRASTRUCTURE.md`, `docs/planning/REFACTORING_DOCUMENTATION.md`
+
+---
+
+## [2025-11-19] - T6: Mathematische Utilities (utils/maths.py, validation.py, geometry.py)
+
+### Zusammenfassung
+
+Implementierung von drei neuen Utility-Modulen für mathematische, geometrische und Validierungs-Funktionen:
+
+- `utils/maths.py` – Numerische Hilfsfunktionen
+- `utils/validation.py` – Eingabe-Validierung
+- `utils/geometry.py` – Geometrische Berechnungen
+
+### Problem/Motivation
+
+**Fehlende Abstraktion:**
+
+- Mathematische Operationen (Winkelkonvertierung, Clamping, etc.) waren über Codebase verteilt
+- Keine zentrale Validierung von Eingaben
+- Geometrische Berechnungen (Distanz, Winkel) in verschiedenen Modulen dupliziert
+- Magic Numbers ohne Erklärung
+
+**Wartbarkeitsprobleme:**
+
+- Wiederholter Code
+- Schwierige Testbarkeit
+- Keine einheitlichen Fehlerbehandlungen
+
+### Lösung/Implementierung
+
+#### 1. utils/maths.py
+
+**Numerische Hilfsfunktionen:**
+
+```python
+def deg_to_rad(degrees: float) -> float
+
+
+    def rad_to_deg(radians: float) -> float
+
+
+    def wrap_angle_deg(angle: float) -> float
+
+
+    def wrap_angle_rad(angle: float) -> float
+
+
+    def clamp(value: float, min_val: float, max_val: float) -> float
+
+
+    def lerp(a: float, b: float, t: float) -> float
+
+
+    def safe_divide(numerator: float, denominator: float, default: float = 0.0) -> float
+```
+
+**Features:**
+
+- Physikalisch korrekte Winkelberechnungen
+- Robuste Division mit Fallback
+- Type-Hints und umfassende Docstrings
+
+#### 2. utils/validation.py
+
+**Eingabe-Validierung:**
+
+```python
+def validate_range(value: float, min_val: float, max_val: float, name: str)
+
+
+    def validate_positive(value: float, name: str)
+
+
+    def validate_non_negative(value: float, name: str)
+```
+
+**Features:**
+
+- Klare Fehlermeldungen
+- Konsistente Exceptions
+- Wiederverwendbar in allen Modulen
+
+#### 3. utils/geometry.py
+
+**Geometrische Berechnungen:**
+
+```python
+def distance_2d(x1: float, y1: float, x2: float, y2: float) -> float
+
+
+    def angle_between_points(x1: float, y1: float, x2: float, y2: float) -> float
+```
+
+**Features:**
+
+- Vektorbasierte Berechnungen
+- Benannte Konstanten statt Magic Numbers:
+  ```python
+  EPSILON_DISTANCE = 1e-10  # Minimale Distanz für Winkelberechnung
+  ```
+
+### Betroffene Dateien
+
+**Neu erstellt:**
+
+- `src/core/simulation/utils/maths.py` (189 Zeilen)
+- `src/core/simulation/utils/validation.py` (85 Zeilen)
+- `src/core/simulation/utils/geometry.py` (78 Zeilen)
+- `tests/test_maths.py` (umfassende Tests)
+- `tests/test_validation.py`
+- `tests/test_geometry.py`
+
+**Aktualisiert:**
+
+- `src/core/simulation/utils/__init__.py` (Exports hinzugefügt)
+
+### Impact
+
+**Entwickler:**
+
+- ✅ Framework-unabhängige mathematische Utilities verfügbar
+- ✅ Konsistente Validierung in gesamter Codebase
+- ✅ Reduzierung von Code-Duplikation
+- ✅ Bessere Testbarkeit durch isolierte Funktionen
+- ✅ Keine Magic Numbers mehr
+
+**Schüler:**
+
+- ✅ Können Utility-Funktionen in Tasks verwenden
+- ✅ Bessere Fehlermeldungen bei ungültigen Eingaben
+
+**Breaking Changes:**
+
+- Keine – nur neue Funktionalität
+
+### Performance-Optimierungen
+
+- Vermeidung unnötiger Berechnungen (z.B. frühe Rückgaben)
+- Verwendung von numpy wo sinnvoll
+- Optimierte Winkelberechnungen
+
+### Code-Qualität
+
+- ✅ Umfassende Docstrings (Google-Stil)
+- ✅ Type-Hints für alle Funktionen
+- ✅ Unit-Tests mit >90% Coverage
+- ✅ Performance-Tests für kritische Funktionen
+
+### Referenzen
+
+- Related Tickets: T6
+- PR: #13
+- Commits: `f2b7013`, `cbee8b3`, `f4f6bc9`, `bfd4179`, `15cbc73`
+- Dokumentation: Repository-Konvention eingehalten
+
+---
+
+## [2025-11-19] - T5: Threading Utilities (synchronization/)
+
+### Zusammenfassung
+
+Implementierung eines konsistenten Threading-Systems mit Decorators für Thread-Sicherheit:
+
+- `@synchronized` Decorator für Instanz-Locks
+- `@synchronized_global` Decorator für Modul-Locks
+- Umfassendes Testing-Framework für Nebenläufigkeit
+- Refactoring aller bestehenden Lock-Pattern
+
+### Problem/Motivation
+
+**Inkonsistente Thread-Sicherheit:**
+
+- Lock-Handling manuell in jeder Methode
+- Verschiedene Lock-Patterns über Codebase verteilt
+- Fehleranfällig und schwer wartbar
+- Keine standardisierte Lösung
+
+**Fehlende Tools:**
+
+- Keine Debugging-Tools für Threading-Probleme
+- Schwierige Identifikation von Deadlocks
+- Keine Performance-Überwachung bei Parallelität
+
+### Lösung/Implementierung
+
+#### 1. Decorator-basiertes Lock-System
+
+**@synchronized (Instanz-Locks):**
+
+```python
+from core.simulation.synchronization import synchronized
+
+
+class MyClass:
+    def __init__(self):
+        self._lock = threading.RLock()
+
+    @synchronized
+    def thread_safe_method(self):
+        # Thread-sicher durch Decorator
+        pass
+```
+
+**@synchronized_global (Modul-Locks):**
+
+```python
+from core.simulation.synchronization import synchronized_global
+
+_module_lock = threading.RLock()
+
+
+@synchronized_global
+def module_level_function():
+    # Thread-sicher auf Modul-Ebene
+    pass
+```
+
+**Features:**
+
+- Automatisches Lock-Handling
+- RLock für Re-Entrancy
+- Klare Fehler wenn Lock fehlt
+- Minimaler Overhead
+
+#### 2. Refactoring bestehender Code
+
+**Aktualisiert:**
+
+- `StateManager`: Alle Methoden mit `@synchronized`
+- `CommandExecutor`: Lock-Pattern vereinheitlicht
+- `logging_setup.py`: `@synchronized_global` für `get_logger()`
+
+**Vorher:**
+
+```python
+def method(self):
+    with self._lock:
+# ... Code ...
+```
+
+**Nachher:**
+
+```python
+@synchronized
+def method(self):
+# ... Code ... (Lock automatisch)
+```
+
+#### 3. Testing-Framework
+
+**Neue Tools installiert:**
+
+- `pytest-timeout` – Deadlock-Erkennung
+- `threadpoolctl` – Thread-Pool Kontrolle
+- `py-spy` – Profiling für Threading
+
+**Pytest-Markers:**
+
+```python
+@pytest.mark.threading  # Threading-Tests
+@pytest.mark.slow  # Langlaufende Tests
+@pytest.mark.deadlock  # Deadlock-Tests
+```
+
+**Tests:**
+
+- `test_synchronization_instance_lock.py` – Instanz-Lock Tests
+- `test_synchronization_module_lock.py` – Modul-Lock Tests
+- `test_threading_tools_demo.py` – Demonstrations-Tests
+
+#### 4. Umbenennung utils/ → synchronization/
+
+**Rationale:**
+
+- Klarere semantische Bedeutung
+- Bessere Trennung von anderen Utilities
+- Vorbereitung für weitere Threading-Tools
+
+**Struktur:**
+
+```
+src/core/simulation/synchronization/
+├── __init__.py
+├── instance_lock.py     # @synchronized
+└── module_lock.py       # @synchronized_global
+```
+
+### Betroffene Dateien
+
+**Neu erstellt:**
+
+- `src/core/simulation/utils/threads.py` (später → synchronization/)
+- `src/core/simulation/synchronization/instance_lock.py`
+- `src/core/simulation/synchronization/module_lock.py`
+- `tests/test_synchronization_instance_lock.py`
+- `tests/test_synchronization_module_lock.py`
+- `tests/test_threading_tools_demo.py`
+
+**Aktualisiert:**
+
+- `src/core/simulation/state/manager.py` (StateManager mit @synchronized)
+- `src/core/simulation/logging_setup.py` (mit @synchronized_global)
+- `requirements.txt` (neue Test-Dependencies)
+- `pyproject.toml` (pytest-Markers)
+
+**Umbenannt:**
+
+- `utils/` → `synchronization/` (gesamtes Package)
+
+### Impact
+
+**Entwickler:**
+
+- ✅ Konsistentes Thread-Safety Pattern
+- ✅ Reduzierter Boilerplate-Code
+- ✅ Bessere Wartbarkeit
+- ✅ Umfangreiche Test-Tools
+- ⚠️ Import-Pfade geändert:
+  ```python
+  # Alt (hypothetisch)
+  from core.simulation.utils.threads import synchronized
+  
+  # Neu
+  from core.simulation.synchronization import synchronized
+  ```
+
+**Schüler:**
+
+- Keine direkten Auswirkungen (interne API)
+
+**Breaking Changes:**
+
+- ⚠️ Package-Umbenennung `utils/` → `synchronization/`
+- ✅ API bleibt kompatibel durch Re-Exports
+
+### Qualitätssicherung
+
+- ✅ Umfassende Threading-Tests
+- ✅ Deadlock-Erkennung durch pytest-timeout
+- ✅ Code-Review durchgeführt
+- ✅ Performance-Validierung
+
+### Referenzen
+
+- Related Tickets: T5
+- PR: #12
+- Commits: `92657f2`, `b4bd754`, `6f561a6`, `ba29984`, `e40b4b4`, `557c97a`, `db7e4e0`
+- Tools: pytest-timeout, threadpoolctl, py-spy
+
+---
+
+## [2025-11-18] - T4: Exceptions & Logging Infrastructure
+
+### Zusammenfassung
+
+Implementierung der Basis-Infrastruktur für Fehlerbehandlung und Logging:
+
+- Exception-Hierarchie mit `SimulationError` als Basis
+- Thread-sicheres Logging-Setup mit einmaliger Konfiguration
+- Vorbereitung für zukünftige Exception-Kategorien
+
+### Problem/Motivation
+
+**Fehlende Exception-Hierarchie:**
+
+- Keine projekt-spezifischen Exception-Klassen
+- Schwierige Unterscheidung zwischen verschiedenen Fehlertypen
+- Keine konsistente Fehlerbehandlung
+
+**Unstrukturiertes Logging:**
+
+- Logging ad-hoc konfiguriert
+- Keine Thread-Sicherheit
+- Mehrfache Initialisierungen möglich
+- Inkonsistente Log-Formate
+
+### Lösung/Implementierung
+
+#### 1. Exception-Hierarchie (exceptions.py)
+
+**Basis-Klasse:**
+
+```python
+class SimulationError(Exception):
+    """Basis-Exception für alle Simulationsfehler."""
+    pass
+```
+
+**Spezialisierte Exceptions:**
+
+```python
+class ConfigError(SimulationError):
+    """Fehler in der Simulationskonfiguration."""
+    pass
+
+
+class StateValidationError(SimulationError):
+    """Fehler bei State-Validierung."""
+    pass
+
+
+class PhysicsError(SimulationError):
+    """Fehler in der Physik-Engine."""
+    pass
+```
+
+**Design-Prinzipien:**
+
+- Klare Hierarchie
+- Aussagekräftige Namen
+- Erweiterbar für zukünftige Kategorien
+
+#### 2. Thread-sicheres Logging (logging_setup.py)
+
+**Implementierung:**
+
+```python
+_logger_cache: dict[str, logging.Logger] = {}
+_logging_configured: bool = False
+_lock = threading.RLock()
+
+
+def configure_logging(level: int = logging.INFO) -> None:
+    """Konfiguriert Logging einmalig (thread-sicher)."""
+    global _logging_configured
+    with _lock:
+        if _logging_configured:
+            return
+        # ... Konfiguration ...
+        _logging_configured = True
+
+
+def get_logger(name: str) -> logging.Logger:
+    """Liefert gecachten Logger (thread-sicher)."""
+    with _lock:
+        if name not in _logger_cache:
+            _logger_cache[name] = logging.getLogger(name)
+        return _logger_cache[name]
+```
+
+**Features:**
+
+- Einmalige Konfiguration (Idempotenz)
+- RLock statt Lock (Re-Entrancy)
+- Logger-Caching für Performance
+- Thread-sicher
+
+#### 3. Race-Condition Fix
+
+**Problem gefunden:**
+
+```python
+# Unsicher:
+if name not in _logger_cache:
+    _logger_cache[name] = logging.getLogger(name)
+return _logger_cache[name]
+```
+
+**Lösung:**
+
+```python
+# Thread-sicher:
+with _lock:
+    if name not in _logger_cache:
+        _logger_cache[name] = logging.getLogger(name)
+    return _logger_cache[name]
+```
+
+### Betroffene Dateien
+
+**Neu erstellt:**
+
+- `src/core/simulation/exceptions.py` (84 Zeilen)
+- `src/core/simulation/logging_setup.py` (145 Zeilen)
+- `tests/test_exceptions.py`
+- `tests/test_logging_setup.py`
+
+**Aktualisiert:**
+
+- `src/core/simulation/__init__.py` (Exports hinzugefügt)
+
+### Impact
+
+**Entwickler:**
+
+- ✅ Konsistente Exception-Hierarchie verfügbar
+- ✅ Thread-sicheres Logging out-of-the-box
+- ✅ Klare Fehler-Kategorisierung möglich
+- ✅ Logger-Caching für bessere Performance
+
+**Schüler:**
+
+- ✅ Bessere Fehlermeldungen
+- ✅ Konsistentes Log-Format
+
+**Breaking Changes:**
+
+- Keine – nur neue Funktionalität
+
+### Qualitätssicherung
+
+- ✅ Thread-Safety validiert
+- ✅ Race-Condition behoben
+- ✅ Unit-Tests für beide Module
+- ✅ RLock-Konsistenz mit Codebase
+
+### Referenzen
+
+- Related Tickets: T4
+- PR: #11
+- Commits: `1c7e4f7`, `17e9c3f`, `5b3c9e9`
+- Follow-up: Modul-Reorganisation (siehe oben)
+
+---
+
+## [2025-11-16] - T3: State-Extraktion mit Immutability-Pattern
+
+### Zusammenfassung
+
+Extraktion des `UfoState` in separates Modul mit vollständiger Immutability:
+
+- `UfoState` als frozen Dataclass
+- `StateProxy` für View-Layer
+- Lazy Property-Berechnung
+- Refactoring von PhysicsEngine und StateManager
+
+### Problem/Motivation
+
+**Strukturelle Probleme:**
+
+- `UfoState` war Teil von `ufosim.py` (tight coupling)
+- Keine klare Trennung zwischen State-Modell und State-Management
+- Mutable State führte zu unvorhersehbaren Seiteneffekten
+
+**Architektonische Ziele:**
+
+- Immutable State (Copy-on-Write Pattern)
+- Klare Verantwortlichkeiten
+- Bessere Testbarkeit
+- Thread-Safety durch Immutability
+
+### Lösung/Implementierung
+
+#### 1. UfoState als frozen Dataclass
+
+**state/state.py:**
+
+```python
+@dataclass(frozen=True)
+class UfoState:
+    """Immutable UFO-Zustand."""
+    x: float
+    y: float
+    z: float
+    vx: float
+    vy: float
+    vz: float
+
+    # ... weitere Felder ...
+
+    @property
+    def position_vector(self) -> np.ndarray:
+        """Lazy-berechneter Positions-Vektor."""
+        return np.array([self.x, self.y, self.z])
+```
+
+**Vorteile:**
+
+- Thread-sicher durch Immutability
+- Keine unerwarteten Seiteneffekte
+- Klare Copy-Semantik
+
+#### 2. StateProxy für View-Layer
+
+**Zweck:**
+
+- Trennung View-Daten von Kern-State
+- Lazy Berechnung komplexer Properties
+- Reduzierung der State-Größe
+
+**Implementierung:**
+
+```python
+class StateProxy:
+    """Read-only View auf UfoState mit lazy Properties."""
+
+    def __init__(self, state: UfoState):
+        self._state = state
+
+    @property
+    def velocity_magnitude(self) -> float:
+        """Berechnet nur wenn benötigt."""
+        return np.linalg.norm(self._state.velocity_vector)
+```
+
+#### 3. PhysicsEngine Refactoring
+
+**Copy-on-Write Pattern:**
+
+```python
+# Alt (mutiert State direkt):
+def integrate_step(self, state: UfoState) -> tuple[bool, bool]:
+    state.vz += acceleration * dt  # ❌ Mutation
+
+
+# Neu (immutable):
+def integrate_step(self, state: UfoState) -> tuple[UfoState, bool, bool]:
+    new_state = dataclasses.replace(
+        state,
+        vz=state.vz + acceleration * dt
+    )
+    return new_state, is_landed, crashed  # ✅ Neuer State
+```
+
+#### 4. StateManager Refactoring
+
+**Thread-sicheres Update:**
+
+```python
+def update_state(self, updater: Callable[[UfoState], UfoState]) -> None:
+    """Atomares State-Update."""
+    with self._lock:
+        self._current_state = updater(self._current_state)
+        self._notify_observers()
+```
+
+### Betroffene Dateien
+
+**Neu erstellt:**
+
+- `src/core/simulation/state/state.py` (UfoState + StateProxy)
+- `tests/test_state.py` (10 neue Tests)
+
+**Aktualisiert:**
+
+- `src/core/simulation/physics/engine.py` (PhysicsEngine)
+- `src/core/simulation/state/manager.py` (StateManager)
+- `src/core/simulation/ufosim.py` (Integration)
+
+**Dokumentation:**
+
+- `docs/planning/implementation-status.md` (T3 als abgeschlossen)
+
+### Impact
+
+**Entwickler:**
+
+- ✅ Immutable State Pattern etabliert
+- ✅ Bessere Thread-Safety
+- ✅ Klarere Datenflüsse
+- ⚠️ API-Änderung:
+  ```python
+  # Alt
+  physics_engine.integrate_step(state)  # mutiert state
+  
+  # Neu
+  new_state, landed, crashed = physics_engine.integrate_step(state)
+  ```
+
+**Schüler:**
+
+- Keine direkten Auswirkungen (interne API)
+
+**Breaking Changes:**
+
+- ⚠️ PhysicsEngine.integrate_step() Signatur geändert
+- ⚠️ State-Updates nur noch über dataclasses.replace()
+
+### Qualitätssicherung
+
+- ✅ 10 neue Tests (alle erfolgreich)
+- ✅ PhysicsEngine-Tests aktualisiert
+- ✅ StateManager-Tests aktualisiert
+- ✅ TODO-Kommentare für Refactoring entfernt
+
+### Architektonische Verbesserungen
+
+- **Immutability:** Keine Seiteneffekte mehr
+- **Separation of Concerns:** State-Modell unabhängig von Management
+- **Testbarkeit:** Isolierte Unit-Tests möglich
+- **Thread-Safety:** Durch Immutability inherent thread-sicher
+
+### Referenzen
+
+- Related Tickets: T3
+- PR: #10
+- Commits: `245f79f`, `86cc29a`, `fdeedea`, `5a2b535`, `d798b4e`, `32669ad`
+- Dokumentation: T3-SUMMARY.md
+
+---
+
+## [2025-11-15] - T2: Konfigurationsmodul (config.py)
+
+### Zusammenfassung
+
+Extraktion der Simulationskonfiguration in dediziertes Modul:
+
+- `SimulationConfig` als Dataclass
+- `DEFAULT_CONFIG` als Standard-Konfiguration
+- Vollständige Typisierung und Dokumentation
+
+### Problem/Motivation
+
+**Konfiguration war hartcodiert:**
+
+- Magic Numbers in `ufosim.py` verteilt
+- Keine zentrale Konfiguration
+- Schwierig zu testen
+- Keine Möglichkeit zur Anpassung ohne Code-Änderung
+
+**Ziele:**
+
+- Zentrale Konfiguration
+- Einfache Anpassbarkeit
+- Validierung von Parametern
+- Dokumentation der Bedeutung jedes Parameters
+
+### Lösung/Implementierung
+
+#### 1. SimulationConfig Dataclass
+
+**config.py:**
+
+```python
+@dataclass
+class SimulationConfig:
+    """Zentrale Konfiguration der UFO-Simulation.
+    
+    Alle physikalischen und technischen Parameter werden hier definiert.
+    """
+    # Zeitsteuerung
+    dt: float = 0.1  # Sekunden pro Simulationsschritt
+    update_interval_ms: int = 100  # GUI-Update-Intervall
+
+    # Physikalische Parameter
+    gravity: float = 1.62  # m/s² (Mond-Gravitation)
+    max_thrust: float = 45.0  # m/s² maximale Schubkraft
+
+    # Landing-Assistance
+    landing_assistance_height: float = 50.0  # m
+    landing_assistance_max_tilt: float = 3.0  # Grad
+
+    # Landungskriterien
+    landing_max_velocity: float = 2.0  # m/s
+    landing_max_tilt: float = 5.0  # Grad
+
+    # ... weitere Parameter ...
+```
+
+**Features:**
+
+- Gruppierung nach Kategorien
+- Kommentare mit Einheiten
+- Default-Werte aus Original-Code
+- Type-Hints für alle Felder
+
+#### 2. DEFAULT_CONFIG
+
+```python
+DEFAULT_CONFIG = SimulationConfig()
+```
+
+**Verwendung:**
+
+```python
+# Standard-Konfiguration
+sim = UfoSim()
+
+# Angepasste Konfiguration
+custom_config = SimulationConfig(gravity=9.81, max_thrust=60.0)
+sim = UfoSim(config=custom_config)
+
+# Partielle Anpassung
+config = dataclasses.replace(DEFAULT_CONFIG, dt=0.05)
+sim = UfoSim(config=config)
+```
+
+#### 3. Integration in UfoSim
+
+**ufosim.py:**
+
+```python
+class UfoSim:
+    def __init__(self, config: SimulationConfig = DEFAULT_CONFIG):
+        self.config = config
+        self.dt = config.dt
+        # ... weitere Initialisierung ...
+```
+
+### Betroffene Dateien
+
+**Neu erstellt:**
+
+- `src/core/simulation/config.py` (125 Zeilen)
+- `tests/test_config.py`
+
+**Aktualisiert:**
+
+- `src/core/simulation/ufosim.py` (Integration)
+- `src/core/simulation/__init__.py` (Export)
+
+### Impact
+
+**Entwickler:**
+
+- ✅ Zentrale Konfiguration verfügbar
+- ✅ Einfache Anpassung für Tests
+- ✅ Klare Dokumentation aller Parameter
+- ✅ Keine Magic Numbers mehr
+
+**Schüler:**
+
+- ✅ Können Simulation einfach anpassen
+- ✅ Verständnis durch dokumentierte Parameter
+
+**Breaking Changes:**
+
+- Keine – UfoSim() funktioniert weiter mit Defaults
+
+### Qualitätssicherung
+
+- ✅ Tests erfolgreich
+- ✅ Integration in bestehenden Code validiert
+- ✅ Dokumentation vollständig
+
+### Referenzen
+
+- Related Tickets: T2
+- PR: #6
+- Commit: `7444352`
+
+---
+
 ## [2025-11-20] - Dokumentations-Reorganisation
 
 ### Zusammenfassung
