@@ -6,6 +6,9 @@ from __future__ import annotations
 
 import math
 
+# Numerische Toleranz für Ursprungsnähe-Prüfung
+EPSILON_NEAR_ORIGIN = 1e-10
+
 
 def cartesian_to_spherical(x: float, y: float, z: float) -> tuple[float, float, float]:
     """
@@ -26,14 +29,14 @@ def cartesian_to_spherical(x: float, y: float, z: float) -> tuple[float, float, 
 
     Examples:
         >>> r, theta, phi = cartesian_to_spherical(0.0, 0.0, 1.0)
-        >>> abs(r - 1.0) < 1e-10
+        >>> abs(r - 1.0) < EPSILON_NEAR_ORIGIN
         True
-        >>> abs(theta - 0.0) < 1e-10
+        >>> abs(theta - 0.0) < EPSILON_NEAR_ORIGIN
         True
     """
     r = math.sqrt(x * x + y * y + z * z)
 
-    if r < 1e-10:  # Sehr nahe am Ursprung
+    if r < EPSILON_NEAR_ORIGIN:
         return 0.0, 0.0, 0.0
 
     theta = math.acos(z / r)
@@ -61,7 +64,9 @@ def spherical_to_cartesian(r: float, theta: float, phi: float) -> tuple[float, f
 
     Examples:
         >>> x, y, z = spherical_to_cartesian(1.0, 0.0, 0.0)
-        >>> abs(x - 0.0) < 1e-10 and abs(y - 0.0) < 1e-10 and abs(z - 1.0) < 1e-10
+        >>> abs(x - 0.0) < EPSILON_NEAR_ORIGIN and abs(y - 0.0) < EPSILON_NEAR_ORIGIN
+        True
+        >>> abs(z - 1.0) < EPSILON_NEAR_ORIGIN
         True
     """
     sin_theta = math.sin(theta)
