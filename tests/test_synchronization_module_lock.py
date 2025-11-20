@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Tests für core.simulation.utils.module_lock.
+Tests für core.simulation.synchronization.module_lock.
 
 Diese Tests prüfen:
 1. Smoke-Test: Modul kann ohne Fehler importiert werden

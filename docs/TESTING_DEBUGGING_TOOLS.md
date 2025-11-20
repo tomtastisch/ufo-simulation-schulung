@@ -17,7 +17,7 @@ Diese Dokumentation beschreibt die installierten Tools für Testing und Debuggin
 pytest tests/
 
 # Einzelner Test mit custom Timeout
-pytest tests/test_utils_instance_lock.py --timeout=60
+pytest tests/test_synchronization_instance_lock.py --timeout=60
 
 # Test mit spezifischem Timeout dekorieren
 @pytest.mark.timeout(10)

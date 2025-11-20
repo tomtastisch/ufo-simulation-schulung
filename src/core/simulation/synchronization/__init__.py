@@ -24,7 +24,6 @@ Verwendung:
         >>> @synchronized_module(_lock)
         ... def function(): pass
 """
-import threading
 
 from .instance_lock import synchronized
 from .module_lock import synchronized_module

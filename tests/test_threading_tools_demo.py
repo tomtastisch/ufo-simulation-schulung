@@ -33,7 +33,6 @@ def test_timeout_prevents_deadlock():
             # Würde auf lock2 warten, aber worker2 hält es bereits
             # with lock2:  # ← Auskommentiert um Deadlock zu vermeiden
             #     pass
-            pass
     
     def worker2():
         with lock2:
@@ -41,7 +40,6 @@ def test_timeout_prevents_deadlock():
             # Würde auf lock1 warten, aber worker1 hält es bereits
             # with lock1:  # ← Auskommentiert um Deadlock zu vermeiden
             #     pass
-            pass
     
     t1 = threading.Thread(target=worker1)
     t2 = threading.Thread(target=worker2)
@@ -138,7 +136,7 @@ def test_module_lock_decorator_works():
     """
     Test für @synchronized_module Decorator mit timeout-Schutz.
     """
-    from core.simulation.utils import synchronized_module
+    from core.simulation.synchronization import synchronized_module
     
     _test_lock = threading.RLock()
     _counter = {"value": 0}
@@ -196,7 +194,7 @@ def test_complex_threading_scenario():
     Tests mit @pytest.mark.threading können selektiv ausgeführt werden:
     pytest -m threading     # Nur threading tests
     """
-    from core.simulation.utils import synchronized
+    from core.simulation.synchronization import synchronized
     
     class Resource:
         def __init__(self, name: str):
