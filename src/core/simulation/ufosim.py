@@ -177,8 +177,8 @@ from typing import Optional, List, Tuple, Literal, overload, Callable, Any, fina
 import numpy as np
 from PyQt5 import QtWidgets, QtGui, QtCore
 
-# Import UfoState from state package
-from .state import UfoState
+# Import UfoState and StateManager from state package
+from .state import UfoState, StateManager
 from .infrastructure import DEFAULT_CONFIG, SimulationConfig, get_logger
 from .synchronization.instance_lock import synchronized
 # from .exceptions import SimulationError, ConfigError  # Für zukünftige Verwendung reserviert
@@ -695,144 +695,6 @@ class UfoViewport:
         px = cx + x * self.scaling
         py = cy - y * self.scaling
         return px, py
-
-
-# =============================================================================
-# STATE MANAGER - Thread-sichere Zustandsverwaltung
-# =============================================================================
-
-class StateManager:
-    """
-    Thread-sicherer Manager für UFO-Zustand.
-
-    Kapselt Zugriff auf UfoState und bietet Event-System für Änderungsbenachrichtigungen.
-    Implementiert Observer-Pattern für Listener-Registrierung.
-    
-    Refactored für frozen UfoState: update_state() akzeptiert Funktionen, die neuen State zurückgeben.
-    """
-
-    def __init__(self, initial_state: Optional['UfoState'] = None):
-        """
-        Initialisiert StateManager mit optionalem Anfangszustand.
-
-        Args:
-            initial_state: Optionaler initialer Zustand (Standard: neuer UfoState())
-        """
-        self._state: UfoState = initial_state if initial_state is not None else UfoState()
-        self._lock = threading.RLock()
-        self._condition = threading.Condition(self._lock)
-        self._observers: List[Callable[[UfoState], None]] = []
-        logger.debug("StateManager initialized")
-
-    @synchronized
-    def get_snapshot(self) -> 'UfoState':
-        """
-        Gibt thread-sicheren Snapshot des aktuellen Zustands zurück.
-
-        Returns:
-            Kopie des aktuellen UfoState
-        """
-        return dataclass_replace(self._state)
-
-    @synchronized
-    def update_state(self, update_func: Callable[['UfoState'], 'UfoState']) -> None:
-        """
-        Führt atomare State-Aktualisierung aus und benachrichtigt Observer.
-
-        Args:
-            update_func: Funktion die neuen State zurückgibt (immutable Pattern)
-        """
-        self._state = update_func(self._state)
-        self._condition.notify_all()
-
-        # Benachrichtige Observer (außerhalb Lock)
-        snapshot = dataclass_replace(self._state)
-        self._notify_observers(snapshot)
-
-    def _notify_observers(self, snapshot: 'UfoState') -> None:
-        """
-        Benachrichtigt alle registrierten Observer über State-Änderung.
-
-        Args:
-            snapshot: Snapshot des neuen Zustands
-        """
-        for observer in self._observers:
-            try:
-                observer(snapshot)
-            except Exception as e:
-                logger.error(f"Observer notification failed: {e}")
-
-    @synchronized
-    def register_observer(self, observer: Callable[['UfoState'], None]) -> None:
-        """
-        Registriert Observer für State-Änderungen.
-
-        Args:
-            observer: Callable das bei jeder Änderung aufgerufen wird
-        """
-        if observer not in self._observers:
-            self._observers.append(observer)
-            logger.debug(f"Observer registered, total: {len(self._observers)}")
-
-    @synchronized
-    def unregister_observer(self, observer: Callable[['UfoState'], None]) -> None:
-        """
-        Entfernt Observer aus Benachrichtigungsliste.
-
-        Args:
-            observer: Zu entfernender Observer
-        """
-        if observer in self._observers:
-            self._observers.remove(observer)
-            logger.debug(f"Observer unregistered, remaining: {len(self._observers)}")
-
-    def wait_for_condition(
-            self,
-            condition: Callable[['UfoState'], bool],
-            timeout: Optional[float] = None
-    ) -> bool:
-        """
-        Wartet bis Bedingung erfüllt ist (event-basiert, kein Busy-Waiting).
-
-        Args:
-            condition: Bedingung die State prüft
-            timeout: Optionales Timeout in Sekunden
-
-        Returns:
-            True wenn Bedingung erfüllt, False bei Timeout
-        """
-        with self._condition:
-            end_time = None if timeout is None else time.time() + timeout
-
-            while True:
-                if condition(self._state):
-                    return True
-
-                if end_time is not None:
-                    remaining = end_time - time.time()
-                    if remaining <= 0:
-                        return False
-                    wait_timeout = remaining
-                else:
-                    wait_timeout = None
-
-                self._condition.wait(timeout=wait_timeout)
-
-    @synchronized
-    def reset(self) -> None:
-        """Setzt State auf Ausgangszustand zurück."""
-        self._state = UfoState()
-        self._condition.notify_all()
-        logger.debug("State reset")
-
-    @property
-    def state(self) -> 'UfoState':
-        """
-        Direkter Zugriff auf internen State (NICHT thread-sicher!).
-
-        Nur für Legacy-Kompatibilität. Verwende get_snapshot() oder update_state().
-        """
-        return self._state
 
 
 # =============================================================================

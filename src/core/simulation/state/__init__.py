@@ -83,6 +83,7 @@ Architektur-Prinzipien
 - NumPy-Integration für effiziente numerische Operationen
 """
 
+from .manager import StateManager
 from .state import UfoState
 
-__all__ = ["UfoState"]
+__all__ = ["UfoState", "StateManager"]
