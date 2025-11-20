@@ -150,31 +150,35 @@ class StateManager:
             ...     return dataclass_replace(state, z=new_z)
             >>> manager.update_state(apply_physics)
         """
-        # Kritischer Abschnitt: State-Update und Snapshot-Erstellung
+        # Kritischer Abschnitt: State-Update, Snapshot-Erstellung und Observer-Liste kopieren
         with self._lock:
             self._state = update_func(self._state)
             self._condition.notify_all()
             snapshot = dataclass_replace(self._state)
+            observers_snapshot = list(self._observers)  # Kopie für thread-sichere Iteration
         
         # Observer außerhalb Lock benachrichtigen (nicht-kritischer Abschnitt)
-        self._notify_observers(snapshot)
+        self._notify_observers(snapshot, observers_snapshot)
 
-    def _notify_observers(self, snapshot: UfoState) -> None:
+    def _notify_observers(self, snapshot: UfoState, observers: List[Callable[[UfoState], None]]) -> None:
         """
         Benachrichtigt alle registrierten Observer über State-Änderung.
 
-        Diese Methode wird automatisch von update_state() aufgerufen.
+        Diese Methode wird automatisch von update_state() und reset() aufgerufen.
         Exceptions in einzelnen Observern werden geloggt, beeinflussen
         aber nicht die Benachrichtigung anderer Observer.
 
         Args:
             snapshot: Snapshot des neuen Zustands
+            observers: Kopie der Observer-Liste (für thread-sichere Iteration)
 
         Thread-Safety:
             Diese Methode wird außerhalb des Locks aufgerufen, um Deadlocks
             zu vermeiden (Observer könnten selbst auf StateManager zugreifen).
+            Die Observer-Liste wird als Kopie übergeben, um Race Conditions
+            bei gleichzeitiger Registrierung/Deregistrierung zu vermeiden.
         """
-        for observer in self._observers:
+        for observer in observers:
             try:
                 observer(snapshot)
             except Exception as e:
@@ -277,7 +281,6 @@ class StateManager:
 
                 self._condition.wait(timeout=wait_timeout)
 
-    @synchronized
     def reset(self) -> None:
         """
         Setzt State auf Ausgangszustand zurück.
@@ -291,11 +294,16 @@ class StateManager:
         Example:
             >>> manager.reset()  # State zurück auf Startposition
         """
-        self._state = UfoState()
-        self._condition.notify_all()
-        snapshot = dataclass_replace(self._state)
-        logger.debug("State reset")
-        self._notify_observers(snapshot)
+        # Kritischer Abschnitt: State-Reset, Snapshot-Erstellung und Observer-Liste kopieren
+        with self._lock:
+            self._state = UfoState()
+            self._condition.notify_all()
+            snapshot = dataclass_replace(self._state)
+            observers_snapshot = list(self._observers)  # Kopie für thread-sichere Iteration
+            logger.debug("State reset")
+        
+        # Observer außerhalb Lock benachrichtigen (nicht-kritischer Abschnitt)
+        self._notify_observers(snapshot, observers_snapshot)
 
     @property
     def state(self) -> UfoState:
