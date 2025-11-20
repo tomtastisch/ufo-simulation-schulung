@@ -171,9 +171,8 @@ import time
 from collections import deque
 from dataclasses import dataclass, replace as dataclass_replace
 from enum import Enum, auto
-from functools import wraps
 from pathlib import Path
-from typing import Optional, List, Tuple, Literal, overload, Callable, Any, TypeVar, final
+from typing import Optional, List, Tuple, Literal, overload, Callable, Any, final
 
 import numpy as np
 from PyQt5 import QtWidgets, QtGui, QtCore
@@ -182,25 +181,8 @@ from PyQt5 import QtWidgets, QtGui, QtCore
 from .state import UfoState
 from .config import SimulationConfig, DEFAULT_CONFIG
 from .logging_setup import get_logger
+from .utils.threads import synchronized
 # from .exceptions import SimulationError, ConfigError  # Für zukünftige Verwendung reserviert
-
-# Type variable for synchronized decorator
-F = TypeVar('F', bound=Callable[..., Any])
-
-
-# =============================================================================
-# DECORATOR - Threadsicherheit
-# =============================================================================
-
-def synchronized(method: F) -> F:
-    """Decorator für threadsichere Methoden."""
-
-    @wraps(method)
-    def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
-        with self._lock:
-            return method(self, *args, **kwargs)
-
-    return wrapper  # type: ignore[return-value]
 
 
 # =============================================================================
