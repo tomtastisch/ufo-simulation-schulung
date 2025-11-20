@@ -262,11 +262,25 @@ class TestModuleIndependence:
             assert forbidden not in module_code, f"utils.maths darf {forbidden} nicht importieren"
 
     def test_module_has_docstring(self):
-        """Modul sollte vollständige Dokumentation haben."""
+        """Modul sollte präzisen, spezifischen Docstring haben."""
         import core.simulation.utils.maths as maths_module
 
         assert maths_module.__doc__ is not None
-        assert len(maths_module.__doc__) > 100
+        # Nach Repository-Konvention: __init__.py hat umfangreiche Dokumentation,
+        # einzelne Module haben nur kurze, spezifische Docstrings
+        assert len(maths_module.__doc__) > 10
+
+    def test_package_has_comprehensive_documentation(self):
+        """utils-Paket sollte umfangreiche Dokumentation in __init__.py haben."""
+        import core.simulation.utils as utils_package
+
+        assert utils_package.__doc__ is not None
+        # Package-Level-Dokumentation sollte umfangreich sein
+        assert len(utils_package.__doc__) > 500
+        # Sollte die wichtigen Abschnitte enthalten
+        assert "Modulzweck" in utils_package.__doc__
+        assert "Strukturelle Verantwortlichkeiten" in utils_package.__doc__
+        assert "Verwendungsbeispiele" in utils_package.__doc__
 
 
 class TestIntegrationScenarios:
