@@ -8,3 +8,4 @@ pytest>=8.0.0
 pytest-timeout>=2.3.1
 threadpoolctl>=3.5.0
 py-spy>=0.3.14
+# Hinweis: Das Paket `python-qt5` (oben entfernt) ist veraltet/Windows-only und erzeugte Metadata-Build-Fehler beim Installieren.

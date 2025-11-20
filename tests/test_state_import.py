@@ -123,9 +123,8 @@ def test_state_uses_slots():
 
 
 if __name__ == "__main__":
-    # Manueller Test-Lauf (ohne pytest)
-    print("Running smoke tests for core.simulation.state...")
-    
+    from conftest import run_manual_tests
+
     tests = [
         test_state_import,
         test_state_instantiation_defaults,
@@ -134,14 +133,5 @@ if __name__ == "__main__":
         test_state_is_dataclass,
         test_state_uses_slots,
     ]
-    
-    for test in tests:
-        try:
-            test()
-            print(f"✓ {test.__name__}")
-        except AssertionError as e:
-            print(f"✗ {test.__name__}: {e}")
-        except Exception as e:
-            print(f"✗ {test.__name__}: {type(e).__name__}: {e}")
-    
-    print("\nAll smoke tests completed.")
+
+    run_manual_tests("core.simulation.state", tests)

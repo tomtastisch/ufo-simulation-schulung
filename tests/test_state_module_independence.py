@@ -1,7 +1,6 @@
 # ...existing code...
 import subprocess
 import sys
-from pathlib import Path
 
 
 def test_state_module_is_independent() -> None:

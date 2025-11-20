@@ -175,13 +175,17 @@ from pathlib import Path
 from typing import Optional, List, Tuple, Literal, overload, Callable, Any, final
 
 import numpy as np
+# noinspection PyPackageRequirements
+# PyCharm zeigt fälschlicherweise "python-qt5" als benötigt an - korrekt ist "PyQt5"
+# Siehe: .pycharm-package-mapping.md für Details
 from PyQt5 import QtWidgets, QtGui, QtCore
 
-# Import UfoState from state package
-from .state import UfoState
 from .config import SimulationConfig, DEFAULT_CONFIG
 from .logging_setup import get_logger
+# Import UfoState from state package
+from .state import UfoState
 from .utils.instance_lock import synchronized
+
 # from .exceptions import SimulationError, ConfigError  # Für zukünftige Verwendung reserviert
 
 
@@ -760,8 +764,12 @@ class StateManager:
         for observer in self._observers:
             try:
                 observer(snapshot)
-            except Exception as e:
-                logger.error(f"Observer notification failed: {e}")
+            # noinspection PyBroadException
+            except Exception:
+                # Observers come from external call sites; a single failing observer
+                # must not prevent notification of others. Daher hier ein breiter
+                # Catch - aber wir loggen die komplette Exception inkl. Stacktrace.
+                logger.exception("Observer notification failed")
 
     @synchronized
     def register_observer(self, observer: Callable[['UfoState'], None]) -> None:
@@ -1870,8 +1878,10 @@ class StateProxy:
         def updater(state: UfoState) -> UfoState:
             try:
                 return dataclass_replace(state, **{name: value})
-            except Exception:
-                # If replacement fails (unknown attribute), just return unchanged state
+            except (TypeError, AttributeError, ValueError) as e:
+                # Replacement kann fehlschlagen, z.B. bei unbekanntem Feld oder
+                # falschem Typ; in diesem Fall den State unverändert lassen.
+                logger.debug("StateProxy: failed to set attribute '%s'=%r: %s", name, value, e)
                 return state
 
         self._manager.update_state(updater)
@@ -1896,4 +1906,3 @@ __all__ = [
     # Manöver-Analyse (für Autopilot)
     "ManeuverAnalysis",
 ]
-

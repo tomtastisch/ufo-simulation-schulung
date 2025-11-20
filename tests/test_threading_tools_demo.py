@@ -139,20 +139,20 @@ def test_module_lock_decorator_works():
     Test für @synchronized_module Decorator mit timeout-Schutz.
     """
     from core.simulation.utils import synchronized_module
-    
-    _test_lock = threading.RLock()
-    _counter = {"value": 0}
-    
-    @synchronized_module(_test_lock)
+
+    lock = threading.RLock()
+    counter = {"value": 0}
+
+    @synchronized_module(lock)
     def increment():
-        old = _counter["value"]
+        old = counter["value"]
         time.sleep(0.0001)
-        _counter["value"] = old + 1
-    
-    @synchronized_module(_test_lock)
+        counter["value"] = old + 1
+
+    @synchronized_module(lock)
     def get_value():
-        return _counter["value"]
-    
+        return counter["value"]
+
     threads: List[threading.Thread] = []
     
     for _ in range(20):
