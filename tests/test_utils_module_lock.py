@@ -92,6 +92,8 @@ def test_synchronized_module_with_lock():
     assert get_value() == 1
 
 
+@pytest.mark.threading
+@pytest.mark.timeout(30)
 def test_synchronized_module_thread_safety_no_race_conditions():
     """
     Multithread-Test: Prüft, dass keine Race-Conditions bei parallelen Zugriffen auftreten.
@@ -141,6 +143,8 @@ def test_synchronized_module_thread_safety_no_race_conditions():
         f"Race-Condition detected: Expected {expected_result}, got {get_value()}"
 
 
+@pytest.mark.threading
+@pytest.mark.timeout(10)
 def test_synchronized_module_reentrant_with_rlock():
     """
     Prüft Wiedereintrittsfähigkeit bei RLock.
@@ -235,6 +239,8 @@ def test_synchronized_module_with_kwargs():
     assert flexible_function(1, b=2, c=3) == 6
 
 
+@pytest.mark.threading
+@pytest.mark.timeout(15)
 def test_synchronized_module_multiple_locks():
     """
     Prüft, dass verschiedene Locks unabhängig voneinander funktionieren.
