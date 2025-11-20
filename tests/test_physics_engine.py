@@ -9,16 +9,15 @@ Testet die physikalische Integrationslogik der UFO-Simulation isoliert.
 import sys
 from pathlib import Path
 
-# Sicherstellen, dass src/ im Python-Pfad ist
+# Sicherstellen, dass src/ im Python-Pfad ist  # noqa: E402
 src_path = Path(__file__).parent.parent / "src"
 sys.path.insert(0, str(src_path))
 
-import pytest
-import numpy as np
+import pytest  # noqa: E402
 
-from core.simulation.physics import PhysicsEngine
-from core.simulation.state import UfoState
-from core.simulation.infrastructure import SimulationConfig, DEFAULT_CONFIG
+from core.simulation.physics import PhysicsEngine  # noqa: E402
+from core.simulation.state import UfoState  # noqa: E402
+from core.simulation.infrastructure import SimulationConfig, DEFAULT_CONFIG  # noqa: E402
 
 
 class TestPhysicsEngineImport:
@@ -51,9 +50,9 @@ class TestPhysicsEngineVelocityUpdate:
         """Geschwindigkeit steigt bei positivem delta_v."""
         engine = PhysicsEngine()
         state = UfoState(v=10.0, delta_v=5.0)
-        
+
         updated = engine._update_velocity(state)
-        
+
         # Geschwindigkeit sollte um acceleration_kmh_per_step gestiegen sein
         assert updated.v > state.v
         assert updated.delta_v < state.delta_v
@@ -62,9 +61,9 @@ class TestPhysicsEngineVelocityUpdate:
         """Geschwindigkeit sinkt bei negativem delta_v."""
         engine = PhysicsEngine()
         state = UfoState(v=50.0, delta_v=-10.0)
-        
+
         updated = engine._update_velocity(state)
-        
+
         # Geschwindigkeit sollte gesunken sein
         assert updated.v < state.v
         assert updated.delta_v > state.delta_v
@@ -74,9 +73,9 @@ class TestPhysicsEngineVelocityUpdate:
         config = SimulationConfig(vmax_kmh=100.0)
         engine = PhysicsEngine(config)
         state = UfoState(v=99.0, delta_v=50.0)
-        
+
         updated = engine._update_velocity(state)
-        
+
         # Geschwindigkeit darf vmax_kmh nicht überschreiten
         assert updated.v <= config.vmax_kmh
 
@@ -84,9 +83,9 @@ class TestPhysicsEngineVelocityUpdate:
         """Geschwindigkeit wird nicht negativ."""
         engine = PhysicsEngine()
         state = UfoState(v=1.0, delta_v=-50.0)
-        
+
         updated = engine._update_velocity(state)
-        
+
         # Geschwindigkeit darf nicht unter 0 fallen
         assert updated.v >= 0.0
 
@@ -94,9 +93,9 @@ class TestPhysicsEngineVelocityUpdate:
         """Keine Änderung bei delta_v=0."""
         engine = PhysicsEngine()
         state = UfoState(v=50.0, delta_v=0.0)
-        
+
         updated = engine._update_velocity(state)
-        
+
         assert updated.v == state.v
         assert updated.delta_v == state.delta_v
 
@@ -108,9 +107,9 @@ class TestPhysicsEngineDirectionUpdate:
         """Richtung wird bei 360° auf 0° zurückgesetzt."""
         engine = PhysicsEngine()
         state = UfoState(d=350.0, delta_d=20.0)
-        
+
         updated = engine._update_direction(state)
-        
+
         # 350 + 20 = 370, soll auf 10 wrappen
         assert 0.0 <= updated.d < 360.0
         assert updated.delta_d == 0.0
@@ -119,9 +118,9 @@ class TestPhysicsEngineDirectionUpdate:
         """Keine Änderung bei delta_d=0."""
         engine = PhysicsEngine()
         state = UfoState(d=90.0, delta_d=0.0)
-        
+
         updated = engine._update_direction(state)
-        
+
         assert updated.d == state.d
         assert updated.delta_d == state.delta_d
 
@@ -133,9 +132,9 @@ class TestPhysicsEngineInclinationUpdate:
         """Neigung steigt bei positivem delta_i."""
         engine = PhysicsEngine()
         state = UfoState(i=0.0, delta_i=10.0)
-        
+
         updated = engine._update_inclination(state)
-        
+
         assert updated.i > state.i
         assert updated.delta_i < state.delta_i
 
@@ -143,9 +142,9 @@ class TestPhysicsEngineInclinationUpdate:
         """Neigung sinkt bei negativem delta_i."""
         engine = PhysicsEngine()
         state = UfoState(i=0.0, delta_i=-10.0)
-        
+
         updated = engine._update_inclination(state)
-        
+
         assert updated.i < state.i
         assert updated.delta_i > state.delta_i
 
@@ -154,9 +153,9 @@ class TestPhysicsEngineInclinationUpdate:
         config = SimulationConfig(inclination_max_deg=90.0)
         engine = PhysicsEngine(config)
         state = UfoState(i=89.0, delta_i=50.0)
-        
+
         updated = engine._update_inclination(state)
-        
+
         assert updated.i <= config.inclination_max_deg
 
     def test_update_inclination_respects_min_limit(self):
@@ -164,18 +163,18 @@ class TestPhysicsEngineInclinationUpdate:
         config = SimulationConfig(inclination_min_deg=-90.0)
         engine = PhysicsEngine(config)
         state = UfoState(i=-89.0, delta_i=-50.0)
-        
+
         updated = engine._update_inclination(state)
-        
+
         assert updated.i >= config.inclination_min_deg
 
     def test_update_inclination_no_change_when_delta_i_zero(self):
         """Keine Änderung bei delta_i=0."""
         engine = PhysicsEngine()
         state = UfoState(i=45.0, delta_i=0.0)
-        
+
         updated = engine._update_inclination(state)
-        
+
         assert updated.i == state.i
         assert updated.delta_i == state.delta_i
 
@@ -187,9 +186,9 @@ class TestPhysicsEnginePositionUpdate:
         """Position ändert sich nicht bei Geschwindigkeit=0."""
         engine = PhysicsEngine()
         state = UfoState(x=0.0, y=0.0, z=10.0, v=0.0, vel=0.0)
-        
+
         updated, result = engine._update_position(state)
-        
+
         assert updated.x == state.x
         assert updated.y == state.y
         # z könnte sich bei geringer Höhe ändern (touchdown)
@@ -198,15 +197,15 @@ class TestPhysicsEnginePositionUpdate:
     def test_update_position_changes_with_nonzero_velocity(self):
         """Position ändert sich bei Geschwindigkeit>0."""
         from dataclasses import replace
-        
+
         config = SimulationConfig(dt=1.0)  # 1 Sekunde für einfachere Berechnung
         engine = PhysicsEngine(config)
         # Horizontaler Flug: i=0, d=0 (Nord), v=36 km/h = 10 m/s
         state = UfoState(x=0.0, y=0.0, z=100.0, v=36.0, i=0.0, d=0.0)
         state = replace(state, vel=10.0)  # vel in m/s setzen
-        
+
         updated, result = engine._update_position(state)
-        
+
         # Position sollte sich geändert haben
         assert updated.x != state.x or updated.y != state.y or updated.z != state.z
         assert result == "continue"  # Noch in der Luft
@@ -220,9 +219,9 @@ class TestPhysicsEnginePositionUpdate:
             v=10.0, vel=2.78, i=-45.0, d=0.0,  # Sinkflug
             vz=-2.0  # Vertikale Geschwindigkeit nach unten
         )
-        
+
         updated, result = engine._update_position(state)
-        
+
         if result == "landed":
             # Bei Landung sollte z <= 0 sein
             assert updated.z <= 0.0
@@ -237,7 +236,7 @@ class TestPhysicsEngineLandingHandling:
     def test_handle_landing_safe_landing(self):
         """Sichere Landung wird korrekt erkannt."""
         engine = PhysicsEngine()
-        
+
         # Sicherer Zustand: langsam, geringe Sinkrate, akzeptable Neigung
         # Verwende Werte unterhalb der Standard-Schwellenwerte
         state = UfoState(
@@ -246,9 +245,9 @@ class TestPhysicsEngineLandingHandling:
             vz=-0.1,  # Geringe Sinkrate
             i=-15.0  # Sanfter Sinkflug
         )
-        
+
         updated = engine._handle_landing(state)
-        
+
         # Sichere Landung: z sollte exakt 0.0 sein (nicht negativ)
         assert updated.z == 0.0
         assert updated.vel == 0.0
@@ -257,7 +256,7 @@ class TestPhysicsEngineLandingHandling:
     def test_handle_landing_crash_high_velocity(self):
         """Crash bei zu hoher Geschwindigkeit."""
         engine = PhysicsEngine()
-        
+
         # Unsicher: zu schnell (über safe_landing_v_threshold_kmh)
         state = UfoState(
             x=10.0, y=20.0, z=0.0,
@@ -265,9 +264,9 @@ class TestPhysicsEngineLandingHandling:
             vz=-1.0,
             i=-15.0
         )
-        
+
         updated = engine._handle_landing(state)
-        
+
         # Crash: z sollte negativ sein (Crash-Marker)
         assert updated.z < 0.0
         assert updated.vel == 0.0
@@ -276,7 +275,7 @@ class TestPhysicsEngineLandingHandling:
     def test_handle_landing_crash_high_vertical_velocity(self):
         """Crash bei zu hoher Sinkrate."""
         engine = PhysicsEngine()
-        
+
         # Unsicher: zu steile Sinkrate (über safe_landing_max_vz_ms)
         state = UfoState(
             x=10.0, y=20.0, z=0.0,
@@ -284,16 +283,16 @@ class TestPhysicsEngineLandingHandling:
             vz=-5.0,  # Zu schnelle Sinkrate!
             i=-15.0
         )
-        
+
         updated = engine._handle_landing(state)
-        
+
         # Crash
         assert updated.z < 0.0
 
     def test_handle_landing_crash_unsafe_inclination(self):
         """Crash bei unsicherer Neigung."""
         engine = PhysicsEngine()
-        
+
         # Unsicher: zu steile Neigung (nicht vertikal genug für vertikale Landung)
         state = UfoState(
             x=10.0, y=20.0, z=0.0,
@@ -301,9 +300,9 @@ class TestPhysicsEngineLandingHandling:
             vz=-0.1,  # Geringe Sinkrate
             i=-45.0  # Zu steil, nicht vertikal genug!
         )
-        
+
         updated = engine._handle_landing(state)
-        
+
         # Crash
         assert updated.z < 0.0
 
@@ -315,9 +314,9 @@ class TestPhysicsEngineLandingAssistance:
         """Landungsassistenz ist nicht aktiv bei großer Höhe."""
         engine = PhysicsEngine()
         state = UfoState(z=100.0, v=50.0)
-        
+
         updated = engine._apply_landing_assistance(state)
-        
+
         # Keine Änderung
         assert updated == state
 
@@ -326,9 +325,9 @@ class TestPhysicsEngineLandingAssistance:
         engine = PhysicsEngine()
         # In Landehöhe aber Benutzer steuert
         state = UfoState(z=1.5, v=50.0, delta_v=5.0)  # Benutzer steuert
-        
+
         updated = engine._apply_landing_assistance(state)
-        
+
         # Keine Assistenz wegen Benutzersteuerung
         assert updated == state
 
@@ -337,9 +336,9 @@ class TestPhysicsEngineLandingAssistance:
         engine = PhysicsEngine()
         # In Landehöhe, keine Benutzersteuerung, zu schnell
         state = UfoState(z=1.5, v=50.0, delta_v=0.0, delta_i=0.0, delta_d=0.0)
-        
+
         updated = engine._apply_landing_assistance(state)
-        
+
         # Geschwindigkeitsreduktion sollte aktiviert sein
         assert updated.delta_v < 0.0  # Bremsen
 
@@ -348,9 +347,9 @@ class TestPhysicsEngineLandingAssistance:
         engine = PhysicsEngine()
         # Zu flach (i=0), sollte steiler werden
         state = UfoState(z=1.5, v=10.0, i=0.0, delta_v=0.0, delta_i=0.0, delta_d=0.0)
-        
+
         updated = engine._apply_landing_assistance(state)
-        
+
         # Neigung sollte steiler gemacht werden (delta_i negativ)
         # Aber nur wenn Assistenz aktiv ist - das hängt von weiteren Bedingungen ab
         # Prüfen dass entweder Assistenz aktiv ist oder State unverändert
@@ -366,9 +365,9 @@ class TestPhysicsEngineIntegrateStep:
         """integrate_step gibt korrektes Tupel zurück."""
         engine = PhysicsEngine()
         state = UfoState()
-        
+
         result = engine.integrate_step(state)
-        
+
         assert isinstance(result, tuple)
         assert len(result) == 3
         new_state, continues, landed = result
@@ -385,9 +384,9 @@ class TestPhysicsEngineIntegrateStep:
             i=45.0,  # Steigflug
             d=0.0
         )
-        
+
         new_state, continues, landed = engine.integrate_step(state)
-        
+
         # Simulation sollte weiterlaufen
         assert continues is True
         assert landed is False
@@ -403,9 +402,9 @@ class TestPhysicsEngineIntegrateStep:
             i=-30.0,  # Sinkflug
             d=0.0
         )
-        
+
         new_state, continues, landed = engine.integrate_step(state)
-        
+
         # Simulation sollte weiterlaufen
         assert continues is True
         assert landed is False
@@ -422,14 +421,14 @@ class TestPhysicsEngineIntegrateStep:
             i=-15.0,
             d=0.0
         )
-        
+
         # Mehrere Schritte ausführen bis Landung
         for _ in range(5):
             new_state, continues, landed = engine.integrate_step(state)
             if landed:
                 break
             state = new_state
-        
+
         # Landung sollte erfolgt sein
         # (kann je nach exaktem Zustand variieren)
         assert landed is True or new_state.z <= 0.0
@@ -441,9 +440,9 @@ class TestPhysicsEngineIntegrateStep:
         config = SimulationConfig(dt=0.1)
         engine = PhysicsEngine(config)
         state = UfoState(z=100.0, ftime=5.0)
-        
+
         new_state, _, _ = engine.integrate_step(state)
-        
+
         # Flugzeit sollte um dt erhöht sein
         assert new_state.ftime == pytest.approx(5.1, abs=0.01)
 
@@ -452,9 +451,9 @@ class TestPhysicsEngineIntegrateStep:
         config = SimulationConfig(dt=0.1)
         engine = PhysicsEngine(config)
         state = UfoState(z=0.0, ftime=10.0)  # Am Boden
-        
+
         new_state, _, _ = engine.integrate_step(state)
-        
+
         # Flugzeit sollte unverändert sein
         assert new_state.ftime == state.ftime
 
@@ -465,13 +464,13 @@ class TestPhysicsEngineImmutability:
     def test_integrate_step_does_not_modify_input_state(self):
         """integrate_step modifiziert Input-State nicht."""
         from dataclasses import asdict
-        
+
         engine = PhysicsEngine()
         original_state = UfoState(z=50.0, v=30.0, i=45.0)
         original_dict = asdict(original_state)
-        
+
         new_state, _, _ = engine.integrate_step(original_state)
-        
+
         # Original-State sollte unverändert sein
         assert asdict(original_state) == original_dict
         # Neuer State sollte unterschiedlich sein
@@ -480,12 +479,12 @@ class TestPhysicsEngineImmutability:
     def test_private_methods_do_not_modify_input_state(self):
         """Private Methoden modifizieren Input-State nicht."""
         from dataclasses import asdict
-        
+
         engine = PhysicsEngine()
         original_state = UfoState(v=50.0, delta_v=10.0)
         original_dict = asdict(original_state)
-        
+
         _ = engine._update_velocity(original_state)
-        
+
         # Original-State sollte unverändert sein
         assert asdict(original_state) == original_dict

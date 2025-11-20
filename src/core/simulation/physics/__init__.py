@@ -66,11 +66,11 @@ Die PhysicsEngine arbeitet nach dem Prinzip der funktionalen Reinheit:
     from core.simulation.physics import PhysicsEngine
     from core.simulation.infrastructure import SimulationConfig
     from core.simulation.state import UfoState
-    
+
     # Engine initialisieren
     config = SimulationConfig()
     engine = PhysicsEngine(config)
-    
+
     # Physik-Schritt ausführen
     state = UfoState()
     new_state, continues, landed = engine.integrate_step(state)

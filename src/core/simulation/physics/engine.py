@@ -27,7 +27,7 @@ class PhysicsEngine:
     Enthält alle Berechnungen für Bewegung, Beschleunigung und Landung.
     Rein funktional - keine Seiteneffekte, arbeitet mit immutable State.
     Thread-sicher durch externes Locking (über StateManager).
-    
+
     Refactored für frozen UfoState: Alle Methoden geben neue State-Instanzen zurück
     statt in-place zu modifizieren (via dataclasses.replace).
     """
@@ -56,7 +56,7 @@ class PhysicsEngine:
         """
         simulation_continues = True
         landing_occurred = False
-        
+
         # Working copy für Updates
         current_state = state
 
@@ -122,7 +122,7 @@ class PhysicsEngine:
             return state
 
         # === ASSISTENZ AKTIV ===
-        
+
         updates = {}
 
         # 1. Geschwindigkeitsreduktion auf sichere Landungsgeschwindigkeit
@@ -159,7 +159,7 @@ class PhysicsEngine:
                 # Zu steil aber nicht vertikal -> abflachen (Richtung -20°)
                 updates['delta_i'] = self.config.inclination_step_deg
                 logger.debug(f"Landing assist: reducing descent angle {current_i:.1f}° -> shallower")
-        
+
         if updates:
             return dataclass_replace(state, **updates)
         return state
@@ -182,7 +182,7 @@ class PhysicsEngine:
             clamped_v = max(0.0, min(new_v, self.config.vmax_kmh))
             new_delta_v = state.delta_v - step * self.config.acceleration_kmh_per_step
             return dataclass_replace(state, v=clamped_v, delta_v=new_delta_v)
-        
+
         return state
 
     def _update_direction(self, state: UfoState) -> UfoState:
@@ -295,7 +295,7 @@ class PhysicsEngine:
                 updates['vel'] = self.config.zero_value
                 updates['v'] = 0.0
                 result = "landed"
-            
+
             state = dataclass_replace(state, **updates)
 
         return state, result
