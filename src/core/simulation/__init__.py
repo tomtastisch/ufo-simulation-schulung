@@ -5,7 +5,7 @@ Stellt die zentralen Klassen und Konfigurationen der Simulation bereit.
 """
 
 from .autopilot_base import AutopilotBase
-from .config import SimulationConfig, DEFAULT_CONFIG
+from .infrastructure import DEFAULT_CONFIG, SimulationConfig
 from .state import UfoState
 from .ufosim import (
     UfoSim,

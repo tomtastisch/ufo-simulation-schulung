@@ -1,22 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-UfoState - Datenmodell für den physikalischen Zustand des UFOs.
-
-Dieses Modul definiert die zentrale Datenstruktur `UfoState`, die den vollständigen
-physikalischen Zustand des UFOs/der Drohne repräsentiert.
-
-Implementierungsdetails:
-    - `@dataclass(slots=True, kw_only=True, frozen=True)` für Performance, typsichere
-      Initialisierung und Immutability
-    - 18 Felder für Position, Geschwindigkeit, Beschleunigung, Statistik und Steuerkommandos
-    - 3 Properties (position_vector, velocity_vector, acceleration_vector) für NumPy-basierte
-      Vektoroperationen
-    - Alle Felder mit Standardwerten (0.0 für Komponenten, 90.0 für Winkel d/i)
-    
-Hinweis:
-    frozen=True implementiert, erfordert aber Refactoring von PhysicsEngine (in-place Modifikationen).
-"""
+"""Physikalische Zustandsrepräsentation des UFOs."""
 
 from dataclasses import dataclass
 
@@ -26,22 +10,10 @@ import numpy as np
 @dataclass(slots=True, kw_only=True, frozen=True)
 class UfoState:
     """
-    Repräsentiert den aktuellen physikalischen Zustand des UFOs.
+    Immutable Dataclass für den vollständigen physikalischen Zustand.
 
-    Alle Felder sind vollständig typisiert und dokumentiert.
-    Verwendet numpy für effiziente Vektorberechnungen.
-
-    Felder:
-        x, y, z: Position in Metern (kartesische Koordinaten)
-        v: Zielgeschwindigkeit in km/h (Legacy-API)
-        vel: Aktuelle Geschwindigkeit in m/s (Physik-Engine)
-        d: Richtung in Grad (0=Nord, 90=Ost)
-        i: Neigung in Grad (90=vertikal hoch, 0=horizontal, -90=vertikal runter)
-        vx, vy, vz: Geschwindigkeitskomponenten in m/s
-        accel_x, accel_y, accel_z: Beschleunigungskomponenten in m/s²
-        dist: Zurückgelegte Distanz in Metern
-        ftime: Flugzeit in Sekunden
-        delta_v, delta_d, delta_i: Steuerkommandos (Änderungen)
+    18 Felder: Position, Geschwindigkeit, Beschleunigung, Statistik, Steuerkommandos.
+    Properties für NumPy-Vektoroperationen.
     """
 
     # Position [m]

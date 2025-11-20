@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Smoke-Test für core.simulation.logging_setup Modul.
+Smoke-Test für core.simulation.infrastructure.logging_setup Modul.
 
 Testet grundlegende Import- und Funktionalität der Logging-Setup-Funktionen.
 """
@@ -17,15 +17,15 @@ sys.path.insert(0, str(src_path))
 
 def test_logging_setup_import():
     """Test: Logging-Setup-Funktionen können importiert werden."""
-    from core.simulation.logging_setup import configure_logging, get_logger
+    from core.simulation.infrastructure import configure_logging, get_logger
     assert configure_logging is not None
     assert get_logger is not None
 
 
 def test_get_logger_returns_logger():
     """Test: get_logger gibt ein Logger-Objekt zurück."""
-    from core.simulation.logging_setup import get_logger
-    
+    from core.simulation.infrastructure import get_logger
+
     logger = get_logger("test_module")
     assert isinstance(logger, logging.Logger)
     assert logger.name == "test_module"
@@ -33,8 +33,8 @@ def test_get_logger_returns_logger():
 
 def test_get_logger_with_module_name():
     """Test: get_logger funktioniert mit __name__."""
-    from core.simulation.logging_setup import get_logger
-    
+    from core.simulation.infrastructure import get_logger
+
     logger = get_logger(__name__)
     assert isinstance(logger, logging.Logger)
     # Der Name sollte den Modulnamen enthalten
@@ -43,8 +43,8 @@ def test_get_logger_with_module_name():
 
 def test_configure_logging_is_idempotent():
     """Test: configure_logging kann mehrfach aufgerufen werden ohne Fehler."""
-    from core.simulation.logging_setup import configure_logging
-    
+    from core.simulation.infrastructure import configure_logging
+
     # Sollte keine Exceptions werfen
     configure_logging()
     configure_logging()
@@ -53,8 +53,8 @@ def test_configure_logging_is_idempotent():
 
 def test_configure_logging_with_custom_level():
     """Test: configure_logging akzeptiert benutzerdefiniertes Log-Level."""
-    from core.simulation.logging_setup import configure_logging
-    
+    from core.simulation.infrastructure import configure_logging
+
     # Sollte keine Exceptions werfen
     configure_logging(level=logging.DEBUG)
     configure_logging(level=logging.WARNING)
@@ -62,24 +62,24 @@ def test_configure_logging_with_custom_level():
 
 def test_configure_logging_with_custom_format():
     """Test: configure_logging akzeptiert benutzerdefinierten Format-String."""
-    from core.simulation.logging_setup import configure_logging
-    
+    from core.simulation.infrastructure import configure_logging
+
     # Sollte keine Exceptions werfen
     configure_logging(format_string='%(name)s - %(message)s')
 
 
 def test_configure_logging_with_custom_datefmt():
     """Test: configure_logging akzeptiert benutzerdefiniertes Datumsformat."""
-    from core.simulation.logging_setup import configure_logging
-    
+    from core.simulation.infrastructure import configure_logging
+
     # Sollte keine Exceptions werfen
     configure_logging(datefmt='%H:%M:%S')
 
 
 def test_logger_can_log_messages():
     """Test: Logger kann Nachrichten ausgeben ohne Fehler."""
-    from core.simulation.logging_setup import get_logger
-    
+    from core.simulation.infrastructure import get_logger
+
     logger = get_logger("test_logging")
     
     # Diese sollten keine Exceptions werfen
@@ -91,8 +91,8 @@ def test_logger_can_log_messages():
 
 def test_multiple_loggers_independent():
     """Test: Mehrere Logger sind unabhängig voneinander."""
-    from core.simulation.logging_setup import get_logger
-    
+    from core.simulation.infrastructure import get_logger
+
     logger1 = get_logger("module1")
     logger2 = get_logger("module2")
     
@@ -103,8 +103,8 @@ def test_multiple_loggers_independent():
 
 def test_same_logger_name_returns_same_instance():
     """Test: Gleicher Logger-Name gibt gleiche Instanz zurück."""
-    from core.simulation.logging_setup import get_logger
-    
+    from core.simulation.infrastructure import get_logger
+
     logger1 = get_logger("same_module")
     logger2 = get_logger("same_module")
     

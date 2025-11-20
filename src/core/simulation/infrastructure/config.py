@@ -1,21 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Zentrale Konfigurationsschicht für die UFO-Simulation.
-
-Dieses Modul kapselt alle Konfigurationsparameter der Simulation in einer einzigen,
-thread-sicheren Dataclass. Es dient als Single Source of Truth für alle physikalischen
-Parameter, Schwellenwerte und Visualisierungseinstellungen.
-
-Architektur-Prinzipien:
-- Keine Abhängigkeiten zu anderen Simulationsmodulen (State, Physics, Controller)
-- Immutable Konfiguration (frozen=True) für Thread-Sicherheit
-- Abgeleitete Werte über Properties statt duplizierter Berechnungen
-- Keine Magic Numbers - alle Konstanten sind hier zentral definiert
-
-Öffentliche API:
-- SimulationConfig: Haupt-Konfigurationsklasse
-- DEFAULT_CONFIG: Standard-Konfigurationsinstanz
+Konfigurationsklasse für Simulationsparameter.
 
 Copyright (C) 2013-2025 R. Gold, tomtastisch (i-ki 1)
 Version: 5.2.0-tw-refactored
@@ -29,25 +15,10 @@ from dataclasses import dataclass
 @dataclass(frozen=True, slots=True)
 class SimulationConfig:
     """
-    Zentrale Konfigurationsklasse für alle physikalischen Parameter.
+    Immutable Konfigurationsklasse mit allen physikalischen und visuellen Parametern.
 
-    Alle Basisparameter und abgeleiteten Schwellenwerte sind hier definiert.
-    Immutable (frozen=True) für thread-sichere Verwendung.
-
-    Architektur:
-    - Basis-Parameter als Instanzvariablen (mit Defaults)
-    - Abgeleitete Werte als Properties (berechnet aus Basis-Parametern)
-    - Keine Logik außer einfachen Berechnungen
-    - Keine Abhängigkeiten zu anderen Modulen
-
-    Verwendung:
-        >>> config = SimulationConfig(vmax_kmh=20.0, dt=0.05)
-        >>> print(config.vmax_ms)  # Automatisch in m/s umgerechnet
-        5.555...
-
-        >>> default_config = DEFAULT_CONFIG
-        >>> print(default_config.safe_landing_v_threshold_kmh)
-        1.0
+    Basis-Parameter sind als Instanzvariablen mit Defaults definiert.
+    Abgeleitete Werte werden als Properties berechnet.
     """
 
     # === Basis-Physik-Parameter ===
