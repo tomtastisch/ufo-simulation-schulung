@@ -11,9 +11,6 @@ Verifiziert:
 
 import sys
 
-import pytest
-
-
 def test_observer_module_import():
     """Observer-Modul kann ohne Fehler importiert werden."""
     from core.simulation.observer import (
