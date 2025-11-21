@@ -6,12 +6,9 @@ Stellt die zentralen Klassen und Konfigurationen der Simulation bereit.
 
 from .autopilot_base import AutopilotBase
 from .infrastructure import DEFAULT_CONFIG, SimulationConfig
+from .observer import ManeuverAnalysis, Phase
 from .state import UfoState
-from .ufosim import (
-    UfoSim,
-    Phase,
-    ManeuverAnalysis,
-)
+from .ufosim import UfoSim
 
 __version__ = "1.0.0"
 __author__ = "tomtastisch"
