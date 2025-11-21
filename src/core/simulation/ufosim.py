@@ -178,14 +178,11 @@ import numpy as np
 # noinspection PyPackageRequirements
 from PyQt5 import QtWidgets, QtGui, QtCore
 
-# Import UfoState and StateManager from state package
-from .state import UfoState, StateManager
 from .infrastructure import DEFAULT_CONFIG, SimulationConfig, get_logger
-from .synchronization.instance_lock import synchronized
-from .synchronization.conditional_lock import conditional
 from .physics import PhysicsEngine
-# from .exceptions import SimulationError, ConfigError  # Für zukünftige Verwendung reserviert
-
+from .state import UfoState, StateManager
+from .synchronization.conditional_lock import conditional
+from .synchronization.instance_lock import synchronized
 
 # =============================================================================
 # LOGGING - Verwendet zentrale Konfiguration aus logging_setup
