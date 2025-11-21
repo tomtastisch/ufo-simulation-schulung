@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 
 from core.simulation.infrastructure import DEFAULT_CONFIG, SimulationConfig
-from core.simulation.observer import ManeuverAnalysis, Phase, StateObserver, compute_phase
+from core.simulation.observer import ManeuverAnalysis, StateObserver, compute_phase
 from core.simulation.state import UfoState
 
 
