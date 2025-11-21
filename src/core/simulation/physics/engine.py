@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Physik-Engine für UFO-Simulation - Kernlogik für physikalische Berechnungen.
-
-Diese Datei enthält die PhysicsEngine-Klasse, welche die gesamte physikalische
-Integrationslogik für die UFO-Simulation bereitstellt.
-"""
+"""Physik-Engine für UFO-Simulation."""
 
 from __future__ import annotations
 
@@ -24,47 +19,32 @@ class PhysicsEngine:
     """
     Physik-Engine für UFO-Simulation.
 
-    Enthält alle Berechnungen für Bewegung, Beschleunigung und Landung.
     Rein funktional - keine Seiteneffekte, arbeitet mit immutable State.
-    Thread-sicher durch externes Locking (über StateManager).
-
-    Refactored für frozen UfoState: Alle Methoden geben neue State-Instanzen zurück
-    statt in-place zu modifizieren (via dataclasses.replace).
+    Thread-sicher durch externes Locking.
     """
 
     def __init__(self, config: SimulationConfig = DEFAULT_CONFIG):
-        """
-        Initialisiert PhysicsEngine mit Konfiguration.
-
-        Args:
-            config: Simulations-Konfiguration
-        """
+        """Initialisiert PhysicsEngine mit Konfiguration."""
         self.config = config
         logger.debug(f"PhysicsEngine initialized with dt={config.dt}s, vmax={config.vmax_kmh}km/h")
 
     def integrate_step(self, state: UfoState) -> Tuple[UfoState, bool, bool]:
         """
-        Führt einen vollständigen Physik-Integrationsschritt aus.
-
-        Gibt neuen State und Flags zurück (immutable Pattern).
-
-        Args:
-            state: Aktueller State (wird nicht modifiziert)
+        Führt vollständigen Physik-Integrationsschritt aus.
 
         Returns:
-            Tupel (updated_state, simulation_should_continue, landing_occurred)
+            (updated_state, simulation_continues, landing_occurred)
         """
         simulation_continues = True
         landing_occurred = False
 
-        # Working copy für Updates
         current_state = state
 
         # Flugzeit hochzählen wenn in der Luft
         if current_state.z > self.config.zero_value:
             current_state = dataclass_replace(current_state, ftime=current_state.ftime + self.config.dt)
 
-        # Automatische Landungsassistenz aktivieren wenn nötig
+        # Automatische Landungsassistenz
         current_state = self._apply_landing_assistance(current_state)
 
         # Zustandsgrößen aktualisieren
@@ -90,23 +70,10 @@ class PhysicsEngine:
         """
         Automatische Landungsassistenz für sichere Landungen.
 
-        Aktiviert sich bei Landephase (z < 2.0m und sinkend) und korrigiert automatisch:
-        - Geschwindigkeit auf sichere Landungsgeschwindigkeit
-        - Neigung auf sicheren Landewinkel
-        - Sinkrate auf maximal zulässige Rate
-
-        Wird NICHT aktiv wenn der Benutzer manuell steuert (delta_v, delta_i, delta_d != 0).
-
-        Args:
-            state: Aktueller State
-
-        Returns:
-            Aktualisierter State (oder unverändert falls keine Assistenz nötig)
+        Aktiviert sich bei Landephase und korrigiert Geschwindigkeit, Neigung und Sinkrate.
+        Nur aktiv wenn Benutzer nicht manuell steuert.
         """
-        # Nur aktivieren wenn:
-        # 1. In Landehöhe (z < 2.0m)
-        # 2. Noch nicht gelandet (z > 0)
-        # 3. In Bewegung (v > 0)
+        # Nur aktivieren wenn in Landehöhe und noch nicht gelandet
         if not (self.config.zero_value < state.z <= self.config.landing_detection_height_m and state.v > 0):
             return state
 
@@ -118,29 +85,21 @@ class PhysicsEngine:
         )
 
         if user_is_controlling:
-            # Benutzer hat Kontrolle - keine Assistenz
             return state
 
         # === ASSISTENZ AKTIV ===
 
         updates = {}
 
-        # 1. Geschwindigkeitsreduktion auf sichere Landungsgeschwindigkeit
+        # Geschwindigkeitsreduktion auf sichere Landungsgeschwindigkeit
         safe_v_kmh = self.config.safe_landing_v_threshold_kmh
         if state.v > safe_v_kmh:
-            # Sanft abbremsen (1 km/h pro Schritt)
             reduction = min(self.config.acceleration_kmh_per_step, state.v - safe_v_kmh)
             updates['delta_v'] = -reduction
             logger.debug(f"Landing assist: reducing velocity {state.v:.1f} -> {state.v - reduction:.1f} km/h")
 
-        # 2. Neigungskorrektur für sichere Landung
-        # Ziel: Sichere Neigung zwischen -20° und -15° für Sinkflug
-        # ODER: Vertikale Landung (-90°) wenn Geschwindigkeit sehr niedrig
+        # Neigungskorrektur für sichere Landung
         current_i = state.i
-
-        # Sichere Landungsneigungen:
-        # - Ideal: -20° bis -10° (sanfter Sinkflug)
-        # - Akzeptabel: -90° bis -70° (vertikale Landung bei niedriger Geschwindigkeit)
 
         is_safe_angle = (
                 (-self.config.safe_landing_inclination_max_deg <= current_i <= -10.0) or
@@ -148,7 +107,6 @@ class PhysicsEngine:
         )
 
         if not is_safe_angle:
-            # Neigung liegt außerhalb sicherer Bereiche -> korrigieren
 
             if current_i > -10.0:
                 # Zu flach -> steiler machen (Richtung -15°)

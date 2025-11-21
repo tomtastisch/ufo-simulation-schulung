@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Öffentliche API für Lock-Wrapper-Utilities.
-
-Dieses Modul exportiert die zentrale Lock-Wrapper-Infrastruktur
-als öffentliche API für externe Verwendung und Tests.
-"""
+"""Öffentliche API für Lock-Wrapper-Utilities."""
 
 from __future__ import annotations
 
