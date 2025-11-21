@@ -177,8 +177,8 @@ from typing import Optional, List, Tuple, Literal, overload, Callable, Any, fina
 import numpy as np
 from PyQt5 import QtWidgets, QtGui, QtCore
 
-# Import UfoState from state package
-from .state import UfoState
+# Import UfoState and StateManager from state package
+from .state import UfoState, StateManager
 from .infrastructure import DEFAULT_CONFIG, SimulationConfig, get_logger
 from .synchronization.instance_lock import synchronized
 from .physics import PhysicsEngine

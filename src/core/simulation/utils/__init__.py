@@ -45,6 +45,10 @@ geometry.py:
     - cartesian_to_spherical: Kartesisch → Sphärisch (x,y,z → r,θ,φ)
     - spherical_to_cartesian: Sphärisch → Kartesisch (r,θ,φ → x,y,z)
 
+threads.py:
+    Thread-Synchronisation-Utilities für thread-sichere Implementierungen:
+    - synchronized: Decorator für automatisches Locking von Instanzmethoden
+
 Öffentliche API
 ---------------
 **Mathematische Funktionen (maths.py):**
@@ -160,6 +164,9 @@ from .validation import (
     is_in_range,
     validate_range,
 )
+from .threads import (
+    synchronized,
+)
 
 __all__ = [
     # maths
@@ -174,4 +181,6 @@ __all__ = [
     # geometry
     "cartesian_to_spherical",
     "spherical_to_cartesian",
+    # threads
+    "synchronized",
 ]
