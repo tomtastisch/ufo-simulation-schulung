@@ -214,8 +214,8 @@ class PhysicsEngine:
 
         if step != 0:
             new_i = state.i + step * self.config.inclination_step_deg
-            max_d = self.config.inclination_max_deg
-            min_d = self.config.inclination_min_deg
+            max_d = float(self.config.inclination_max_deg)
+            min_d = float(self.config.inclination_min_deg)
             clamped_i = max(min_d, min(new_i, max_d))
 
             new_delta_i = state.delta_i - step * self.config.inclination_step_deg

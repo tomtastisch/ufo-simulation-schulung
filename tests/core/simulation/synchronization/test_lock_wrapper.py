@@ -6,6 +6,14 @@ import threading
 import time
 import pytest
 from typing import Callable, List
+from pathlib import Path
+import sys
+
+
+# add repo root to sys.path so `import src` works
+repo_root = Path(__file__).resolve().parents[4]
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
 
 from src.core.simulation.synchronization.lock_wrapper import (
     acquire_lock,

@@ -57,33 +57,36 @@ class StateManager:
 
     Verwendung
     ----------
-    Initialisierung:
-        >>> manager = StateManager()  # Mit Default-State
-        >>> manager = StateManager(initial_state=custom_state)  # Mit Custom-State
+    Initialisierung::
 
-    State-Updates (immutable Pattern):
-        >>> def move_up(state: UfoState) -> UfoState:
-        ...     return dataclass_replace(state, z=state.z + 10.0)
-        >>> manager.update_state(move_up)
+        manager = StateManager()  # Mit Default-State
 
-    Snapshots (defensive Kopien):
-        >>> snapshot = manager.get_snapshot()
-        >>> print(f"Höhe: {snapshot.z}m")
+    State-Updates (immutable Pattern)::
 
-    Observer-Registrierung:
-        >>> def on_state_changed(state: UfoState) -> None:
-        ...     print(f"State changed: z={state.z}m")
-        >>> manager.register_observer(on_state_changed)
+        def move_up(state: UfoState) -> UfoState:
+            return dataclass_replace(state, z=state.z + 10.0)
+        manager.update_state(move_up)
 
-    Event-basiertes Warten:
-        >>> # Warte bis UFO Höhe >= 50m erreicht
-        >>> success = manager.wait_for_condition(
-        ...     lambda s: s.z >= 50.0,
-        ...     timeout=10.0
-        ... )
-        >>> if success:
-        ...     print("Ziel-Höhe erreicht!")
-        ... else:
+    Snapshots (defensive Kopien)::
+
+        snapshot = manager.get_snapshot()
+        print(f"Höhe: {snapshot.z}m")
+
+    Observer-Registrierung::
+
+        def on_state_changed(state: UfoState) -> None:
+            print(f"State changed: z={state.z}m")
+        manager.register_observer(on_state_changed)
+
+    Event-basiertes Warten::
+
+        # Warte bis UFO Höhe >= 50m erreicht
+        success = manager.wait_for_condition(
+            lambda s: s.z >= 50.0,
+            timeout=10.0
+        )
+        if success:
+            print("Ziel-Höhe erreicht!")
         ...     print("Timeout - Höhe nicht erreicht")
 
     Attributes:
@@ -141,15 +144,17 @@ class StateManager:
             - Exception in Observer beeinflussen nicht andere Observer
             - Kein nested lock: @conditional nutzt self._condition's Lock direkt
 
-        Example:
-            >>> # Einfaches Update
-            >>> manager.update_state(lambda s: dataclass_replace(s, z=s.z + 1.0))
-            >>>
-            >>> # Komplexes Update
-            >>> def apply_physics(state: UfoState) -> UfoState:
-            ...     new_z = state.z + state.vz * dt
-            ...     return dataclass_replace(state, z=new_z)
-            >>> manager.update_state(apply_physics)
+        Example::
+
+            # Einfaches Update
+            manager.update_state(lambda s: dataclass_replace(s, z=s.z + 1.0))
+
+            # Komplexes Update mit Physik
+            def apply_physics(state: UfoState) -> UfoState:
+                dt = 0.1  # Zeit-Delta
+                new_z = state.z + state.vz * dt
+                return dataclass_replace(state, z=new_z)
+            manager.update_state(apply_physics)
         """
         # Kritischer Abschnitt unter @conditional Lock
         snapshot, observers = self._update_state_atomic(update_func)
@@ -185,13 +190,19 @@ class StateManager:
         observers_snapshot = list(self._observers)
         return snapshot, observers_snapshot
 
-    def _notify_observers(self, snapshot: UfoState, observers: List[Callable[[UfoState], None]]) -> None:
+    @staticmethod
+    def _notify_observers(snapshot: UfoState, observers: List[Callable[[UfoState], None]]) -> None:
         """
         Benachrichtigt alle registrierten Observer über State-Änderung.
 
         Diese Methode wird automatisch von update_state() und reset() aufgerufen.
         Exceptions in einzelnen Observern werden geloggt, beeinflussen
         aber nicht die Benachrichtigung anderer Observer.
+
+        Note:
+            Diese Methode ist als staticmethod deklariert, da sie keinen
+            Zugriff auf die Instanz benötigt. Alle benötigten Daten werden
+            als Parameter übergeben.
 
         Args:
             snapshot: Snapshot des neuen Zustands
@@ -225,10 +236,11 @@ class StateManager:
         Thread-Safety:
             Diese Methode ist thread-sicher und kann jederzeit aufgerufen werden.
 
-        Example:
-            >>> def log_altitude(state: UfoState) -> None:
-            ...     print(f"Altitude: {state.z}m")
-            >>> manager.register_observer(log_altitude)
+        Example::
+
+            def log_altitude(state: UfoState) -> None:
+                print(f"Altitude: {state.z}m")
+            manager.register_observer(log_altitude)
         """
         if observer not in self._observers:
             self._observers.append(observer)
@@ -245,8 +257,9 @@ class StateManager:
         Thread-Safety:
             Diese Methode ist thread-sicher und kann jederzeit aufgerufen werden.
 
-        Example:
-            >>> manager.unregister_observer(log_altitude)
+        Example::
+
+            manager.unregister_observer(log_altitude)
         """
         if observer in self._observers:
             self._observers.remove(observer)
@@ -275,19 +288,18 @@ class StateManager:
             - Interrupt-sicher: Kann jederzeit abgebrochen werden
             - Deadlock-frei: Nutzt Condition Variables korrekt
 
-        Example:
-            >>> # Warte bis Landung (mit Timeout)
-            >>> landed = manager.wait_for_condition(
-            ...     lambda s: s.z <= 0.1,
-            ...     timeout=30.0
-            ... )
-            >>> if landed:
-            ...     print("Gelandet!")
-            >>> else:
-            ...     print("Landung dauert zu lange")
-            >>>
-            >>> # Warte unbegrenzt bis Ziel-Höhe
-            >>> manager.wait_for_condition(lambda s: s.z >= 100.0)
+        Example::
+
+            # Warte bis Landung (mit Timeout)
+            landed = manager.wait_for_condition(
+                lambda s: s.z <= 0.1,
+                timeout=30.0
+            )
+            if landed:
+                print("Gelandet!")
+
+            # Warte unbegrenzt bis Ziel-Höhe
+            manager.wait_for_condition(lambda s: s.z >= 100.0)
         """
         # Delegation an zentrale ConditionWaiter-Utility
         from ..utils.condition_waiter import ConditionWaiter
@@ -311,8 +323,9 @@ class StateManager:
         Thread-Safety:
             Diese Methode ist thread-sicher und atomar via @conditional.
 
-        Example:
-            >>> manager.reset()  # State zurück auf Startposition
+        Example::
+
+            manager.reset()  # State zurück auf Startposition
         """
         # Kritischer Abschnitt unter @conditional Lock
         snapshot, observers = self._reset_atomic()

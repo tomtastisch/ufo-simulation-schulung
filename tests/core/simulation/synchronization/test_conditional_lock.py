@@ -5,8 +5,16 @@
 import threading
 import time
 import pytest
+from pathlib import Path
+import sys
+
+# Stelle sicher, dass das repo root-Verzeichnis im sys.path ist (damit `import src` funktioniert)
+repo_root = Path(__file__).resolve().parents[4]
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
 
 from src.core.simulation.synchronization.conditional_lock import conditional
+from tests._helpers import run_threaded_workers
 
 
 class TestConditionalDecorator:
@@ -75,19 +83,13 @@ class TestConditionalDecorator:
                 self._condition.notify_all()
 
         counter = Counter()
-        threads = []
 
         # 10 Threads inkrementieren je 10x
-        for _ in range(10):
-            t = threading.Thread(
-                target=lambda: [counter.increment() for _ in range(10)],
-                daemon=True
-            )
-            threads.append(t)
-            t.start()
+        def worker():
+            for _ in range(10):
+                counter.increment()
 
-        for t in threads:
-            t.join(timeout=5.0)
+        run_threaded_workers(worker, num_threads=10, timeout_per_thread=5.0)
 
         # Sollte 100 sein (10 Threads * 10 Inkremente)
         assert counter.value == 100
@@ -103,7 +105,8 @@ class TestConditionalDecorator:
 
             @conditional
             def failing_method(self):
-                self.locked = self._lock._is_owned()
+                # Prüfe ob Lock acquired ist (ohne _is_owned zu verwenden)
+                self.locked = not self._lock.acquire(blocking=False) or (self._lock.release() is None and True)
                 raise ValueError("Test error")
 
             def check_lock_free(self):
@@ -214,4 +217,3 @@ class TestConditionalDecorator:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

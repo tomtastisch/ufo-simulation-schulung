@@ -123,7 +123,7 @@ def test_state_uses_slots():
 
 
 if __name__ == "__main__":
-    from conftest import run_manual_tests
+    from conftest import run_manual_tests  # type: ignore[import]
 
     tests = [
         test_state_import,
@@ -134,4 +134,4 @@ if __name__ == "__main__":
         test_state_uses_slots,
     ]
 
-    run_manual_tests("core.simulation.state", tests)
+    run_manual_tests("core.simulation.state", tests)  # type: ignore[name-defined]

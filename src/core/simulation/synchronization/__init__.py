@@ -46,6 +46,11 @@ conditional_lock.py:
     Decorator `@conditional` für Methoden die mit threading.Condition arbeiten.
     Nutzt das Lock der Condition Variable, verhindert nested locks.
 
+lock_wrapper.py:
+    Öffentliche API-Exportierung der Lock-Wrapper-Utilities.
+    Stellt `acquire_lock` (Context Manager) und `create_lock_wrapper` (Factory)
+    für externe Verwendung und Tests bereit.
+
 Öffentliche API
 ---------------
 synchronized:
@@ -59,6 +64,14 @@ synchronized_module(lock):
 conditional:
     Decorator für Methoden mit Condition-Variable. Erwartet self._condition
     auf der Klasseninstanz. Verhindert nested locks bei notify_all() Calls.
+
+acquire_lock(lock):
+    Context Manager für explizite Lock-Acquisition. Unterstützt Lock, RLock
+    und Condition. Garantiert exception-sichere Freigabe.
+
+create_lock_wrapper(lock_getter):
+    Factory-Funktion für eigene Lock-basierte Decorators. Ermöglicht die
+    Erstellung benutzerdefinierter Synchronisations-Patterns.
 
 Verwendungsbeispiele
 --------------------
@@ -96,6 +109,31 @@ Modul-Level-Funktionen (synchronized_module):
     >>> @synchronized_module(_global_lock)
     >>> def get_global_count():
     ...     return _shared_state["count"]
+
+Explizite Lock-Verwendung (acquire_lock):
+    >>> from core.simulation.synchronization import acquire_lock
+    >>> import threading
+    >>>
+    >>> lock = threading.RLock()
+    >>> shared_data = []
+    >>>
+    >>> def safe_append(item):
+    ...     with acquire_lock(lock):
+    ...         shared_data.append(item)
+
+Eigene Decorators erstellen (create_lock_wrapper):
+    >>> from core.simulation.synchronization import create_lock_wrapper
+    >>> import threading
+    >>>
+    >>> _custom_lock = threading.RLock()
+    >>>
+    >>> def my_synchronized(func):
+    ...     return create_lock_wrapper(lambda *args, **kwargs: _custom_lock)(func)
+    >>>
+    >>> @my_synchronized
+    >>> def protected_function():
+    ...     # Thread-sicher durch custom decorator
+    ...     pass
 
 Kombination mit anderen Modulen:
     >>> from core.simulation.infrastructure import get_logger
@@ -140,9 +178,12 @@ Architektur-Prinzipien
 from .instance_lock import synchronized
 from .module_lock import synchronized_module
 from .conditional_lock import conditional
+from .lock_wrapper import acquire_lock, create_lock_wrapper
 
 __all__ = [
     "synchronized",
     "synchronized_module",
     "conditional",
+    "acquire_lock",
+    "create_lock_wrapper",
 ]

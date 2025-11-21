@@ -76,21 +76,22 @@ class ConditionWaiter:
             - Timeout-Berechnung: end_time fixiert, remaining dynamisch
             - State-Getter wird unter Lock aufgerufen (atomare Prüfung)
 
-        Example:
-            >>> # Mit Timeout
-            >>> success = ConditionWaiter.wait_for_condition(
-            ...     condition_var=my_condition,
-            ...     predicate=lambda s: s.z <= 0.0,
-            ...     state_getter=lambda: self._state,
-            ...     timeout=30.0
-            ... )
-            >>>
-            >>> # Unbegrenzt warten
-            >>> ConditionWaiter.wait_for_condition(
-            ...     condition_var=my_condition,
-            ...     predicate=lambda s: s.ready,
-            ...     state_getter=lambda: self._state
-            ... )
+        Example::
+
+            # Mit Timeout
+            success = ConditionWaiter.wait_for_condition(
+                condition_var=my_condition,
+                predicate=lambda s: s.z <= 0.0,
+                state_getter=lambda: my_state,
+                timeout=30.0
+            )
+
+            # Unbegrenzt warten
+            ConditionWaiter.wait_for_condition(
+                condition_var=my_condition,
+                predicate=lambda s: s.ready,
+                state_getter=lambda: my_state
+            )
         """
         with condition_var:
             # Timeout-Endzeit berechnen (None wenn unbegrenzt)

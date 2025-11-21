@@ -9,14 +9,11 @@ Diese Tests prüfen:
 3. Thread-Safety: Keine Race-Conditions bei parallelen Zugriffen
 4. Kompatibilität: Funktioniert mit Lock und RLock
 """
-
 import threading
-import time
-from typing import List
-
 import pytest
 
 from core.simulation.synchronization.module_lock import synchronized_module
+from conftest import create_decorated_counter, assert_race_condition_free
 
 
 def test_module_lock_module_import():
@@ -35,7 +32,7 @@ def test_synchronized_module_decorator_exists():
     assert callable(synchronized_module)
 
 
-def test_synchronized_module_basic_functionality():
+def test_synchronized_module_basic_functionality(rlock):
     """
     Prüft Basisfunktionalität des @synchronized_module Decorators.
     
@@ -45,56 +42,31 @@ def test_synchronized_module_basic_functionality():
     - Rückgabewerte bleiben erhalten
     - Parameter werden korrekt durchgereicht
     """
-    
-    lock = threading.RLock()
-    counter = {"value": 0}
-    
-    @synchronized_module(lock)
-    def increment():
-        counter["value"] += 1
-    
-    @synchronized_module(lock)
-    def get_value():
-        return counter["value"]
-    
-    @synchronized_module(lock)
-    def add(amount: int):
-        counter["value"] += amount
-        return counter["value"]
-    
-    assert get_value() == 0
-    
-    increment()
-    assert get_value() == 1
-    
-    result = add(5)
+    counter = create_decorated_counter(synchronized_module, rlock)
+
+    assert counter["get_value"]() == 0
+
+    counter["increment"]()
+    assert counter["get_value"]() == 1
+
+    result = counter["add"](5)
     assert result == 6
-    assert get_value() == 6
+    assert counter["get_value"]() == 6
 
 
-def test_synchronized_module_with_lock():
+def test_synchronized_module_with_lock(lock):
     """
     Prüft, dass @synchronized_module mit threading.Lock funktioniert.
     """
-    
-    lock = threading.Lock()
-    counter = {"value": 0}
-    
-    @synchronized_module(lock)
-    def increment():
-        counter["value"] += 1
-    
-    @synchronized_module(lock)
-    def get_value():
-        return counter["value"]
-    
-    increment()
-    assert get_value() == 1
+    counter = create_decorated_counter(synchronized_module, lock)
+
+    counter["increment"]()
+    assert counter["get_value"]() == 1
 
 
 @pytest.mark.threading
 @pytest.mark.timeout(30)
-def test_synchronized_module_thread_safety_no_race_conditions():
+def test_synchronized_module_thread_safety_no_race_conditions(rlock):
     """
     Multithread-Test: Prüft, dass keine Race-Conditions bei parallelen Zugriffen auftreten.
     
@@ -103,75 +75,35 @@ def test_synchronized_module_thread_safety_no_race_conditions():
     - Erwartetes Ergebnis: 10.000 (keine Race-Conditions)
     - Ohne @synchronized_module würde das Ergebnis typischerweise < 10.000 sein
     """
-    
-    lock = threading.RLock()
-    counter = {"value": 0}
-    
-    @synchronized_module(lock)
-    def increment():
-        # Simuliere kritischen Abschnitt mit Read-Modify-Write
-        old_value = counter["value"]
-        time.sleep(0.0001)  # Kurze Verzögerung um Race-Conditions zu provozieren
-        counter["value"] = old_value + 1
-    
-    @synchronized_module(lock)
-    def get_value():
-        return counter["value"]
-    
-    threads: List[threading.Thread] = []
-    
-    num_threads = 100
-    increments_per_thread = 100
-    expected_result = num_threads * increments_per_thread
-    
-    # Starte Threads
-    for _ in range(num_threads):
-        def worker():
-            for _ in range(increments_per_thread):
-                increment()
-        
-        thread = threading.Thread(target=worker)
-        threads.append(thread)
-        thread.start()
-    
-    # Warte auf Abschluss
-    for thread in threads:
-        thread.join()
-    
-    # Prüfe Ergebnis
-    assert get_value() == expected_result, \
-        f"Race-Condition detected: Expected {expected_result}, got {get_value()}"
+    counter = create_decorated_counter(synchronized_module, rlock)
+
+    assert_race_condition_free(
+        counter["increment"],
+        counter["get_value"],
+        num_threads=100,
+        increments_per_thread=100
+    )
 
 
 @pytest.mark.threading
 @pytest.mark.timeout(10)
-def test_synchronized_module_reentrant_with_rlock():
+def test_synchronized_module_reentrant_with_rlock(rlock):
     """
     Prüft Wiedereintrittsfähigkeit bei RLock.
     
     Testet, dass derselbe Thread die Funktion mehrfach betreten kann
     (wichtig für verschachtelte Aufrufe).
     """
-    
-    lock = threading.RLock()
-    counter = {"value": 0}
-    
-    @synchronized_module(lock)
-    def increment():
-        counter["value"] += 1
-    
-    @synchronized_module(lock)
+    counter = create_decorated_counter(synchronized_module, rlock)
+
+    @synchronized_module(rlock)
     def increment_twice():
         # Ruft eine andere synchronisierte Funktion auf
-        increment()
-        increment()
-    
-    @synchronized_module(lock)
-    def get_value():
-        return counter["value"]
-    
+        counter["increment"]()
+        counter["increment"]()
+
     increment_twice()  # Sollte nicht deadlocken
-    assert get_value() == 2
+    assert counter["get_value"]() == 2
 
 
 def test_synchronized_module_preserves_exceptions():
@@ -241,43 +173,19 @@ def test_synchronized_module_with_kwargs():
 
 @pytest.mark.threading
 @pytest.mark.timeout(15)
-def test_synchronized_module_multiple_locks():
+def test_synchronized_module_multiple_locks(rlock, lock):
     """
     Prüft, dass verschiedene Locks unabhängig voneinander funktionieren.
     """
-    
-    lock1 = threading.RLock()
-    lock2 = threading.RLock()
-    
-    counter1 = {"value": 0}
-    counter2 = {"value": 0}
-    
-    @synchronized_module(lock1)
-    def increment1():
-        old = counter1["value"]
-        time.sleep(0.001)
-        counter1["value"] = old + 1
-    
-    @synchronized_module(lock2)
-    def increment2():
-        old = counter2["value"]
-        time.sleep(0.001)
-        counter2["value"] = old + 1
-    
-    @synchronized_module(lock1)
-    def get_value1():
-        return counter1["value"]
-    
-    @synchronized_module(lock2)
-    def get_value2():
-        return counter2["value"]
-    
+    counter1 = create_decorated_counter(synchronized_module, rlock)
+    counter2 = create_decorated_counter(synchronized_module, lock)
+
     # Parallele Zugriffe auf unterschiedliche Locks
     threads = []
     
     for _ in range(10):
-        t1 = threading.Thread(target=increment1)
-        t2 = threading.Thread(target=increment2)
+        t1 = threading.Thread(target=counter1["increment"])
+        t2 = threading.Thread(target=counter2["increment"])
         threads.extend([t1, t2])
         t1.start()
         t2.start()
@@ -286,8 +194,8 @@ def test_synchronized_module_multiple_locks():
         thread.join()
     
     # Beide Counter sollten korrekt sein (unabhängig voneinander)
-    assert get_value1() == 10
-    assert get_value2() == 10
+    assert counter1["get_value"]() == 10
+    assert counter2["get_value"]() == 10
 
 
 def test_synchronized_module_with_args_and_kwargs():

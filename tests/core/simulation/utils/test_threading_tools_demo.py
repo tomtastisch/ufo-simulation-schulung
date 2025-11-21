@@ -10,7 +10,7 @@ Demonstriert die Verwendung von:
 
 import threading
 import time
-from typing import Callable, List, Dict, Any
+from typing import Callable, List, Dict, Any, Optional
 
 import pytest
 import threadpoolctl
@@ -22,7 +22,8 @@ import threadpoolctl
 
 
 def run_threaded_workers(worker_func: Callable[[], None], num_threads: int = 10, timeout_per_thread: float = 5.0) -> List[threading.Thread]:
-    """Führt eine Worker-Funktion in mehreren Threads aus und wartet auf Abschluss.
+    """
+    Führt eine Worker-Funktion in mehreren Threads aus und wartet auf Abschluss.
 
     Diese Implementierung ist intentionally klein und test-fokussiert.
     """
@@ -41,7 +42,7 @@ def run_threaded_workers(worker_func: Callable[[], None], num_threads: int = 10,
     return threads
 
 
-def test_race_condition_free(
+def assert_race_condition_free(
     increment_func: Callable[[], None],
     get_value_func: Callable[[], int],
     num_threads: int = 100,
@@ -66,7 +67,7 @@ def test_race_condition_free(
     return True
 
 
-def create_decorated_counter(decorator: Callable, lock: threading.RLock | None = None) -> Dict[str, Any]:
+def create_decorated_counter(decorator: Callable, lock: Optional[threading.RLock] = None) -> Dict[str, Any]:
     """Erzeugt einen kleinen dekorierten Counter (increment/get_value/add).
 
     Nützlich für Tests, die Decorators wie `@synchronized` prüfen.
@@ -186,7 +187,7 @@ def test_synchronized_decorator_under_load():
     counter = TestCounter()
 
     # 50 Threads × 20 Inkremente = 1000
-    test_race_condition_free(
+    assert_race_condition_free(
         counter.increment,
         counter.get_value,
         num_threads=50,
@@ -204,7 +205,7 @@ def test_module_lock_decorator_works(rlock):
     counter = create_decorated_counter(synchronized_module, rlock)
 
     # 20 Threads × 10 Inkremente = 200
-    test_race_condition_free(
+    assert_race_condition_free(
         counter["increment"],
         counter["get_value"],
         num_threads=20,

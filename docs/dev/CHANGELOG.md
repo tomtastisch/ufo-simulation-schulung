@@ -4,6 +4,199 @@ Chronologische Auflistung aller Änderungen (neueste zuerst).
 
 ---
 
+## [2025-11-21] - Lock-Verwendung validiert und nested locks behoben
+
+### Zusammenfassung
+
+Projektweite Validierung aller Lock-Verwendungen zur Sicherstellung korrekter Decorator-Nutzung. Zwei nested locks in `_UfoLegacySync` gefunden und behoben durch Umstellung auf `@conditional` Decorator.
+
+### Problem/Motivation
+
+Nach Einführung der zentralen Lock-Decorators sollte sichergestellt werden, dass:
+1. Alle Locks via Decorators verwendet werden (keine manuellen Patterns)
+2. Keine nested locks existieren
+3. Keine veralteten Lock-Patterns im Projekt verbleiben
+
+### Durchgeführte Analyse
+
+**Geprüfte Komponenten**:
+- StateManager ✅
+- _UfoLegacySync ❌ → ✅ (2 Probleme behoben)
+- CommandQueue ✅
+- CommandExecutor ✅
+- logging_setup ✅
+
+**Suchmuster**:
+- `threading.(Lock|RLock|Condition)` - Lock-Erstellungen
+- `\.acquire()` / `\.release()` - Manuelle Acquisitions
+- `with .*_lock:` - Manuelle Lock-Statements
+- `notify_all()` - Condition-Variable-Nutzung
+- `@synchronized` / `@conditional` - Decorator-Verwendung
+
+### Gefundene Probleme
+
+#### 1. _UfoLegacySync.update_state() - Nested Lock
+**Problem**:
+```python
+@synchronized  # ← self._lock acquired
+def update_state(self, update_func):
+    self._state = update_func(self._state)
+    self._condition.notify_all()  # ← Nutzt intern self._lock! NESTED!
+```
+
+**Lösung**:
+```python
+def update_state(self, update_func):
+    snapshot = self._update_state_atomic(update_func)
+    self._notify_observers(snapshot)
+
+@conditional  # ← Nutzt self._condition direkt, kein nested lock
+def _update_state_atomic(self, update_func):
+    self._state = update_func(self._state)
+    self._condition.notify_all()  # ✓ Korrekt
+    return dataclass_replace(self._state)
+```
+
+#### 2. _UfoLegacySync.reset() - Nested Lock
+**Problem**: Identisch zu update_state()  
+**Lösung**: Analog umgestellt auf `@conditional` via `_reset_atomic()`
+
+### Betroffene Dateien
+
+**Geändert**:
+- `src/core/simulation/ufosim.py`
+  - Import von `@conditional` hinzugefügt
+  - `_UfoLegacySync.update_state()` refactored
+  - `_UfoLegacySync._update_state_atomic()` neu (mit `@conditional`)
+  - `_UfoLegacySync.reset()` refactored
+  - `_UfoLegacySync._reset_atomic()` neu (mit `@conditional`)
+
+**Dokumentation**:
+- `docs/dev/lock-usage-validation.md` (vollständige Analyse)
+
+### Validierungsergebnisse
+
+**Lock-Statistik projektweit**:
+- RLocks: 5
+- Conditions: 2
+- `@synchronized`: 17 Verwendungen ✅
+- `@conditional`: 4 Verwendungen ✅
+- `@synchronized_module`: 2 Verwendungen ✅
+- Manuelle Locks: 0 ✅
+- Nested Locks: 0 ✅ (2 behoben)
+
+**Multi-Lock-Pattern (korrekt)**:
+- `CommandExecutor.process_commands()`: `@synchronized` + `with queue.lock:` 
+  → Zwei verschiedene Objekte, kein nested lock ✅
+
+### Best Practices - Eingehalten
+
+1. ✅ Alle Locks via Decorators
+2. ✅ Keine manuellen `acquire()/release()`
+3. ✅ Keine manuellen `with self._lock:` Statements
+4. ✅ Alle `notify_all()` unter `@conditional`
+5. ✅ Exception-Safety durch automatisches Lock-Release
+
+### Breaking Changes
+
+**Keine** - Nur interne Implementierung geändert, API bleibt gleich.
+
+### Referenzen
+
+- **Dokumentation**: `docs/dev/lock-usage-validation.md`
+- **Related**: Lock-Wrapper-Refactoring [2025-11-21]
+- **Pattern**: @conditional für Condition-Variable-Methoden
+
+---
+
+## [2025-11-21] - Test-Struktur-Reorganisation nach Best Practice
+
+### Zusammenfassung
+
+Reorganisation der Test-Verzeichnisstruktur zur Spiegelung der Quellcode-Struktur gemäß Python-Best-Practices. Alle Tests wurden in eine hierarchische Ordnerstruktur verschoben, die der `src/`-Struktur entspricht.
+
+### Problem/Motivation
+
+Die Test-Dateien lagen alle flach im `tests/`-Root-Verzeichnis:
+- Schwer nachvollziehbar welcher Test zu welchem Modul gehört
+- Skaliert nicht bei wachsender Codebasis
+- Verstößt gegen Python Testing Best Practices
+- Keine klare Trennung nach Komponenten
+
+### Lösung/Implementierung
+
+#### Neue Struktur (spiegelt `src/core/simulation/`)
+
+```
+tests/
+├── conftest.py
+└── core/
+    └── simulation/
+        ├── exceptions/          # ← test_exceptions.py
+        ├── infrastructure/      # ← test_logging_setup.py
+        ├── physics/            # ← test_physics_engine.py
+        ├── state/              # ← 4 Test-Dateien
+        ├── synchronization/    # ← 4 Test-Dateien
+        └── utils/              # ← 5 Test-Dateien
+```
+
+#### Durchgeführte Änderungen
+
+**Verschobene Dateien** (15 Tests):
+- `test_exceptions.py` → `core/simulation/exceptions/`
+- `test_logging_setup.py` → `core/simulation/infrastructure/`
+- `test_physics_engine.py` → `core/simulation/physics/`
+- `test_state_*.py` (4 Dateien) → `core/simulation/state/`
+- `test_*_lock.py` (4 Dateien) → `core/simulation/synchronization/`
+- `test_*.py` (5 Utils) → `core/simulation/utils/`
+
+**Umbenannt** (Konsistenz):
+- `test_synchronization_instance_lock.py` → `test_instance_lock.py`
+- `test_synchronization_module_lock.py` → `test_module_lock.py`
+
+**Neue Dateien**:
+- 8x `__init__.py` in Test-Verzeichnissen (korrekte Python-Package-Struktur)
+
+### Vorteile
+
+1. **Nachvollziehbarkeit**: 1:1 Mapping zwischen `src/` und `tests/`
+2. **Best Practice**: Standard Python Testing Layout
+3. **Skalierbarkeit**: Neue Module → neue Test-Verzeichnisse
+4. **IDE-Support**: Bessere Navigation zwischen Code und Tests
+5. **Übersichtlichkeit**: Klare Komponenten-Trennung
+
+### Pytest-Kompatibilität
+
+**Keine Änderungen notwendig**:
+- ✅ `pyproject.toml`: `testpaths = ["tests"]` funktioniert (rekursive Suche)
+- ✅ `setup.py`: Keine hardcodierten Pfade, funktioniert weiterhin
+- ✅ Alle 16 Test-Dateien werden gefunden
+- ✅ Keine Breaking Changes
+
+### Betroffene Dateien
+
+**Verschoben**: 15 Test-Dateien  
+**Umbenannt**: 2 Test-Dateien  
+**Neu erstellt**: 8x `__init__.py` (Test-Package-Struktur)  
+**Dokumentation**: `docs/dev/test-structure-reorganization.md`
+
+### Breaking Changes
+
+**Keine** - Alle Test-Befehle funktionieren weiterhin:
+```bash
+pytest                                    # Alle Tests
+pytest tests/core/simulation/utils/       # Modul-Tests
+pytest tests/.../test_maths.py            # Spezifische Datei
+```
+
+### Referenzen
+
+- **Python Testing Best Practices**: Tests spiegeln Quellcode-Struktur
+- **pytest Documentation**: Hierarchical test discovery
+- **PEP 8**: Package/Module naming conventions
+
+---
+
 ## [2025-11-21] - Zentrale Lock-Wrapper-Utility (DRY-Refactoring)
 
 ### Zusammenfassung
