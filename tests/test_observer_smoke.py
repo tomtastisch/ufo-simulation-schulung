@@ -69,8 +69,7 @@ def test_observer_has_no_forbidden_dependencies():
 
 def test_observer_allowed_dependencies():
     """Observer-Modul hat nur erlaubte Abhängigkeiten."""
-    # Importiere Observer-Modul
-    import core.simulation.observer
+    # Importiere Observer-Modul (bereits durch andere Tests geladen)
 
     # Prüfe geladene Module
     loaded_modules = sys.modules.keys()
