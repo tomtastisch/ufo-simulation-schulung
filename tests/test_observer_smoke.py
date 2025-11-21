@@ -173,29 +173,29 @@ def test_phase_type_is_literal():
 
 def test_observer_module_has_all_exports():
     """Observer-Modul exportiert alle erwarteten Symbole via __all__."""
-    import core.simulation.observer as observer_module
+    from core.simulation.observer import __all__, Phase, compute_phase, ManeuverAnalysis, StateObserver
 
     # Prüfe __all__
-    assert hasattr(observer_module, "__all__")
-    all_exports = observer_module.__all__
+    assert __all__ is not None
+    all_exports = __all__
 
     # Erwartete Exports
     expected = ["Phase", "compute_phase", "ManeuverAnalysis", "StateObserver"]
 
     for symbol in expected:
         assert symbol in all_exports, f"{symbol} fehlt in __all__"
-        assert hasattr(observer_module, symbol), f"{symbol} nicht im Modul"
+        assert symbol in globals(), f"{symbol} nicht im Modul"
 
 
 def test_observer_module_docstring():
     """Observer-Modul hat umfassende Dokumentation."""
-    import core.simulation.observer as observer_module
+    from core.simulation.observer import __doc__
 
-    assert observer_module.__doc__ is not None
-    assert len(observer_module.__doc__) > 100  # Umfangreiche Doku
+    assert __doc__ is not None
+    assert len(__doc__) > 100  # Umfangreiche Doku
 
     # Wichtige Begriffe in der Dokumentation
-    doc = observer_module.__doc__
+    doc = __doc__
     assert "Observer" in doc
     assert "Phase" in doc
     assert "Manöver" in doc or "Maneuver" in doc
