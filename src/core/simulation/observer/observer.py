@@ -141,7 +141,7 @@ class StateObserver:
             recent = list(self.history)[-10:]  # Letzte 10 oder weniger
 
             # Vertikale Bewegung
-            vz_values = [s.vz for s in recent if hasattr(s, 'vz')]
+            vz_values = [s.vz for s in recent]
             if vz_values:
                 avg_vz = sum(vz_values) / len(vz_values)
                 is_ascending = avg_vz > self.config.climb_vz_threshold_ms
