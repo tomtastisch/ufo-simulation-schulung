@@ -7,11 +7,8 @@ Testet Phase-Erkennung, Manöver-Analyse und State-Observer mit
 synthetischen Zustandsverläufen.
 """
 
-import pytest
-
 from core.simulation.infrastructure import DEFAULT_CONFIG, SimulationConfig
 from core.simulation.observer import (
-    Phase,
     ManeuverAnalysis,
     compute_phase,
     StateObserver,
@@ -388,7 +385,7 @@ class TestStateObserverAnalyze:
             )
 
         analysis = observer.analyze()
-        assert analysis.is_stagnating == True
+        assert analysis.is_stagnating
 
     def test_analyze_no_stagnation_when_moving_correctly(self):
         """Keine Stagnation bei korrekter Bewegung."""
@@ -409,7 +406,7 @@ class TestStateObserverAnalyze:
             )
 
         analysis = observer.analyze()
-        assert analysis.is_stagnating == False
+        assert not analysis.is_stagnating
 
 
 class TestStateObserverManeuverDescription:
@@ -504,7 +501,7 @@ class TestStateObserverIntegration:
         analysis = observer.analyze()
         assert analysis.phase == "takeoff"
         # Jetzt haben wir genug States für Trend-Erkennung (>= 3)
-        assert analysis.is_ascending == True
+        assert analysis.is_ascending
 
         # Steigflug
         for i in range(10):
@@ -513,7 +510,7 @@ class TestStateObserverIntegration:
             )
         analysis = observer.analyze()
         assert analysis.phase == "flying"
-        assert analysis.is_ascending == True
+        assert analysis.is_ascending
 
     def test_complete_landing_sequence(self):
         """Komplette Landungssequenz wird korrekt erkannt."""

@@ -57,8 +57,15 @@ def compute_phase(s: UfoState, config: SimulationConfig = DEFAULT_CONFIG) -> Pha
     rules: list[tuple[Phase, bool]] = [
         ("crashed", s.z < config.zero_value),
         ("landed", s.z == config.zero_value and s.v == 0.0 and has_flown),
-        ("takeoff", s.ftime == config.zero_value and s.v > 0.0 and s.z > config.zero_value),
-        ("landing", s.v > 0.0 > s.vz and config.zero_value < s.z <= config.landing_detection_height_m),
+        (
+            "takeoff",
+            s.ftime == config.zero_value and s.v > 0.0 and s.z > config.zero_value,
+        ),
+        (
+            "landing",
+            s.v > 0.0 > s.vz and
+            config.zero_value < s.z <= config.landing_detection_height_m,
+        ),
         ("flying", s.v > 0.0 and s.z > config.zero_value),
     ]
 
@@ -170,12 +177,15 @@ class StateObserver:
                 total_distance = 0.0
                 for i in range(1, len(recent)):
                     # NumPy für effiziente Distanzberechnung
-                    pos_delta = recent[i].position_vector - recent[i - 1].position_vector
+                    pos_delta = (
+                        recent[i].position_vector - recent[i - 1].position_vector
+                    )
                     total_distance += np.linalg.norm(pos_delta)
 
                 avg_distance_per_step = total_distance / (len(recent) - 1)
                 expected_distance = current.vel * self.config.dt
-                # Stagnation, nur wenn Sollgeschwindigkeit > 0 und tatsächliche Bewegung < 50% der erwarteten
+                # Stagnation, nur wenn Sollgeschwindigkeit > 0 und
+                # tatsächliche Bewegung < 50% der erwarteten
                 is_stagnating = (
                         current.v > 0.0 and
                         expected_distance > 0.0 and
