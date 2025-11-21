@@ -10,7 +10,6 @@ Testet:
     - Manöver-Flags (is_ascending, is_descending, is_turning, is_stagnating)
 """
 
-import numpy as np
 import pytest
 
 from core.simulation.infrastructure import DEFAULT_CONFIG, SimulationConfig
