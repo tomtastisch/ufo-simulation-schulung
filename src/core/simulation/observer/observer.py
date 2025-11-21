@@ -7,15 +7,12 @@ from __future__ import annotations
 import logging
 from collections import deque
 from dataclasses import dataclass, replace as dataclass_replace
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 import numpy as np
 
 from core.simulation.infrastructure import DEFAULT_CONFIG, SimulationConfig
 from core.simulation.state.state import UfoState
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
 
 # Logger für dieses Modul
 logger = logging.getLogger(__name__)

@@ -27,10 +27,6 @@ def test_observer_receives_state_updates():
     # Initial sollte History leer sein
     assert len(sim.observer.history) == 0
     
-    # Nach manuellem State-Update sollte Observer benachrichtigt werden
-    def update_state(state):
-        return state
-    
     # Trigger ein Update durch get_state_snapshot
     _ = sim.get_state_snapshot()
     
