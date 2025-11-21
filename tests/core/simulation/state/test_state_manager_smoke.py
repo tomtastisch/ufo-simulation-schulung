@@ -53,7 +53,6 @@ def test_state_manager_has_required_methods():
 
 def test_state_manager_has_no_forbidden_dependencies():
     """StateManager hat keine verbotenen Dependencies."""
-    import sys
     from core.simulation.state import manager as manager_module
     
     # StateManager-Modul laden

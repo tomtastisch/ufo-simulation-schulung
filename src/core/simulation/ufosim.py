@@ -175,12 +175,14 @@ from pathlib import Path
 from typing import Optional, List, Tuple, Literal, overload, Callable, Any, final
 
 import numpy as np
+# noinspection PyPackageRequirements
 from PyQt5 import QtWidgets, QtGui, QtCore
 
 # Import UfoState and StateManager from state package
 from .state import UfoState, StateManager
 from .infrastructure import DEFAULT_CONFIG, SimulationConfig, get_logger
 from .synchronization.instance_lock import synchronized
+from .synchronization.conditional_lock import conditional
 from .physics import PhysicsEngine
 # from .exceptions import SimulationError, ConfigError  # Für zukünftige Verwendung reserviert
 
@@ -699,12 +701,15 @@ class UfoViewport:
 
 
 # =============================================================================
-# STATE MANAGER - Thread-sichere Zustandsverwaltung
+# STATE MANAGER - Thread-sichere Zustandsverwaltung (Legacy)
 # =============================================================================
 
-class StateManager:
+class _UfoLegacyStateManager:
     """
-    Thread-sicherer Manager für UFO-Zustand.
+    Thread-sicherer Manager für UFO-Zustand (Legacy-Implementierung).
+
+    DEPRECATED: Wird durch StateManager aus state.manager ersetzt.
+    Nur für Abwärtskompatibilität mit altem Code beibehalten.
 
     Kapselt Zugriff auf UfoState und bietet Event-System für Änderungsbenachrichtigungen.
     Implementiert Observer-Pattern für Listener-Registrierung.
@@ -735,7 +740,6 @@ class StateManager:
         """
         return dataclass_replace(self._state)
 
-    @synchronized
     def update_state(self, update_func: Callable[['UfoState'], 'UfoState']) -> None:
         """
         Führt atomare State-Aktualisierung aus und benachrichtigt Observer.
@@ -743,12 +747,18 @@ class StateManager:
         Args:
             update_func: Funktion die neuen State zurückgibt (immutable Pattern)
         """
-        self._state = update_func(self._state)
-        self._condition.notify_all()
+        # Kritischer Abschnitt unter @conditional
+        snapshot = self._update_state_atomic(update_func)
 
-        # Benachrichtige Observer (außerhalb Lock)
-        snapshot = dataclass_replace(self._state)
+        # Benachrichtige Observer außerhalb Lock (Deadlock-Vermeidung)
         self._notify_observers(snapshot)
+
+    @conditional
+    def _update_state_atomic(self, update_func: Callable[['UfoState'], 'UfoState']) -> 'UfoState':
+        """Atomarer State-Update unter Condition-Lock (verhindert nested lock)."""
+        self._state = update_func(self._state)
+        self._condition.notify_all()  # Kein nested lock dank @conditional
+        return dataclass_replace(self._state)
 
     def _notify_observers(self, snapshot: 'UfoState') -> None:
         """
@@ -760,8 +770,8 @@ class StateManager:
         for observer in self._observers:
             try:
                 observer(snapshot)
-            except Exception as e:
-                logger.error(f"Observer notification failed: {e}")
+            except Exception as e:  # noqa: BLE001 - Breiter Catch bewusst: Observer können beliebige Exceptions werfen, dürfen aber andere Observer nicht blockieren
+                logger.exception(f"Observer notification failed: {e}")
 
     @synchronized
     def register_observer(self, observer: Callable[['UfoState'], None]) -> None:
@@ -802,28 +812,26 @@ class StateManager:
         Returns:
             True wenn Bedingung erfüllt, False bei Timeout
         """
-        with self._condition:
-            end_time = None if timeout is None else time.time() + timeout
+        # Delegation an zentrale ConditionWaiter-Utility
+        from .utils.condition_waiter import ConditionWaiter
 
-            while True:
-                if condition(self._state):
-                    return True
+        return ConditionWaiter.wait_for_condition(
+            condition_var=self._condition,
+            predicate=condition,
+            state_getter=lambda: self._state,
+            timeout=timeout
+        )
 
-                if end_time is not None:
-                    remaining = end_time - time.time()
-                    if remaining <= 0:
-                        return False
-                    wait_timeout = remaining
-                else:
-                    wait_timeout = None
 
-                self._condition.wait(timeout=wait_timeout)
-
-    @synchronized
     def reset(self) -> None:
         """Setzt State auf Ausgangszustand zurück."""
+        self._reset_atomic()
+
+    @conditional
+    def _reset_atomic(self) -> None:
+        """Atomarer State-Reset unter Condition-Lock (verhindert nested lock)."""
         self._state = UfoState()
-        self._condition.notify_all()
+        self._condition.notify_all()  # Kein nested lock dank @conditional
         logger.debug("State reset")
 
     @property
@@ -1542,8 +1550,7 @@ class StateProxy:
         def updater(state: UfoState) -> UfoState:
             try:
                 return dataclass_replace(state, **{name: value})
-            except Exception:
-                # If replacement fails (unknown attribute), just return unchanged state
+            except (AttributeError, TypeError):  # noqa: BLE001 - Breiter Catch bewusst: AttributeError oder TypeError möglich
                 return state
 
         self._manager.update_state(updater)

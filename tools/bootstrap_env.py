@@ -433,15 +433,23 @@ def check_pyqt5_macos(platform_info: dict[str, str]) -> None:
 # --- Dependency installation ----------------------------------------------
 
 
-def install_runtime_requirements(platform_info: dict[str, str], requirements: dict[str, str]) -> bool:
-    """Installiert Laufzeitabhängigkeiten aus requirements.txt mit Progress-Bar."""
-    python_venv = platform_info["python_venv"]
-    print("📥 Installiere Runtime-Dependencies (aus requirements.txt)...\n")
+def _install_requirements_batch(
+    python_venv: str,
+    requirements: dict[str, str],
+    category_name: str,
+    success_message: str
+) -> bool:
+    """Hilfsfunktion: Installiert eine Gruppe von Requirements mit Progress-Bar.
 
-    if not requirements:
-        print_warning("Keine Requirements gefunden!")
-        return False
+    Args:
+        python_venv: Pfad zum Python-Interpreter im venv
+        requirements: Dictionary {package_name: version_spec}
+        category_name: Name der Kategorie für Logging (z.B. "Runtime-Dependency")
+        success_message: Erfolgsmeldung nach Installation
 
+    Returns:
+        True bei Erfolg, False bei Fehler
+    """
     log_file = Path("setup.log")
     total = len(requirements)
     progress = ProgressBar(total, prefix="   ")
@@ -465,10 +473,9 @@ def install_runtime_requirements(platform_info: dict[str, str], requirements: di
             print_error(f"Fehler bei der Installation von {spec}:")
             print(get_error_message(exc))
 
-            # Nur bei Fehler in Log schreiben
             log_error_to_file(
                 log_file,
-                f"Runtime-Dependency Installation: {spec}",
+                f"{category_name} Installation: {spec}",
                 f"Fehler beim Installieren von {spec}",
                 extract_subprocess_error_details(exc)
             )
@@ -477,8 +484,25 @@ def install_runtime_requirements(platform_info: dict[str, str], requirements: di
             return False
 
     progress.finish(f"✓ {installed_count}/{total} Pakete installiert")
-    print_success("Alle Runtime-Dependencies installiert\n")
+    print_success(success_message)
     return True
+
+
+def install_runtime_requirements(platform_info: dict[str, str], requirements: dict[str, str]) -> bool:
+    """Installiert Laufzeitabhängigkeiten aus requirements.txt mit Progress-Bar."""
+    python_venv = platform_info["python_venv"]
+    print("📥 Installiere Runtime-Dependencies (aus requirements.txt)...\n")
+
+    if not requirements:
+        print_warning("Keine Requirements gefunden!")
+        return False
+
+    return _install_requirements_batch(
+        python_venv,
+        requirements,
+        "Runtime-Dependency",
+        "Alle Runtime-Dependencies installiert\n"
+    )
 
 
 def install_dev_requirements(platform_info: dict[str, str], dev_requirements: dict[str, str]) -> bool:
@@ -489,43 +513,12 @@ def install_dev_requirements(platform_info: dict[str, str], dev_requirements: di
     python_venv = platform_info["python_venv"]
     print("📥 Installiere Dev-Dependencies (pytest, black, flake8, ...)...\n")
 
-    log_file = Path("setup.log")
-    total = len(dev_requirements)
-    progress = ProgressBar(total, prefix="   ")
-
-    installed_count = 0
-    for idx, (name, version_spec) in enumerate(dev_requirements.items(), start=1):
-        spec = f"{name}{version_spec}"
-        progress.update(idx - 1, f"Installiere {name}...")
-
-        try:
-            subprocess.run(
-                [python_venv, "-m", "pip", "install", spec, "--progress-bar", "off"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            installed_count += 1
-
-        except subprocess.CalledProcessError as exc:
-            progress.finish(f"❌ Fehler bei {name}")
-            print_error(f"Fehler bei der Installation von {spec}:")
-            print(get_error_message(exc))
-
-            # Nur bei Fehler in Log schreiben
-            log_error_to_file(
-                log_file,
-                f"Dev-Dependency Installation: {spec}",
-                f"Fehler beim Installieren von {spec}",
-                extract_subprocess_error_details(exc)
-            )
-
-            print_info(f"Fehlerdetails in {log_file} gespeichert")
-            return False
-
-    progress.finish(f"✓ {installed_count}/{total} Pakete installiert")
-    print_success("Alle Dev-Dependencies installiert\n")
-    return True
+    return _install_requirements_batch(
+        python_venv,
+        dev_requirements,
+        "Dev-Dependency",
+        "Alle Dev-Dependencies installiert\n"
+    )
 
 
 def install_project_editable(platform_info: dict[str, str]) -> bool:

@@ -150,7 +150,7 @@ class TestPhysicsEngineInclinationUpdate:
 
     def test_update_inclination_respects_max_limit(self):
         """Neigung wird auf inclination_max_deg begrenzt."""
-        config = SimulationConfig(inclination_max_deg=90.0)
+        config = SimulationConfig(inclination_max_deg=90)
         engine = PhysicsEngine(config)
         state = UfoState(i=89.0, delta_i=50.0)
 
@@ -160,7 +160,7 @@ class TestPhysicsEngineInclinationUpdate:
 
     def test_update_inclination_respects_min_limit(self):
         """Neigung wird auf inclination_min_deg begrenzt."""
-        config = SimulationConfig(inclination_min_deg=-90.0)
+        config = SimulationConfig(inclination_min_deg=-90)
         engine = PhysicsEngine(config)
         state = UfoState(i=-89.0, delta_i=-50.0)
 
@@ -421,6 +421,11 @@ class TestPhysicsEngineIntegrateStep:
             i=-15.0,
             d=0.0
         )
+
+        # Initialisiere Variablen vor Schleife
+        new_state = state
+        continues = True
+        landed = False
 
         # Mehrere Schritte ausführen bis Landung
         for _ in range(5):

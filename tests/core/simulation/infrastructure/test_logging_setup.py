@@ -113,7 +113,7 @@ def test_same_logger_name_returns_same_instance():
 
 
 if __name__ == "__main__":
-    from conftest import run_manual_tests
+    from conftest import run_manual_tests  # type: ignore[import]
 
     tests = [
         test_logging_setup_import,
@@ -128,4 +128,4 @@ if __name__ == "__main__":
         test_same_logger_name_returns_same_instance,
     ]
 
-    run_manual_tests("core.simulation.logging_setup", tests)
+    run_manual_tests("core.simulation.logging_setup", tests)  # type: ignore[name-defined]

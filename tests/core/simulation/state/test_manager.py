@@ -59,7 +59,8 @@ class TestStateManagerSnapshot:
         
         # Frozen dataclass wirft AttributeError bei direkter Änderung
         with pytest.raises(AttributeError):
-            snapshot.x = 100.0  # type: ignore
+            # noinspection PyDataclass
+            snapshot.x = 100.0  # type: ignore[misc,assignment]
 
     def test_snapshot_does_not_affect_manager_state(self):
         """Snapshot-Modifikation beeinflusst Manager-State nicht."""
@@ -175,7 +176,7 @@ class TestObserverPattern:
         manager = StateManager()
         notification_count = [0]
         
-        def observer(state: UfoState) -> None:
+        def observer(_: UfoState) -> None:
             notification_count[0] += 1
         
         manager.register_observer(observer)
@@ -211,7 +212,7 @@ class TestObserverPattern:
         notifications1 = []
         notifications2 = []
         
-        def failing_observer(state: UfoState) -> None:
+        def failing_observer(_: UfoState) -> None:
             raise RuntimeError("Simulated observer error")
         
         def working_observer1(state: UfoState) -> None:
@@ -494,7 +495,7 @@ class TestDeadlockPrevention:
         manager = StateManager()
         snapshots_in_observer = []
         
-        def observer(state: UfoState) -> None:
+        def observer(_: UfoState) -> None:
             # Observer ruft get_snapshot() auf
             # (wird außerhalb Lock benachrichtigt, daher kein Deadlock)
             snapshot = manager.get_snapshot()

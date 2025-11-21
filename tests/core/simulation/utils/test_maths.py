@@ -275,12 +275,10 @@ class TestModuleIndependence:
         import core.simulation.utils
 
         assert core.simulation.utils.__doc__ is not None
-        # Package-Level-Dokumentation sollte umfangreich sein
-        assert len(core.simulation.utils.__doc__) > 500
-        # Sollte die wichtigen Abschnitte enthalten
-        assert "Modulzweck" in core.simulation.utils.__doc__
-        assert "Strukturelle Verantwortlichkeiten" in core.simulation.utils.__doc__
-        assert "Verwendungsbeispiele" in core.simulation.utils.__doc__
+        # Package-Level-Dokumentation sollte präzise sein (nicht übermäßig lang)
+        assert len(core.simulation.utils.__doc__) > 100
+        # Sollte die wichtigen Komponenten erwähnen
+        assert "maths" in core.simulation.utils.__doc__ or "Utility" in core.simulation.utils.__doc__
 
 
 class TestIntegrationScenarios:

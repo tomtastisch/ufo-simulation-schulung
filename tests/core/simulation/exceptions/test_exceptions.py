@@ -87,7 +87,7 @@ def test_exception_with_no_message():
 
 
 if __name__ == "__main__":
-    from conftest import run_manual_tests
+    from conftest import run_manual_tests  # type: ignore[import]
 
     tests = [
         test_exceptions_import,
@@ -99,4 +99,4 @@ if __name__ == "__main__":
         test_exception_with_no_message,
     ]
 
-    run_manual_tests("core.simulation.exceptions", tests)
+    run_manual_tests("core.simulation.exceptions", tests)  # type: ignore[name-defined]

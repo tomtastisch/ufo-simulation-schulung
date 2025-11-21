@@ -1,133 +1,30 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Thread-Synchronisations-Modul für die UFO-Simulation.
+Thread-Synchronisation für die UFO-Simulation.
 
-Modulzweck
-----------
-Dieses Modul stellt wiederverwendbare Decorators für Thread-Sicherheit bereit,
-die keine direkten Abhängigkeiten zu den Simulationsklassen haben. Es kapselt
-Thread-Synchronisationslogik in einer generischen, projektübergreifend nutzbaren Form.
+Stellt generische Decorators für Thread-Sicherheit bereit.
+Projektübergreifend einsetzbar ohne Simulationsabhängigkeiten.
 
-Strukturelle Verantwortlichkeiten
-----------------------------------
-Das Synchronization-Modul folgt diesen Architektur-Prinzipien:
-
-1. **Generische Wiederverwendbarkeit**: Keine Abhängigkeiten zu spezifischen
-   Simulationsklassen. Die Decorators können in beliebigen Python-Projekten
-   verwendet werden.
-
-2. **Zwei Synchronisationsebenen**:
-   - Instanz-Level (synchronized): Für Methoden mit self._lock
-   - Modul-Level (synchronized_module): Für Funktionen mit explizitem Lock
-
-3. **Exception-Sicherheit**: Locks werden auch bei Exceptions korrekt freigegeben
-   durch Verwendung von context managers (with-Statement).
-
-4. **Typ-Erhaltung**: Decorators erhalten die Original-Signatur der dekorierten
-   Funktionen/Methoden für korrekte Type-Checking-Unterstützung.
-
-Modul-Bestandteile
-------------------
-instance_lock.py:
-    Decorator `@synchronized` für Instanzmethoden, die automatisch das
-    self._lock-Attribut der Klasse verwenden.
-
-module_lock.py:
-    Decorator-Factory `@synchronized_module(lock)` für Modul-Level-Funktionen
-    mit explizit übergebenem Lock-Objekt.
-
-Öffentliche API
----------------
-synchronized:
-    Decorator für Instanzmethoden. Erwartet self._lock auf der Klasseninstanz.
-    Serialisiert Zugriffe auf die dekorierte Methode pro Instanz.
-
-synchronized_module(lock):
-    Decorator-Factory für Modul-Level-Funktionen. Benötigt explizites Lock
-    als Parameter. Serialisiert Zugriffe auf die dekorierte Funktion global.
-
-Verwendungsbeispiele
---------------------
-Instanzmethoden (synchronized):
-    >>> from core.simulation.synchronization import synchronized
-    >>> import threading
-    >>>
-    >>> class SafeCounter:
-    ...     def __init__(self):
-    ...         self._lock = threading.RLock()  # Erforderlich!
-    ...         self._value = 0
-    ...
-    ...     @synchronized
-    ...     def increment(self):
-    ...         self._value += 1
-    ...
-    ...     @synchronized
-    ...     def get_value(self):
-    ...         return self._value
-    >>>
-    >>> counter = SafeCounter()
-    >>> counter.increment()  # Thread-sicher
-
-Modul-Level-Funktionen (synchronized_module):
-    >>> from core.simulation.synchronization import synchronized_module
-    >>> import threading
-    >>>
-    >>> _global_lock = threading.RLock()
-    >>> _shared_state = {"count": 0}
-    >>>
-    >>> @synchronized_module(_global_lock)
-    >>> def increment_global():
-    ...     _shared_state["count"] += 1
-    >>>
-    >>> @synchronized_module(_global_lock)
-    >>> def get_global_count():
-    ...     return _shared_state["count"]
-
-Kombination mit anderen Modulen:
-    >>> from core.simulation.infrastructure import get_logger
-    >>> from core.simulation.synchronization import synchronized
-    >>> import threading
-    >>>
-    >>> logger = get_logger(__name__)
-    >>>
-    >>> class ThreadSafeSimulation:
-    ...     def __init__(self):
-    ...         self._lock = threading.RLock()
-    ...         self._running = False
-    ...
-    ...     @synchronized
-    ...     def start(self):
-    ...         if not self._running:
-    ...             self._running = True
-    ...             logger.info("Simulation gestartet")
-    ...
-    ...     @synchronized
-    ...     def stop(self):
-    ...         if self._running:
-    ...             self._running = False
-    ...             logger.info("Simulation gestoppt")
-
-Thread-Safety-Garantien
-------------------------
-- Serialisierter Zugriff auf dekorierte Methoden/Funktionen
-- Wiedereintrittsfähig bei Verwendung von RLock
-- Exception-sicher durch automatische Lock-Freigabe
-- Keine Race-Conditions bei korrekter Verwendung
-
-Architektur-Prinzipien
-----------------------
-- Generisch und wiederverwendbar (keine Simulationslogik)
-- Typ-erhaltend (Type Hints bleiben erhalten)
-- Exception-sicher (Locks werden immer freigegeben)
-- Minimal und fokussiert (nur Synchronisations-Logik)
-- Vollständig dokumentiert und getestet
+Komponenten:
+    - synchronized: Decorator für Instanzmethoden (self._lock)
+    - synchronized_module: Decorator-Factory für Modul-Level-Funktionen
+    - conditional: Decorator für Condition-Variable-Methoden
+    - acquire_lock: Context Manager für explizite Lock-Acquisition
+    - create_lock_wrapper: Factory für eigene Lock-Decorators
 """
 
 from .instance_lock import synchronized
 from .module_lock import synchronized_module
+from .conditional_lock import conditional
+from .lock_wrapper import acquire_lock, create_lock_wrapper
 
 __all__ = [
     "synchronized",
     "synchronized_module",
+    "conditional",
+    "acquire_lock",
+    "create_lock_wrapper",
 ]
+
+
