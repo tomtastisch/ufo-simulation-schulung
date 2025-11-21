@@ -29,6 +29,11 @@ Das Synchronization-Modul folgt diesen Architektur-Prinzipien:
 
 Modul-Bestandteile
 ------------------
+_lock_wrapper.py:
+    Zentrale Lock-Wrapper-Utilities zur Vermeidung von Code-Duplikation.
+    Enthält `create_lock_wrapper()` Factory-Funktion die von allen Decorators genutzt wird.
+    NICHT Teil der öffentlichen API (private Modul, prefix `_`).
+
 instance_lock.py:
     Decorator `@synchronized` für Instanzmethoden, die automatisch das
     self._lock-Attribut der Klasse verwenden.
@@ -36,6 +41,10 @@ instance_lock.py:
 module_lock.py:
     Decorator-Factory `@synchronized_module(lock)` für Modul-Level-Funktionen
     mit explizit übergebenem Lock-Objekt.
+
+conditional_lock.py:
+    Decorator `@conditional` für Methoden die mit threading.Condition arbeiten.
+    Nutzt das Lock der Condition Variable, verhindert nested locks.
 
 Öffentliche API
 ---------------
@@ -46,6 +55,10 @@ synchronized:
 synchronized_module(lock):
     Decorator-Factory für Modul-Level-Funktionen. Benötigt explizites Lock
     als Parameter. Serialisiert Zugriffe auf die dekorierte Funktion global.
+
+conditional:
+    Decorator für Methoden mit Condition-Variable. Erwartet self._condition
+    auf der Klasseninstanz. Verhindert nested locks bei notify_all() Calls.
 
 Verwendungsbeispiele
 --------------------
@@ -126,8 +139,10 @@ Architektur-Prinzipien
 
 from .instance_lock import synchronized
 from .module_lock import synchronized_module
+from .conditional_lock import conditional
 
 __all__ = [
     "synchronized",
     "synchronized_module",
+    "conditional",
 ]

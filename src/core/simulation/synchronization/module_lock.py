@@ -5,26 +5,27 @@
 from __future__ import annotations
 
 import threading
-from functools import wraps
 from typing import Any, Callable, TypeVar
+
+from ._lock_wrapper import create_lock_wrapper
 
 F = TypeVar("F", bound=Callable[..., Any])
 
 
 def synchronized_module(lock: threading.Lock | threading.RLock) -> Callable[[F], F]:
     """
-    Decorator-Factory für Funktionen mit explizitem Lock-Parameter.
+    Decorator-Factory für Modul-Level-Funktionen mit explizitem Lock.
 
     Erwartet threading.Lock oder threading.RLock als Parameter.
-    Serialisiert Zugriffe, wiedereintrittsfähig bei RLock, exception-sicher.
+    Nutzt zentrale create_lock_wrapper() Implementation.
+
+    Example:
+        >>> import threading
+        >>> _module_lock = threading.RLock()
+        >>>
+        >>> @synchronized_module(_module_lock)
+        >>> def critical_function():
+        ...     # Thread-sicherer Code
+        ...     pass
     """
-
-    def decorator(func: F) -> F:
-        @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            with lock:
-                return func(*args, **kwargs)
-
-        return wrapper  # type: ignore[return-value]
-
-    return decorator
+    return create_lock_wrapper(lambda *args, **kwargs: lock)

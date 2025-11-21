@@ -802,22 +802,16 @@ class StateManager:
         Returns:
             True wenn Bedingung erfüllt, False bei Timeout
         """
-        with self._condition:
-            end_time = None if timeout is None else time.time() + timeout
+        # Delegation an zentrale ConditionWaiter-Utility
+        from .utils.condition_waiter import ConditionWaiter
 
-            while True:
-                if condition(self._state):
-                    return True
+        return ConditionWaiter.wait_for_condition(
+            condition_var=self._condition,
+            predicate=condition,
+            state_getter=lambda: self._state,
+            timeout=timeout
+        )
 
-                if end_time is not None:
-                    remaining = end_time - time.time()
-                    if remaining <= 0:
-                        return False
-                    wait_timeout = remaining
-                else:
-                    wait_timeout = None
-
-                self._condition.wait(timeout=wait_timeout)
 
     @synchronized
     def reset(self) -> None:

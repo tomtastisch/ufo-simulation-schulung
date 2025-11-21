@@ -211,11 +211,16 @@ class PhysicsEngine:
             Aktualisierter State
         """
         step = (state.delta_i > 0) - (state.delta_i < 0)
+
         if step != 0:
             new_i = state.i + step * self.config.inclination_step_deg
-            clamped_i = max(self.config.inclination_min_deg, min(new_i, self.config.inclination_max_deg))
+            max_d = self.config.inclination_max_deg
+            min_d = self.config.inclination_min_deg
+            clamped_i = max(min_d, min(new_i, max_d))
+
             new_delta_i = state.delta_i - step * self.config.inclination_step_deg
             return dataclass_replace(state, i=clamped_i, delta_i=new_delta_i)
+
         return state
 
     def _update_position(self, state: UfoState) -> Tuple[UfoState, Literal["continue", "landed"]]:

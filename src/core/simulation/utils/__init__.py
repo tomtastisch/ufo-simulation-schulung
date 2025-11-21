@@ -49,6 +49,10 @@ threads.py:
     Thread-Synchronisation-Utilities für thread-sichere Implementierungen:
     - synchronized: Decorator für automatisches Locking von Instanzmethoden
 
+condition_waiter.py:
+    Zentrale Utility für event-basiertes Warten auf Bedingungen:
+    - ConditionWaiter: Stateless Utility-Klasse für Condition-Variable-Warten
+
 Öffentliche API
 ---------------
 **Mathematische Funktionen (maths.py):**
@@ -167,6 +171,9 @@ from .validation import (
 from .threads import (
     synchronized,
 )
+from .condition_waiter import (
+    ConditionWaiter,
+)
 
 __all__ = [
     # maths
@@ -183,4 +190,5 @@ __all__ = [
     "spherical_to_cartesian",
     # threads
     "synchronized",
+    "ConditionWaiter",
 ]

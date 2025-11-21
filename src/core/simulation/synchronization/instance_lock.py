@@ -4,8 +4,9 @@
 
 from __future__ import annotations
 
-from functools import wraps
 from typing import Any, Callable, TypeVar
+
+from ._lock_wrapper import create_lock_wrapper
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -15,12 +16,17 @@ def synchronized(method: F) -> F:
     Decorator für Instanzmethoden mit automatischem Locking über self._lock.
 
     Erwartet self._lock-Attribut auf der Klasseninstanz (threading.Lock/RLock).
-    Serialisiert Zugriffe, wiedereintrittsfähig bei RLock, exception-sicher.
+    Nutzt zentrale create_lock_wrapper() Implementation.
+
+    Example:
+        >>> import threading
+        >>> class Counter:
+        ...     def __init__(self):
+        ...         self._lock = threading.RLock()
+        ...         self.value = 0
+        ...
+        ...     @synchronized
+        ...     def increment(self):
+        ...         self.value += 1
     """
-
-    @wraps(method)
-    def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
-        with self._lock:
-            return method(self, *args, **kwargs)
-
-    return wrapper  # type: ignore[return-value]
+    return create_lock_wrapper(lambda self, *args, **kwargs: self._lock)(method)

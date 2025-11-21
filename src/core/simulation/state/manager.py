@@ -6,11 +6,11 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 from dataclasses import replace as dataclass_replace
 from typing import Callable, List, Optional
 
 from .state import UfoState
+from ..synchronization import conditional
 from ..utils.threads import synchronized
 
 logger = logging.getLogger(__name__)
@@ -136,9 +136,10 @@ class StateManager:
                         Signatur: (current_state: UfoState) -> UfoState
 
         Thread-Safety:
-            - Atomare Ausführung: Update ist atomar unter Lock
+            - Atomare Ausführung: Update ist atomar unter @conditional Lock
             - Observer werden außerhalb des Locks benachrichtigt (Deadlock-Vermeidung)
             - Exception in Observer beeinflussen nicht andere Observer
+            - Kein nested lock: @conditional nutzt self._condition's Lock direkt
 
         Example:
             >>> # Einfaches Update
@@ -150,15 +151,39 @@ class StateManager:
             ...     return dataclass_replace(state, z=new_z)
             >>> manager.update_state(apply_physics)
         """
-        # Kritischer Abschnitt: State-Update, Snapshot-Erstellung und Observer-Liste kopieren
-        with self._lock:
-            self._state = update_func(self._state)
-            self._condition.notify_all()
-            snapshot = dataclass_replace(self._state)
-            observers_snapshot = list(self._observers)  # Kopie für thread-sichere Iteration
-        
+        # Kritischer Abschnitt unter @conditional Lock
+        snapshot, observers = self._update_state_atomic(update_func)
+
         # Observer außerhalb Lock benachrichtigen (nicht-kritischer Abschnitt)
-        self._notify_observers(snapshot, observers_snapshot)
+        # Deadlock-Vermeidung: Observer können selbst auf StateManager zugreifen
+        self._notify_observers(snapshot, observers)
+
+    @conditional
+    def _update_state_atomic(
+        self,
+        update_func: Callable[[UfoState], UfoState]
+    ) -> tuple[UfoState, List[Callable[[UfoState], None]]]:
+        """
+        Atomarer State-Update unter Condition-Lock (private Methode).
+
+        Diese Methode ist mit @conditional dekoriert und führt den kritischen
+        Abschnitt aus: State-Update, Notification und Snapshot-Erstellung.
+
+        Args:
+            update_func: Funktion die neuen State zurückgibt
+
+        Returns:
+            Tuple aus (snapshot, observers_list) für externe Benachrichtigung
+
+        Note:
+            Diese Methode wird nur intern von update_state() aufgerufen.
+            Der @conditional Decorator verhindert nested locks.
+        """
+        self._state = update_func(self._state)
+        self._condition.notify_all()  # Kein nested lock dank @conditional
+        snapshot = dataclass_replace(self._state)
+        observers_snapshot = list(self._observers)
+        return snapshot, observers_snapshot
 
     def _notify_observers(self, snapshot: UfoState, observers: List[Callable[[UfoState], None]]) -> None:
         """
@@ -264,22 +289,17 @@ class StateManager:
             >>> # Warte unbegrenzt bis Ziel-Höhe
             >>> manager.wait_for_condition(lambda s: s.z >= 100.0)
         """
-        with self._condition:
-            end_time = None if timeout is None else time.time() + timeout
+        # Delegation an zentrale ConditionWaiter-Utility
+        from ..utils.condition_waiter import ConditionWaiter
 
-            while True:
-                if condition(self._state):
-                    return True
+        return ConditionWaiter.wait_for_condition(
+            condition_var=self._condition,
+            predicate=condition,
+            state_getter=lambda: self._state,
+            timeout=timeout
+        )
 
-                if end_time is not None:
-                    remaining = end_time - time.time()
-                    if remaining <= 0:
-                        return False
-                    wait_timeout = remaining
-                else:
-                    wait_timeout = None
 
-                self._condition.wait(timeout=wait_timeout)
 
     def reset(self) -> None:
         """
@@ -289,21 +309,34 @@ class StateManager:
         Alle wartenden Threads werden aufgeweckt (via notify_all).
 
         Thread-Safety:
-            Diese Methode ist thread-sicher und atomar.
+            Diese Methode ist thread-sicher und atomar via @conditional.
 
         Example:
             >>> manager.reset()  # State zurück auf Startposition
         """
-        # Kritischer Abschnitt: State-Reset, Snapshot-Erstellung und Observer-Liste kopieren
-        with self._lock:
-            self._state = UfoState()
-            self._condition.notify_all()
-            snapshot = dataclass_replace(self._state)
-            observers_snapshot = list(self._observers)  # Kopie für thread-sichere Iteration
-            logger.debug("State reset")
-        
-        # Observer außerhalb Lock benachrichtigen (nicht-kritischer Abschnitt)
-        self._notify_observers(snapshot, observers_snapshot)
+        # Kritischer Abschnitt unter @conditional Lock
+        snapshot, observers = self._reset_atomic()
+
+        # Observer außerhalb Lock benachrichtigen
+        self._notify_observers(snapshot, observers)
+
+    @conditional
+    def _reset_atomic(self) -> tuple[UfoState, List[Callable[[UfoState], None]]]:
+        """
+        Atomarer State-Reset unter Condition-Lock (private Methode).
+
+        Diese Methode ist mit @conditional dekoriert und führt den kritischen
+        Abschnitt aus: State-Reset, Notification und Snapshot-Erstellung.
+
+        Returns:
+            Tuple aus (snapshot, observers_list) für externe Benachrichtigung
+        """
+        self._state = UfoState()
+        self._condition.notify_all()  # Kein nested lock dank @conditional
+        snapshot = dataclass_replace(self._state)
+        observers_snapshot = list(self._observers)
+        logger.debug("State reset")
+        return snapshot, observers_snapshot
 
     @property
     def state(self) -> UfoState:

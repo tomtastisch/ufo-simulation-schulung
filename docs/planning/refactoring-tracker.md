@@ -17,10 +17,10 @@ Tickets mit Branches, Verantwortlichkeiten und Prüfschritten. Alle Beschreibung
 | T3        | Abschnitt 2.2 | `UfoState` nach `state/state.py` verlagern                       | copilot/feat-refactor-phase2-state     | ✅ Merged      | Lead Dev | Peer Reviewer | 2025-11-16       | Self-Check: Typprüfungen; QA: Simulationslauf (10 Tests, PR #10)  |
 | T4        | Abschnitt 2.3 | `logging_setup.py` & `exceptions.py` anlegen                     | feature/refactor-phase2-config-state   | ✅ Merged      | Lead Dev | Peer Reviewer | 2025-11-18       | Self-Check: Logging-Test; QA: Thread-Safety validiert (PR #11)    |
 | T5        | Abschnitt 3.1 | `synchronization/` (`@synchronized`)                             | copilot/feat-refactor-phase3-threads   | ✅ Merged      | Lead Dev | Peer Reviewer | 2025-11-19       | Self-Check: Multithread-Test; QA: umfassende Tests (PR #12)       |
-| T6        | Abschnitt 3.2 | `utils/maths.py` (numerische Helfer)                             | copilot/refactor-maths-utils-phase-3-2 | ✅ Merged      | Lead Dev | Peer Reviewer | 2025-11-19       | Self-Check: Unit-Tests; QA: validation.py, geometry.py (PR #13)   |
-| T7        | Abschnitt 3.3 | `physics/engine.py` auslagern                                    | feature/refactor-phase3-utils-physics  | ⏹️ Ausstehend | Lead Dev | Tech Reviewer | -                | Self-Check: Integrations-Test; QA: Physik-Regressionstest         |
-| T8        | Abschnitt 4.1 | `StateManager` nach `state/manager.py`                           | feature/refactor-phase4-state-observer | ⏹️ Ausstehend | Lead Dev | Peer Reviewer | -                | Self-Check: Observer-Benachrichtigungen; QA: Threading-Test       |
-| T9        | Abschnitt 4.2 | `Phase`, `compute_phase`, `StateObserver`                        | feature/refactor-phase4-state-observer | ⏹️ Ausstehend | Lead Dev | Tech Reviewer | -                | Self-Check: Analysen; QA: Unit-Tests                              |
+| T6        | Abschnitt 3.2 | `utils/maths.py` (numerische Helfer)                             | copilot/refactor-maths-utils-phase-3-2 | ✅ Merged        | Lead Dev | Peer Reviewer | 2025-11-19       | Self-Check: Unit-Tests; QA: validation.py, geometry.py (PR #13)   |
+| T7        | Abschnitt 3.3 | `physics/engine.py` auslagern                                    | feature/refactor-phase3-physics        | ✅ Merged        | Lead Dev | Tech Reviewer | 2025-11-21       | Self-Check: Integrations-Test; QA: Physik-Tests erfolgreich       |
+| T8        | Abschnitt 4.1 | `StateManager` nach `state/manager.py`                           | feature/refactor-phase4-state-manager  | ✅ Merged        | Lead Dev | Peer Reviewer | 2025-11-21       | Self-Check: Observer-Pattern; QA: Threading-Tests erfolgreich     |
+| T9        | Abschnitt 4.2 | `Phase`, `compute_phase`, `StateObserver`                        | feature/refactor-phase4-state-observer | ⏹️ Ausstehend   | Lead Dev | Tech Reviewer | -                | Self-Check: Analysen; QA: Unit-Tests                              |
 | T10       | Abschnitt 5.1 | `CommandType`, `Command` nach `command/types.py`                 | feature/refactor-phase5-command        | ⏹️ Ausstehend | Lead Dev | Peer Reviewer | -                | Self-Check: Typchecker; QA: Test Queue                            |
 | T11       | Abschnitt 5.2 | `CommandQueue` nach `command/queue.py`                           | feature/refactor-phase5-command        | ⏹️ Ausstehend | Lead Dev | Peer Reviewer | -                | Self-Check: Szenario-Test; QA: Review                             |
 | T12       | Abschnitt 5.3 | `CommandExecutor` nach `command/executor.py`                     | feature/refactor-phase5-command        | ⏹️ Ausstehend | Lead Dev | Tech Reviewer | -                | Self-Check: Integration; QA: Deadlock-Test                        |
@@ -43,8 +43,8 @@ Tickets mit Branches, Verantwortlichkeiten und Prüfschritten. Alle Beschreibung
 
 ## Nächste Schritte
 
-1. ✅ T0–T6 abgeschlossen (siehe Detailübersicht unten)
-2. ⏭️ T7 (`physics/engine.py`) als nächstes Ticket
+1. ✅ T0–T8 abgeschlossen (siehe Detailübersicht unten)
+2. ⏭️ T9 (`observer/` - Phase, compute_phase, StateObserver) als nächstes Ticket
 3. Für neue Anforderungen weitere Zeilen ergänzen und Branch-Schema beibehalten
 
 ---
