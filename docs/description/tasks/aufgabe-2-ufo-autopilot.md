@@ -402,7 +402,7 @@ Teste dein fertiges Programm mit folgenden Eingaben:
 
 ### Test 2
 
-- x = -100.0, y = 20.5, z = 10.0
+- x = -100.0, y = 20.0, z = 10.0
 
 ### Test 3
 
@@ -446,32 +446,33 @@ Bei Test 2 (`x=-100.0, y=20.0`) wirst du feststellen: **Das UFO landet neben dem
 
 **Hauptaufgabe**:
 
-4. **Download**: Dateien von Moodle herunterladen
+1. **Download**: Dateien von Moodle herunterladen
     - `ufo_main.py`
     - `ufo_autopilot.py`
     - `pa2_utest.py`
 
-5. **Funktionsgerüst**: Kopiere Funktionskopfzeilen in `ufo_autopilot.py`
+2. **Funktionsgerüst**: Kopiere Funktionskopfzeilen in `ufo_autopilot.py`
 
-6. **Dummy-Implementierung**: Ergänze Dummy-Rümpfe
+3. **Dummy-Implementierung**: Ergänze Dummy-Rümpfe
    ```python
-   return 0.0  # für float-Rückgabe
-   return 0    # für int-Rückgabe
-   return ""   # für str-Rückgabe
+   def dummy_funktion():
+       return 0.0  # für float-Rückgabe
+       # return 0    # für int-Rückgabe
+       # return ""   # für str-Rückgabe
    ```
 
-7. **Test**: Führe `pa2_utest.py` aus
+4. **Test**: Führe `pa2_utest.py` aus
     - Am Anfang schlagen die meisten Tests fehl (normal!)
 
-8. **Schrittweise Implementierung**:
+5. **Schrittweise Implementierung**:
     - Programmiere eine Funktion nach der anderen
     - Führe nach jeder Funktion `pa2_utest.py` aus
     - Ziel: Alle Tests grün!
     - **Nutze** deine `angle_q1()` Funktion wo sinnvoll!
 
-9. **Hauptprogramm**: Ergänze `ufo_main.py`
+6. **Hauptprogramm**: Ergänze `ufo_main.py`
 
-10. **Finaler Test**: Teste mit selbst gewählten Eingaben
+7. **Finaler Test**: Teste mit selbst gewählten Eingaben
 
 ---
 

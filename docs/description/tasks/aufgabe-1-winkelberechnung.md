@@ -140,8 +140,11 @@ mit t = a/b
 Die Schleife läuft, **bis der letzte Summand** zwischen `-0.000001` und `+0.000001` liegt.
 
 ```python
+# Beispiel-Schleife mit Abbruchkriterium
+summand = 1.0  # Initialer Wert
 while abs(summand) >= 0.000001:
-# Berechnung...
+    # Berechnung des nächsten Summanden
+    pass
 ```
 
 ### Inkrementelle Berechnung
@@ -160,6 +163,8 @@ a_(k+1) = (-1)^(k+1) · t^(2k+3) / (2k+3)
 
 → p = -t² · (2k+1) / (2k+3)
 ```
+
+**Hinweis**: Der nächste Summand wird berechnet als `a_(k+1) = p · a_k`
 
 ---
 
@@ -343,6 +348,14 @@ y2 = 10
 
 1. **Zwischenergebnisse ausgeben:**
    ```python
+   # Beispiel: Debug-Ausgaben
+   # Annahme: x1, y1, x2, y2 wurden bereits eingelesen
+   x1, y1, x2, y2 = 0.0, 0.0, 5.0, 3.0  # Beispielwerte
+   
+   delta_x = x2 - x1
+   delta_y = y2 - y1
+   z = delta_y / delta_x  # Falls delta_x != 0
+   
    print(f"delta_x = {delta_x}")
    print(f"delta_y = {delta_y}")
    print(f"z = {z}")
@@ -350,7 +363,17 @@ y2 = 10
 
 2. **Summanden verfolgen:**
    ```python
-   print(f"Iteration {n}: summand = {summand}")
+   # Beispiel: Debug-Ausgaben in der Schleife
+   # Annahme: z wurde bereits berechnet
+   z = 0.6  # Beispielwert
+   n = 0
+   summand = z  # Initialer Summand
+   
+   while abs(summand) >= 0.000001:
+       print(f"Iteration {n}: summand = {summand}")
+       # Berechnung des nächsten Summanden
+       summand = summand * (-z * z) * (2*n+1) / (2*n+3)
+       n += 1
    ```
 
 ### Häufige Fehler
@@ -375,18 +398,38 @@ y2 = 10
 
 1. **z² speichern:**
    ```python
+   # Beispiel: Optimierung durch Zwischenspeicherung
+   # Annahme: x1, y1, x2, y2 wurden bereits eingelesen
+   x1, y1, x2, y2 = 0.0, 0.0, 5.0, 3.0  # Beispielwerte
+   delta_x = x2 - x1
+   delta_y = y2 - y1
+   
+   z = delta_y / delta_x  # Annahme: delta_x != 0
    z_quadrat = z * z
-   summand = summand * (-z_quadrat) * (2*n+1) / (2*n+3)
+   n = 0
+   summand = z  # Initialer Summand
+   
+   # In der Schleife:
+   while abs(summand) >= 0.000001:
+       summand = summand * (-z_quadrat) * (2*n+1) / (2*n+3)
+       n += 1
    ```
 
 2. **Sonderfälle vorab prüfen:**
    ```python
+   # Beispiel: Sonderfall-Behandlung
+   # Annahme: x1, y1, x2, y2 wurden bereits eingelesen
+   x1, y1, x2, y2 = 0.0, 0.0, 0.0, 10.0  # Beispielwerte
+   delta_x = x2 - x1
+   delta_y = y2 - y1
+   
    if delta_x == 0:
        winkel = 90.0
    elif delta_y == 0:
        winkel = 0.0
    else:
-       # Taylor-Reihe
+       # Taylor-Reihen-Berechnung durchführen
+       pass
    ```
 
 ---

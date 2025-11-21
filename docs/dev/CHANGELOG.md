@@ -4,17 +4,18 @@ Chronologische Auflistung aller Änderungen (neueste zuerst).
 
 ---
 
-## [2025-11-21] - Lock-Verwendung validiert und nested locks behoben
+## [2025-11-21] - Lock-Verwendung validiert und verschachtelte Locks behoben
 
 ### Zusammenfassung
 
-Projektweite Validierung aller Lock-Verwendungen zur Sicherstellung korrekter Decorator-Nutzung. Zwei nested locks in `_UfoLegacySync` gefunden und behoben durch Umstellung auf `@conditional` Decorator.
+Projektweite Validierung aller Lock-Verwendungen zur Sicherstellung korrekter Decorator-Nutzung. Zwei verschachtelte
+Locks in `_UfoLegacySync` gefunden und behoben durch Umstellung auf `@conditional` Decorator.
 
 ### Problem/Motivation
 
 Nach Einführung der zentralen Lock-Decorators sollte sichergestellt werden, dass:
 1. Alle Locks via Decorators verwendet werden (keine manuellen Patterns)
-2. Keine nested locks existieren
+2. Keine verschachtelten Locks existieren
 3. Keine veralteten Lock-Patterns im Projekt verbleiben
 
 ### Durchgeführte Analyse
@@ -35,13 +36,13 @@ Nach Einführung der zentralen Lock-Decorators sollte sichergestellt werden, das
 
 ### Gefundene Probleme
 
-#### 1. _UfoLegacySync.update_state() - Nested Lock
+#### 1. _UfoLegacySync.update_state() - Verschachtelter Lock
 **Problem**:
 ```python
-@synchronized  # ← self._lock acquired
+@synchronized  # ← self._lock erworben
 def update_state(self, update_func):
     self._state = update_func(self._state)
-    self._condition.notify_all()  # ← Nutzt intern self._lock! NESTED!
+    self._condition.notify_all()  # ← Nutzt intern self._lock! VERSCHACHTELT!
 ```
 
 **Lösung**:
@@ -50,14 +51,15 @@ def update_state(self, update_func):
     snapshot = self._update_state_atomic(update_func)
     self._notify_observers(snapshot)
 
-@conditional  # ← Nutzt self._condition direkt, kein nested lock
+
+@conditional  # ← Nutzt self._condition direkt, kein verschachtelter Lock
 def _update_state_atomic(self, update_func):
     self._state = update_func(self._state)
     self._condition.notify_all()  # ✓ Korrekt
     return dataclass_replace(self._state)
 ```
 
-#### 2. _UfoLegacySync.reset() - Nested Lock
+#### 2. _UfoLegacySync.reset() - Verschachtelter Lock
 **Problem**: Identisch zu update_state()  
 **Lösung**: Analog umgestellt auf `@conditional` via `_reset_atomic()`
 
@@ -83,11 +85,11 @@ def _update_state_atomic(self, update_func):
 - `@conditional`: 4 Verwendungen ✅
 - `@synchronized_module`: 2 Verwendungen ✅
 - Manuelle Locks: 0 ✅
-- Nested Locks: 0 ✅ (2 behoben)
+- Verschachtelte Locks: 0 ✅ (2 behoben)
 
 **Multi-Lock-Pattern (korrekt)**:
-- `CommandExecutor.process_commands()`: `@synchronized` + `with queue.lock:` 
-  → Zwei verschiedene Objekte, kein nested lock ✅
+- `CommandExecutor.process_commands()`: `@synchronized` + `with queue.lock:`
+  → Zwei verschiedene Objekte, kein verschachtelter Lock ✅
 
 ### Best Practices - Eingehalten
 
@@ -284,7 +286,8 @@ Implementierung eines zentralen `@conditional` Decorators für Methoden mit Cond
 
 ### Problem/Motivation
 
-1. **Nested Locks**: `update_state()` und `reset()` hatten nested lock Anti-Pattern (manuelles `with self._lock:` + `self._condition.notify_all()`)
+1. **Verschachtelte Locks**: `update_state()` und `reset()` hatten verschachteltes Lock Anti-Pattern (manuelles
+   `with self._lock:` + `self._condition.notify_all()`)
 2. **Code-Duplikation**: Identische `wait_for_condition()` Implementierung in StateManager und _UfoLegacySync (38 Zeilen Duplikation)
 3. **Fehlende Abstraktion**: Kein dedizierter Decorator für Condition-Variable-basierte Methoden
 
@@ -294,7 +297,7 @@ Implementierung eines zentralen `@conditional` Decorators für Methoden mit Cond
 - Neue Datei: `src/core/simulation/synchronization/conditional_lock.py`
 - Decorator für Methoden die mit `threading.Condition` arbeiten
 - Nutzt `self._condition.acquire()/release()` direkt
-- Verhindert nested locks bei `notify_all()` Aufrufen
+- Verhindert verschachtelte Locks bei `notify_all()` Aufrufen
 - Kompatibel mit RLock (wiedereintrittsfähig)
 
 #### 2. ConditionWaiter Utility

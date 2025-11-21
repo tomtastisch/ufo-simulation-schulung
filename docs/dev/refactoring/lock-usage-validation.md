@@ -6,7 +6,7 @@
 
 Vollständige Analyse aller Lock-Verwendungen im Projekt um sicherzustellen, dass:
 1. Alle Locks korrekt via Decorators verwendet werden
-2. Keine nested locks existieren
+2. Keine verschachtelten Locks existieren
 3. Keine veralteten manuellen Lock-Patterns vorhanden sind
 
 ---
@@ -19,9 +19,9 @@ Vollständige Analyse aller Lock-Verwendungen im Projekt um sicherzustellen, das
 - `__init__`: Erstellt `self._lock` (RLock) und `self._condition`
 - `get_snapshot()`: ✅ `@synchronized`
 - `update_state()`: ✅ Delegiert an `_update_state_atomic()`
-- `_update_state_atomic()`: ✅ `@conditional` (verhindert nested lock)
+- `_update_state_atomic()`: ✅ `@conditional` (verhindert verschachtelten Lock)
 - `reset()`: ✅ Delegiert an `_reset_atomic()`
-- `_reset_atomic()`: ✅ `@conditional` (verhindert nested lock)
+- `_reset_atomic()`: ✅ `@conditional` (verhindert verschachtelten Lock)
 - `register_observer()`: ✅ `@synchronized`
 - `unregister_observer()`: ✅ `@synchronized`
 - `wait_for_condition()`: ✅ `@synchronized` + Delegation an ConditionWaiter
@@ -38,7 +38,7 @@ Vollständige Analyse aller Lock-Verwendungen im Projekt um sicherzustellen, das
 @synchronized
 def update_state(self, update_func):
     self._state = update_func(self._state)
-    self._condition.notify_all()  # ← NESTED LOCK!
+    self._condition.notify_all()  # ← VERSCHACHTELT!
 ```
 
 #### Nachher ✅
@@ -50,7 +50,7 @@ def update_state(self, update_func):
 @conditional
 def _update_state_atomic(self, update_func):
     self._state = update_func(self._state)
-    self._condition.notify_all()  # ✓ Kein nested lock
+    self._condition.notify_all()  # ✓ Kein verschachtelter Lock
     return dataclass_replace(self._state)
 ```
 
@@ -58,7 +58,7 @@ def _update_state_atomic(self, update_func):
 - `update_state()`: ✅ Nutzt jetzt `@conditional` via `_update_state_atomic()`
 - `reset()`: ✅ Nutzt jetzt `@conditional` via `_reset_atomic()`
 
-**Bewertung**: Nested locks behoben, jetzt korrekt.
+**Bewertung**: Verschachtelte Locks behoben, jetzt korrekt.
 
 ---
 
@@ -81,7 +81,7 @@ def _update_state_atomic(self, update_func):
 def process_commands(self, current_state):
     # ...
     queue = self._active_queue
-    with queue.lock:  # ← Anderes Objekt, kein nested lock!
+    with queue.lock:  # ← Anderes Objekt, kein verschachtelter Lock!
         # Zugriff auf Queue-Internals
 ```
 
@@ -89,7 +89,7 @@ def process_commands(self, current_state):
 - `self._lock` (CommandExecutor) schützt `_active_queue` Reference
 - `queue.lock` (CommandQueue) schützt Queue-Internals (current_index, commands)
 - Zwei verschiedene Locks für zwei verschiedene Ressourcen
-- **Kein problematischer nested lock** - korrektes Multi-Lock-Pattern
+- **Kein problematischer verschachtelter Lock** - korrektes Multi-Lock-Pattern
 
 **Bewertung**: Korrekt implementiert.
 
@@ -128,7 +128,7 @@ def get_logger(...):
 - **Locks**: 5 RLocks, 2 Conditions
 - **Decorators**: 17x `@synchronized`, 4x `@conditional`, 2x `@synchronized_module`
 - **Manuelle Locks**: 1 (korrekt, Multi-Lock-Pattern)
-- **Nested Locks**: 0 ✅ (2 behoben)
+- **Verschachtelte Locks**: 0 ✅ (2 behoben)
 
 ---
 
@@ -179,20 +179,22 @@ grep -r "notify_all()" src/
 
 **Ergebnis**:
 - ✅ Alle `notify_all()` Aufrufe sind innerhalb von `@conditional` Methoden
-- ✅ Keine `notify_all()` innerhalb von `@synchronized` (würde nested lock bedeuten)
+- ✅ Keine `notify_all()` innerhalb von `@synchronized` (würde verschachtelten Lock bedeuten)
 
 ---
 
 ## 🐛 Behobene Probleme
 
 ### Problem 1: _UfoLegacySync.update_state()
-**Vorher**: `@synchronized` + `notify_all()` = nested lock  
-**Nachher**: `@conditional` via `_update_state_atomic()` = kein nested lock  
+
+**Vorher**: `@synchronized` + `notify_all()` = verschachtelter Lock  
+**Nachher**: `@conditional` via `_update_state_atomic()` = kein verschachtelter Lock  
 **Status**: ✅ Behoben
 
 ### Problem 2: _UfoLegacySync.reset()
-**Vorher**: `@synchronized` + `notify_all()` = nested lock  
-**Nachher**: `@conditional` via `_reset_atomic()` = kein nested lock  
+
+**Vorher**: `@synchronized` + `notify_all()` = verschachtelter Lock  
+**Nachher**: `@conditional` via `_reset_atomic()` = kein verschachtelter Lock  
 **Status**: ✅ Behoben
 
 ---
@@ -200,7 +202,7 @@ grep -r "notify_all()" src/
 ## 📋 Best Practices - Eingehalten
 
 1. ✅ **DRY**: Alle Decorators nutzen zentrale `create_lock_wrapper()`
-2. ✅ **Kein nested lock**: Alle `notify_all()` Aufrufe unter `@conditional`
+2. ✅ **Kein verschachtelter Lock**: Alle `notify_all()` Aufrufe unter `@conditional`
 3. ✅ **Konsistenz**: Einheitliche Decorator-Verwendung
 4. ✅ **Exception-Safety**: Alle Locks werden automatisch freigegeben
 5. ✅ **Type Safety**: Vollständige Type Hints
@@ -214,7 +216,7 @@ grep -r "notify_all()" src/
 
 **Alle Lock-Verwendungen sind korrekt**:
 - ✅ Alle Locks via Decorators (`@synchronized`, `@conditional`, `@synchronized_module`)
-- ✅ Keine nested locks (2 gefunden und behoben)
+- ✅ Keine verschachtelten Locks (2 gefunden und behoben)
 - ✅ Keine veralteten manuellen Lock-Patterns
 - ✅ Konsistente Verwendung der Decorator-Layer
 - ✅ Exception-sicher durch automatisches Lock-Release
