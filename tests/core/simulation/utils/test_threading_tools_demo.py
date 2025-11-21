@@ -10,108 +10,11 @@ Demonstriert die Verwendung von:
 
 import threading
 import time
-from typing import Callable, List, Dict, Any, Optional
 
 import pytest
 import threadpoolctl
 
-
-# Vermeide direkten Import aus `conftest` (pytest entdeckt conftest, aber statische
-# Analyzer melden oft 'unresolved import'). Stattdessen definieren wir hier kleine,
-# gut dokumentierte Test-Helfer lokal in der Datei.
-
-
-def run_threaded_workers(worker_func: Callable[[], None], num_threads: int = 10, timeout_per_thread: float = 5.0) -> List[threading.Thread]:
-    """
-    Führt eine Worker-Funktion in mehreren Threads aus und wartet auf Abschluss.
-
-    Diese Implementierung ist intentionally klein und test-fokussiert.
-    """
-    threads: List[threading.Thread] = []
-
-    for _ in range(num_threads):
-        t = threading.Thread(target=worker_func, daemon=False)
-        threads.append(t)
-        t.start()
-
-    for t in threads:
-        t.join(timeout=timeout_per_thread)
-        if t.is_alive():
-            raise TimeoutError(f"Thread did not complete within {timeout_per_thread}s")
-
-    return threads
-
-
-def assert_race_condition_free(
-    increment_func: Callable[[], None],
-    get_value_func: Callable[[], int],
-    num_threads: int = 100,
-    increments_per_thread: int = 100,
-    timeout: float = 30.0,
-) -> bool:
-    """Prüft, ob `increment_func` race-condition-frei arbeitet.
-
-    Diese vereinfachte Funktion spiegelt das Verhalten der gleichnamigen Helfer
-    in der Projekt-`conftest.py` wider und wirft bei Abweichungen AssertionError.
-    """
-    expected = num_threads * increments_per_thread
-
-    def worker():
-        for _ in range(increments_per_thread):
-            increment_func()
-
-    run_threaded_workers(worker, num_threads=num_threads, timeout_per_thread=timeout / max(1, num_threads))
-
-    actual = get_value_func()
-    assert actual == expected, f"Race-Condition detected: Expected {expected}, got {actual}"
-    return True
-
-
-def create_decorated_counter(decorator: Callable, lock: Optional[threading.RLock] = None) -> Dict[str, Any]:
-    """Erzeugt einen kleinen dekorierten Counter (increment/get_value/add).
-
-    Nützlich für Tests, die Decorators wie `@synchronized` prüfen.
-    """
-    data: Dict[str, int] = {"value": 0}
-
-    if lock is not None:
-        @decorator(lock)
-        def increment():
-            old = data["value"]
-            time.sleep(0.0001)
-            data["value"] = old + 1
-
-        @decorator(lock)
-        def get_value():
-            return data["value"]
-
-        @decorator(lock)
-        def add(amount: int):
-            old = data["value"]
-            time.sleep(0.0001)
-            data["value"] = old + amount
-            return data["value"]
-    else:
-        @decorator
-        def increment():
-            old = data["value"]
-            time.sleep(0.0001)
-            data["value"] = old + 1
-
-        @decorator
-        def get_value():
-            return data["value"]
-
-        @decorator
-        def add(amount: int):
-            old = data["value"]
-            time.sleep(0.0001)
-            data["value"] = old + amount
-            return data["value"]
-
-    return {"increment": increment, "get_value": get_value, "add": add, "data": data}
-
-
+from tests._helpers import run_threaded_workers, assert_race_condition_free, create_decorated_counter
 from core.simulation.synchronization import synchronized
 
 

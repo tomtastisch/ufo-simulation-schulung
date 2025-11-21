@@ -11,6 +11,13 @@ import math
 from core.simulation.utils.geometry import cartesian_to_spherical, spherical_to_cartesian
 
 
+def assert_coordinates_equal(actual: tuple[float, float, float], expected: tuple[float, float, float], tolerance: float = 1e-10) -> None:
+    """Hilfsfunktion: Prüft, ob zwei 3D-Koordinaten innerhalb der Toleranz gleich sind."""
+    assert abs(actual[0] - expected[0]) < tolerance, f"x: {actual[0]} != {expected[0]}"
+    assert abs(actual[1] - expected[1]) < tolerance, f"y: {actual[1]} != {expected[1]}"
+    assert abs(actual[2] - expected[2]) < tolerance, f"z: {actual[2]} != {expected[2]}"
+
+
 class TestCartesianToSpherical:
     """Tests für cartesian_to_spherical Funktion."""
 
@@ -116,9 +123,7 @@ class TestRoundtripConversion:
         # Zurück
         x, y, z = spherical_to_cartesian(r, theta, phi)
 
-        assert abs(x - original_x) < 1e-10
-        assert abs(y - original_y) < 1e-10
-        assert abs(z - original_z) < 1e-10
+        assert_coordinates_equal((x, y, z), (original_x, original_y, original_z))
 
     def test_roundtrip_spherical_cartesian_spherical(self):
         """Sphärisch → Kartesisch → Sphärisch sollte Original ergeben."""
@@ -132,9 +137,7 @@ class TestRoundtripConversion:
         # Zurück
         r, theta, phi = cartesian_to_spherical(x, y, z)
 
-        assert abs(r - original_r) < 1e-10
-        assert abs(theta - original_theta) < 1e-10
-        assert abs(phi - original_phi) < 1e-10
+        assert_coordinates_equal((r, theta, phi), (original_r, original_theta, original_phi))
 
     def test_multiple_points_roundtrip(self):
         """Mehrere Punkte sollten Roundtrip korrekt durchlaufen."""
@@ -150,6 +153,4 @@ class TestRoundtripConversion:
             r, theta, phi = cartesian_to_spherical(orig_x, orig_y, orig_z)
             x, y, z = spherical_to_cartesian(r, theta, phi)
 
-            assert abs(x - orig_x) < 1e-10
-            assert abs(y - orig_y) < 1e-10
-            assert abs(z - orig_z) < 1e-10
+            assert_coordinates_equal((x, y, z), (orig_x, orig_y, orig_z))
