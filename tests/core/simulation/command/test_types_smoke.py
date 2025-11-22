@@ -8,6 +8,10 @@ sowie die korrekte Vermeidung von Importzyklen.
 """
 
 
+def always_true_condition(s):
+    """Condition that always returns True."""
+    return True
+
 def test_command_types_import():
     """Test: CommandType und Command können importiert werden."""
     from core.simulation.command.types import CommandType, Command
@@ -117,16 +121,15 @@ def test_command_is_dataclass():
 def test_no_runtime_import_of_ufostate():
     """Test: UfoState wird nicht zur Laufzeit importiert (TYPE_CHECKING only)."""
     from core.simulation.command.types import Command, CommandType
-    import sys
-    
+
     # Command sollte importierbar sein, ohne dass state.state geladen wird
     # (außer es wurde bereits woanders geladen)
     # Dies ist ein Proxy-Test für korrekte TYPE_CHECKING Nutzung
-    
+
     # Erstelle Command mit condition - sollte ohne UfoState-Import funktionieren
     cmd = Command(
-        type=CommandType.WAIT_CONDITION,  # Verwende korrekten CommandType
-        condition=lambda s: True  # Lambda akzeptiert beliebigen Parameter
+        type=CommandType.WAIT_CONDITION,
+        condition=always_true_condition  # Funktion zur besseren Lesbarkeit, statt Lambda
     )
     
     assert cmd is not None
@@ -154,8 +157,7 @@ def test_command_module_has_no_circular_imports():
         del sys.modules['core.simulation.command']
     
     # Import sollte nicht state.state zur Laufzeit laden
-    from core.simulation.command.types import Command, CommandType
-    
+
     # state.state sollte nur geladen sein, wenn TYPE_CHECKING true wäre (ist es nicht)
     # oder wenn es bereits vorher geladen war
     # Ein reines Import von command.types sollte state.state NICHT laden
