@@ -97,7 +97,7 @@ Dieses Dokument verfolgt den Implementierungsstatus der einzelnen Refactoring-Ti
 **Referenzen:**
 
 - Config-Datei: [
-  `src/core/simulation/infrastructure/config.py`](../../src/core/simulation/infrastructure/simulation_config.py)
+  `src/core/simulation/infrastructure/config.py`](../../src/core/simulation/infrastructure/config/simulation.py)
 - Zielbild: Abschnitt "infrastructure/config.py"
 
 ---

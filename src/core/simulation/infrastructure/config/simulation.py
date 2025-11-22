@@ -24,7 +24,7 @@ Wichtig - Konsistenz-Regel:
     Handhabung von Konfigurationen und erleichtert die Wartung.
 
     Beispiel:
-        ❌ FALSCH: Config in physics/simulation_config.py definieren
+        ❌ FALSCH: Config in physics/simulation.py definieren
         ✅ RICHTIG: Config hier definieren und in physics/ importieren
 
 Copyright (C) 2013-2025 R. Gold, tomtastisch (i-ki 1)
