@@ -19,7 +19,7 @@ import numpy as np
 # noinspection PyPackageRequirements
 from PyQt5 import QtWidgets, QtGui, QtCore
 
-from core.simulation.infrastructure import DEFAULT_CONFIG, SimulationConfig, get_logger
+from .infrastructure import DEFAULT_CONFIG, SimulationConfig, get_logger
 from .observer import Phase, ManeuverAnalysis, compute_phase, StateObserver
 from .physics import PhysicsEngine
 from .state import UfoState, StateManager
