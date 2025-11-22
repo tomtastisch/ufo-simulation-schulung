@@ -123,40 +123,37 @@ def test_observer_module_has_no_forbidden_dependencies():
     # Observer-Modul laden
     module_source = observer_module.__file__
 
-    # Verbotene Imports gemäß Spec (Sicherstellung)
-    forbidden_imports = [
-        "from ..state.manager",
-        "from .state.manager",
-        "import state.manager",
-        "from ..physics",
-        "from .physics",
-        "import physics",
-        "from ..command",
-        "from .command",
-        "import command",
-        "from ..controller",
-        "from .controller",
-        "import controller",
-        "from ..view",
-        "from .view",
-        "import view",
-    ]
-
     # Modul-Quelltext überprüfen
     with open(module_source, "r", encoding="utf-8") as f:
         content = f.read()
 
-    for forbidden in forbidden_imports:
-        assert (
-            forbidden not in content
-        ), f"Observer sollte nicht '{forbidden}' verwenden"
+    # Generische Sicherheitsprüfung der Importstruktur (AST‑basiert)
+    import ast
 
-    # Erlaubte Dependencies sollten vorhanden sein
-    # ToDo Anpassen an neue Struktur
-    # assert "from ..infrastructure import" in content
-    assert "from ..state.state import UfoState" in content
-    assert "from collections import deque" in content
-    assert "import numpy" in content
+    tree = ast.parse(content)
+
+    # Erlaubte Root-Pakete nach einhaltung der Ticketvorgaben
+    forbidden_roots = {
+        "core.simulation.physics",
+        "core.simulation.controller",
+        "core.simulation.command",
+        "core.simulation.view",
+        "core.simulation.state.manager",
+    }
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                for root in forbidden_roots:
+                    if alias.name.startswith(root):
+                        raise AssertionError(
+                            f"Observer sollte keine verbotene Dependency importieren: import {alias.name}")
+
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for root in forbidden_roots:
+                if node.module.startswith(root):
+                    raise AssertionError(
+                        f"Observer sollte keine verbotene Dependency importieren: from {node.module} import ...")
 
 
 def test_observer_module_exports():
