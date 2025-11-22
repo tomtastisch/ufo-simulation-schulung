@@ -76,11 +76,13 @@ def test_command_instantiation_execute_func():
     """Test: Command für EXECUTE_FUNC kann instanziiert werden."""
     from core.simulation.command.types import CommandType, Command
     
-    test_func = lambda: print("test")
+    def test_print_func() -> None:
+        """Hilfsfunktion für EXECUTE_FUNC-Test: Gibt 'test' aus."""
+        print("test")
     
     cmd = Command(
         type=CommandType.EXECUTE_FUNC,
-        func=test_func
+        func=test_print_func
     )
     
     assert cmd.type == CommandType.EXECUTE_FUNC
