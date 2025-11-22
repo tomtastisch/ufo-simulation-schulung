@@ -25,18 +25,7 @@ from .physics import PhysicsEngine
 from .state import UfoState, StateManager
 from .synchronization import conditional, synchronized
 
-# =============================================================================
-# LOGGING - Verwendet zentrale Konfiguration aus logging_setup
-# =============================================================================
-
 logger = get_logger(__name__)
-
-
-# =============================================================================
-# KONFIGURATION - Importiert aus simulation_config.py
-# =============================================================================
-# SimulationConfig und DEFAULT_CONFIG sind nun in simulation_config.py definiert
-# und werden am Anfang dieser Datei importiert.
 
 
 # =============================================================================
