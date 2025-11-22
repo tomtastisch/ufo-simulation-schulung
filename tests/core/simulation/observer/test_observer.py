@@ -135,10 +135,10 @@ class TestComputePhaseEdgeCases:
     """Tests für Grenzfälle und spezielle Konfigurationen."""
 
     def test_zero_velocity_in_air(self):
-        """Geschwindigkeit 0 in der Luft ist idle (kein Flug)."""
+        """Geschwindigkeit 0 in der Luft ist hovering (schwebt)."""
         state = UfoState(z=10.0, v=0.0, vz=0.0, ftime=5.0, dist=20.0)
-        # v=0 erfüllt keine Flugphase -> idle
-        assert compute_phase(state) == "idle"
+        # v=0, vz=0, z>0 -> hovering
+        assert compute_phase(state) == "hovering"
 
     def test_custom_landing_detection_height(self):
         """Benutzerdefinierte Landungshöhe wird korrekt verwendet."""

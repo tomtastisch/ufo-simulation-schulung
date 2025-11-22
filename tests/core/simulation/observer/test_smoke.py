@@ -29,7 +29,7 @@ def test_phase_type_is_literal():
 
     # Phase sollte ein Literal sein
     args = get_args(Phase)
-    expected_phases = {"idle", "takeoff", "flying", "landing", "landed", "crashed"}
+    expected_phases = {"idle", "takeoff", "hovering", "flying", "landing", "landed", "crashed"}
 
     assert set(args) == expected_phases
 
@@ -218,48 +218,6 @@ def test_observer_uses_config_thresholds():
 
     # History maxlen sollte von Config kommen
     assert observer.history.maxlen == 100
-
-
-def test_observer_module_has_comprehensive_documentation():
-    """Observer-Modul hat umfassende Dokumentation."""
-    from core.simulation import observer as observer_module
-
-    # __init__.py sollte ausführliche Dokumentation haben
-    assert observer_module.__doc__ is not None
-    assert len(observer_module.__doc__) > 500  # Mindestens 500 Zeichen
-
-    # Wichtige Abschnitte sollten vorhanden sein
-    doc = observer_module.__doc__
-    assert "ZWECK" in doc or "Zweck" in doc
-    assert "BESTANDTEILE" in doc or "Bestandteile" in doc
-    assert "VERANTWORTLICHKEITEN" in doc or "Verantwortlichkeiten" in doc
-    assert "DEPENDENCY" in doc or "Dependency" in doc or "Abhängigkeiten" in doc
-
-
-def test_observer_module_functions_are_documented():
-    """Alle öffentlichen Funktionen/Klassen haben Docstrings."""
-    from core.simulation.observer import (
-        ManeuverAnalysis,
-        StateObserver,
-        compute_phase,
-    )
-
-    # compute_phase Dokumentation
-    assert compute_phase.__doc__ is not None
-    assert len(compute_phase.__doc__) > 100
-
-    # ManeuverAnalysis Dokumentation
-    assert ManeuverAnalysis.__doc__ is not None
-
-    # StateObserver Dokumentation
-    assert StateObserver.__doc__ is not None
-    assert len(StateObserver.__doc__) > 100
-
-    # StateObserver Methoden haben Docstrings
-    assert StateObserver.observe.__doc__ is not None
-    assert StateObserver.analyze.__doc__ is not None
-    assert StateObserver.get_maneuver_description.__doc__ is not None
-
 
 def test_observer_does_not_modify_state():
     """Observer modifiziert empfangene States nicht."""

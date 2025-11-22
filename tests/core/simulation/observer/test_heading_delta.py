@@ -18,14 +18,14 @@ class TestNormalizeHeadingDelta:
         assert delta == 45.0
 
     def test_no_wrap_around_negative_small(self):
-        """Kleine negative Differenz ohne Wrap-around."""
+        """Kleine negative Differenz bleibt unverändert."""
         delta = normalize_heading_delta(-45.0)
         assert delta == -45.0
 
     def test_no_wrap_around_at_boundary_positive(self):
-        """Differenz genau bei +180° (Grenzfall)."""
+        """Differenz genau bei +180° (Grenzfall) -> normalisiert zu -180°."""
         delta = normalize_heading_delta(180.0)
-        assert delta == 180.0
+        assert delta == -180.0
 
     def test_no_wrap_around_at_boundary_negative(self):
         """Differenz genau bei -180° (Grenzfall)."""
@@ -69,10 +69,10 @@ class TestNormalizeHeadingDelta:
         assert delta == 0.0
 
     def test_multiple_wraps_positive(self):
-        """Mehrfache Umläufe positiv (540° = 360° + 180°)."""
-        # 540° - 360° = 180°
+        """Mehrfache Umläufe positiv (540° = 360° + 180°) -> normalisiert zu -180°."""
+        # 540° - 360° = 180° -> -180° (Konsistenz)
         delta = normalize_heading_delta(540.0)
-        assert delta == 180.0
+        assert delta == -180.0
 
     def test_multiple_wraps_negative(self):
         """Mehrfache Umläufe negativ (-540° = -360° - 180°)."""

@@ -1,178 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-UFO/Drohnen-Simulation mit realistischer Physik und dynamischer Visualisierung.
+UFO-Simulation Controller.
 
-Vollständig refaktorierte, produktionsreife Implementierung nach Clean Architecture-Prinzipien.
-Version 5.2.0 - Modulare Architektur mit klarer Trennung der Verantwortlichkeiten.
-
-=== ARCHITEKTUR-ÜBERSICHT (v5.2.0 - Refactored) ===
-
-Die Simulation ist in klar getrennte, spezialisierte Komponenten organisiert:
-
-1. **Konfigurationsschicht (SimulationConfig)**
-   - Zentrale, immutable Konfigurationsklasse für alle physikalischen Parameter
-   - Keine Magic Numbers im Code - alle Konstanten hier definiert
-   - Abgeleitete Schwellenwerte werden konsistent aus Basisparametern berechnet
-   - Thread-sicher durch frozen dataclass
-
-2. **Zustandsmodell (UfoState)**
-   - Vollständiger physikalischer Zustand: Position, Geschwindigkeit, Beschleunigung
-   - SI-Einheiten intern (m, m/s, m/s², rad)
-   - Legacy-API-Kompatibilität über Felder in km/h und Grad
-   - Slots-optimiert für Performance
-   - NumPy-Properties für Vektoroperationen
-
-3. **Zustandsverwaltung (StateManager)**
-   - Thread-sicherer Zugriff auf UfoState
-   - Event-System für State-Änderungen (Condition Variables)
-   - Observer-Pattern für Benachrichtigungen
-   - Snapshot-API für defensive Kopien
-   - KEIN Locking in Domänenlogik nötig
-
-4. **Physik-Engine (PhysicsEngine)**
-   - Reine Berechnungslogik ohne Threading-Concerns
-   - Zeitschritt-basierte Integration (dt-basiert)
-   - Korrekte 3D-Vektormathematik (sphärische Koordinaten)
-   - Physikalische Constraints (max. Geschwindigkeit, Beschleunigungen)
-   - Realistische Landungs-/Crash-Kriterien
-   - Modifiziert State in-place (durch StateManager geschützt)
-
-5. **Command System (CommandExecutor + CommandQueue)**
-   - Event-basierte Command-Verarbeitung (keine Polling-Loops!)
-   - Deklarative Autopilot-Steuerung
-   - Entkoppelt von Simulationsloop
-   - Thread-sicher durch StateManager-Integration
-
-6. **Manöver-Analyse (StateObserver + ManeuverAnalysis)**
-   - Separater Observer mit Ringpuffer (collections.deque)
-   - Erkennt Manöver aus Zustandsverlauf (nicht aus Steuerbefehlen!)
-   - Phasen: idle, takeoff, flying, landing, landed, crashed
-   - Flags: is_ascending, is_descending, is_turning, is_stagnating
-   - Rein lesend - keine Schreibzugriffe auf State
-   - Automatische Benachrichtigung via StateManager
-
-7. **Simulation Controller (UfoSim)**
-   - Schlanker Orchestrator ohne eigene Implementierung
-   - Komponenten-Komposition statt Vererbung
-   - Thread-Management und Lifecycle
-   - Logging-Koordination
-   - Stabile Public API (100% rückwärtskompatibel)
-
-8. **Visualisierung (SimulationViewModel + UfoPView)**
-   - View-Model-Pattern für Entkopplung
-   - PyQt5-basierte View mit QGraphicsScene
-   - Nutzt nur ViewModel (keine direkten Simulation-Zugriffe)
-   - Keine Physik-Logik in der View
-   - Dynamisches Viewport-Zoom
-
-=== FEATURES (v5.2.0) ===
-
-**Architektur:**
-- Clean Architecture mit klarer Trennung der Verantwortlichkeiten
-- Single Responsibility Principle - jede Klasse < 200 Zeilen
-- Komposition statt Vererbung
-- Dependency Injection für Testbarkeit
-- Lock-freie Physik-Engine durch StateManager-Abstraktion
-
-**Thread-Safety:**
-- StateManager mit Event-System (Condition Variables)
-- Observer-Pattern für State-Benachrichtigungen
-- KEINE Locks in Domänenlogik
-- Defensive Kopien via Snapshots
-
-**Physik:**
-- NumPy-basierte Vektorberechnungen
-- Korrekte 3D-Vektorphysik (sphärische Koordinaten)
-- Physikalisch plausible Constraints
-- Realistische Landungs-/Crash-Kriterien
-
-**Code-Qualität:**
-- Moderne Python 3.11+ Syntax (dataclasses, type hints, Literal)
-- PEP 8-konform
-- Vollständige Docstrings (Google-Stil)
-- Keine Magic Numbers
-- Single return point pro Funktion
-- Professionelles Logging (logging-Modul)
-- Type Hints für alle öffentlichen APIs
-
-=== VERWENDUNG ===
-
-Basis-Beispiel:
-    >>> sim = UfoSim()
-    >>> sim.start(speedup=5, show_view=True, enable_logging=True)
-
-Mit Custom Config:
-    >>> config = SimulationConfig(vmax_kmh=20.0, dt=0.05)
-    >>> sim = UfoSim(config)
-    >>> sim.start(speedup=10)
-
-Manöver-Analyse:
-    >>> analysis = sim.get_maneuver_analysis()
-    >>> print(f"Phase: {analysis.phase}, Climbing: {analysis.is_ascending}")
-
-Event-basierte Steuerung:
-    >>> sim.wait_for_condition(lambda s: s.z >= 10.0, timeout=5.0)
-    >>> # Wartet bis UFO 10m Höhe erreicht (kein Busy-Waiting!)
-
-=== THREADING-MODEL ===
-
-- Simulation läuft in eigenem Thread (daemon wenn GUI, sonst blocking)
-- Optional: Autopilot in separatem Thread (daemon)
-- Optional: View im Main-Thread (Qt Event Loop)
-- Alle State-Zugriffe über StateManager (event-basiert, kein Polling)
-- Observer-Pattern für asynchrone Benachrichtigungen
-
-Copyright (C) 2013-2025 R. Gold, tomtastisch (i-ki 1)
-Version: 5.2.0-tw-refactored
-Release Date: 2025-01-15
-
-=== CHANGELOG v5.2.0 (Major Refactoring) ===
-
-**Architektur-Verbesserungen:**
-- StateManager extrahiert: Thread-sicherer Zugriff ohne God-Object
-- PhysicsEngine extrahiert: Reine Berechnungslogik ohne Threading
-- CommandExecutor extrahiert: Event-basierte Command-Verarbeitung
-- SimulationViewModel eingeführt: View-Model-Pattern für UI-Entkopplung
-- UfoSim zu schlankem Controller refactored (von 800+ auf ~200 Zeilen)
-
-**Code-Qualität:**
-- Single Responsibility: Jede Klasse hat genau EINE Aufgabe
-- Testbarkeit: Komponenten isoliert testbar
-- Erweiterbarkeit: Neue Features ohne Kern-Änderungen
-- Lesbarkeit: Klare Namensgebung, präzise Docstrings
-- Wartbarkeit: Niedrige Kopplung, hohe Kohäsion
-
-**Thread-Safety Verbesserungen:**
-- Lock-freie Physik-Engine
-- Event-basiertes Warten (keine Busy-Loops)
-- Observer-Pattern reduziert Polling
-- Condition Variables statt aktiver Warteschleifen
-
-**API-Stabilität:**
-- 100% rückwärtskompatibel zu v5.1.0
-- Legacy-Property `sim.state` für alte Aufrufer
-- Alle bestehenden Tests funktionieren unverändert
-
-=== CHANGELOG v5.1.0 ===
-
-Kritische Fixes & Optimierungen:
-- NumPy Integration für effiziente Vektorberechnungen
-- Typenzuordnung korrigiert: v, d, i sind jetzt float statt int
-- Magic Numbers durch konfigurierbare Parameter ersetzt
-- Thread-Safety in Update-Loop verbessert
-- Alle NumPy-Vektoren verwenden dtype=np.float64
+Orchestriert Simulation-Lifecycle, Threading und Komponenten-Integration.
 """
 
 from __future__ import annotations
 
 import threading
 import time
-from collections import deque
 from dataclasses import dataclass, replace as dataclass_replace
 from enum import Enum, auto
 from pathlib import Path
-from typing import Optional, List, Tuple, Literal, overload, Callable, Any, final
+from typing import Optional, List, Tuple, overload, Callable, Any, final
 
 import numpy as np
 # noinspection PyPackageRequirements

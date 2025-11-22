@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Observer-Modul für Phasenbestimmung und Manöveranalyse.
+Observer-Modul für Manöveranalyse.
 
-Dieses Modul enthält die rein lesende Logik zur Analyse des UFO-Zustands
-und der Zustandshistorie. Es implementiert regelbasierte Phasenerkennung
-und trendbasierte Manöveranalyse ohne Schreibzugriffe auf den State.
+Dieses Modul enthält die rein lesende Logik zur Analyse der UFO-Zustandshistorie.
+Es implementiert trendbasierte Manöveranalyse ohne Schreibzugriffe auf den State.
+
+Die Phasenerkennung ist in das Untermodul `phase` ausgelagert.
 """
 
 from __future__ import annotations
@@ -13,98 +14,17 @@ from __future__ import annotations
 import itertools
 from collections import deque
 from dataclasses import dataclass, replace as dataclass_replace
-from typing import Literal
 
 import numpy as np
 
+from .heading_delta import normalize_heading_delta
+from .phase import Phase, compute_phase
 from ..infrastructure import DEFAULT_CONFIG, SimulationConfig, get_logger
 from ..state.state import UfoState
 
 # Logger für dieses Modul
 logger = get_logger(__name__)
 
-# =============================================================================
-# HILFSFUNKTIONEN - Heading Wrap-around
-# =============================================================================
-
-
-def normalize_heading_delta(delta_d: float) -> float:
-    """
-    Normalisiert die Heading-Differenz auf den Bereich [-180, 180].
-
-    Behandelt Wrap-around-Fälle korrekt, z.B.:
-    - 350° → 10° ergibt +20° (nicht +340°)
-    - 10° → 350° ergibt -20° (nicht -340°)
-
-    Unterstützt auch mehrfache Umläufe (z.B. 720° → 0°).
-
-    Args:
-        delta_d: Rohdifferenz zwischen zwei Heading-Werten in Grad
-
-    Returns:
-        Normalisierte Differenz im Bereich [-180, 180] Grad
-    """
-    # Auf [-180, 180] normalisieren mit Modulo-Arithmetik
-    delta_d = delta_d % 360
-    if delta_d > 180:
-        delta_d -= 360
-    elif delta_d < -180:
-        delta_d += 360
-    return delta_d
-
-
-# =============================================================================
-# PHASENMODELL - Zentral und threadsicher
-# =============================================================================
-
-Phase = Literal["idle", "takeoff", "flying", "landing", "landed", "crashed"]
-
-
-def compute_phase(s: UfoState, config: SimulationConfig = DEFAULT_CONFIG) -> Phase:
-    """
-    Leitet die Flugphase deterministisch aus dem Zustand ab.
-
-    Threadsicher und zustandslos. Verwendet Rule-basierte Evaluation mit
-    Prioritätsreihenfolge - erste erfüllte Bedingung bestimmt die Phase.
-
-    Phasen:
-        - crashed: z < 0 (Crash-Marker)
-        - idle: am Boden, noch nie geflogen
-        - landed: am Boden nach erfolgreichem Flug
-        - takeoff: gerade abgehoben (erste Sekunden in der Luft)
-        - landing: kontrollierter Sinkflug nahe Boden (vz < 0)
-        - flying: normale Flugphase
-
-    Args:
-        s: Aktueller UFO-Zustand
-        config: Simulations-Konfiguration
-
-    Returns:
-        Phase als Literal-String
-    """
-    has_flown = s.dist > config.zero_value or s.ftime > config.zero_value
-
-    # Rules werden in Prioritätsreihenfolge geprüft
-    rules: list[tuple[Phase, bool]] = [
-        ("crashed", s.z < config.zero_value),
-        ("landed", s.z == config.zero_value and s.v == 0.0 and has_flown),
-        (
-            "takeoff",
-            s.ftime == config.zero_value and s.v > 0.0 and s.z > config.zero_value,
-        ),
-        (
-            "landing",
-            s.v > 0.0 > s.vz and
-            config.zero_value < s.z <= config.landing_detection_height_m,
-        ),
-        ("flying", s.v > 0.0 and s.z > config.zero_value),
-    ]
-
-    for phase, condition in rules:
-        if condition:
-            return phase
-
-    return "idle"  # Default-Fall
 
 
 # =============================================================================
@@ -216,6 +136,7 @@ class StateObserver:
                 expected_distance = current.vel * self.config.dt
                 # Stagnation, nur wenn Sollgeschwindigkeit > 0 und
                 # tatsächliche Bewegung unter Schwellenwert der erwarteten
+                # Geschwindigkeit in die betrachtet wird
                 threshold_ratio = self.config.stagnation_movement_threshold_ratio
                 is_stagnating = (
                         current.v > 0.0 and
