@@ -115,7 +115,7 @@ def test_command_is_dataclass():
 
 def test_no_runtime_import_of_ufostate():
     """Test: UfoState wird nicht zur Laufzeit importiert (TYPE_CHECKING only)."""
-    from core.simulation.command.types import Command
+    from core.simulation.command.types import Command, CommandType
     import sys
     
     # Command sollte importierbar sein, ohne dass state.state geladen wird
@@ -124,7 +124,7 @@ def test_no_runtime_import_of_ufostate():
     
     # Erstelle Command mit condition - sollte ohne UfoState-Import funktionieren
     cmd = Command(
-        type=lambda: None,  # Dummy type
+        type=CommandType.WAIT_CONDITION,  # Verwende korrekten CommandType
         condition=lambda s: True  # Lambda akzeptiert beliebigen Parameter
     )
     

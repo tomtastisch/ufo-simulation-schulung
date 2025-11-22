@@ -28,7 +28,7 @@ class CommandType(Enum):
     SET_STATE = auto()  # Setze State-Attribut direkt
     WAIT_CONDITION = auto()  # Warte auf Bedingung
     EXECUTE_FUNC = auto()  # Führe Funktion aus
-    LOG_MESSAGE = auto()  # Gebe Nachricht aus
+    LOG_MESSAGE = auto()  # Gib Nachricht aus
 
 
 @dataclass
