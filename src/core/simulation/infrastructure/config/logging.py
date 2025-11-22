@@ -12,7 +12,7 @@ Komponenten:
 
 Hinweis zu zukünftigen Erweiterungen:
     Falls eine LoggingConfig-Klasse benötigt wird (z.B. für konfigurierbare
-    Log-Levels, Handler, Formatter), sollte diese in simulation_config.py definiert werden,
+    Log-Levels, Handler, Formatter), sollte diese in simulation.py definiert werden,
     nicht hier. Dies gewährleistet Konsistenz mit anderen Konfigurationen.
 """
 
@@ -20,7 +20,7 @@ import logging
 import threading
 from typing import Optional
 
-from ..synchronization import synchronized_module
+from core.simulation.synchronization import synchronized_module
 
 # Flag und Lock für thread-sichere Konfiguration
 _logging_configured = False

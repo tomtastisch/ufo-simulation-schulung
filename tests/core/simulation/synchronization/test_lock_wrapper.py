@@ -2,20 +2,20 @@
 # -*- coding: utf-8 -*-
 """Unit-Tests für zentrale Lock-Wrapper-Utilities."""
 
+import sys
 import threading
 import time
-import pytest
-from typing import Callable, List
 from pathlib import Path
-import sys
+from typing import Callable, List
 
+import pytest
 
 # add repo root to sys.path so `import src` works
 repo_root = Path(__file__).resolve().parents[4]
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
-from src.core.simulation.synchronization.lock_wrapper import (
+from src.core.simulation.synchronization import (
     acquire_lock,
     create_lock_wrapper,
 )

@@ -9,7 +9,7 @@ from typing import Tuple, Literal
 
 import numpy as np
 
-from ..infrastructure import SimulationConfig, DEFAULT_CONFIG, get_logger
+from core.simulation.infrastructure import SimulationConfig, DEFAULT_CONFIG, get_logger
 from ..state import UfoState
 
 logger = get_logger(__name__)

@@ -4,8 +4,8 @@ Kern-Simulationspaket für die UFO-Simulation-Schulung.
 Stellt die zentralen Klassen und Konfigurationen der Simulation bereit.
 """
 
+from core.simulation.infrastructure.config import DEFAULT_CONFIG, SimulationConfig
 from .autopilot_base import AutopilotBase
-from .infrastructure import DEFAULT_CONFIG, SimulationConfig
 from .observer import ManeuverAnalysis, Phase
 from .state import UfoState
 from .ufosim import UfoSim

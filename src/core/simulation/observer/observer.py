@@ -17,9 +17,9 @@ from dataclasses import dataclass, replace as dataclass_replace
 
 import numpy as np
 
+from core.simulation.infrastructure.config import DEFAULT_CONFIG, SimulationConfig, get_logger
 from .heading_delta import normalize_heading_delta
 from .phase import Phase, compute_phase
-from ..infrastructure import DEFAULT_CONFIG, SimulationConfig, get_logger
 from ..state.state import UfoState
 
 # Logger für dieses Modul

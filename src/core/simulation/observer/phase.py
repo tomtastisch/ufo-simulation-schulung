@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from ..infrastructure import DEFAULT_CONFIG, SimulationConfig
+from core.simulation.infrastructure.config import DEFAULT_CONFIG, SimulationConfig
 from ..state.state import UfoState
 
 # =============================================================================
