@@ -130,7 +130,6 @@ class SimulationConfig:
     # === Manöver-Erkennung ===
     observer_history_size: int = 50  # Anzahl der gespeicherten Zustände
     observer_analysis_window_size: int = 10  # Anzahl der Zustände für Trend-Analyse
-    stagnation_distance_threshold_m: float = 0.1  # Minimale Bewegung für Nicht-Stagnation
     stagnation_movement_threshold_ratio: float = 0.5  # Bewegungsschwelle (Faktor der erwarteten Bewegung)
     turn_heading_threshold_deg: float = 5.0  # Minimale Richtungsänderung für Turn-Detektion
     climb_vz_threshold_ms: float = 0.5  # Minimale vz für Steigflug-Detektion
