@@ -131,6 +131,7 @@ from .observer import (
     Phase,
     ManeuverAnalysis,
     compute_phase,
+    normalize_heading_delta,
     StateObserver,
 )
 
@@ -138,5 +139,6 @@ __all__ = [
     "Phase",
     "ManeuverAnalysis",
     "compute_phase",
+    "normalize_heading_delta",
     "StateObserver",
 ]

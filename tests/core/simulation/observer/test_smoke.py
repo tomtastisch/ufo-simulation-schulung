@@ -166,6 +166,7 @@ def test_observer_module_exports():
         "Phase",
         "ManeuverAnalysis",
         "compute_phase",
+        "normalize_heading_delta",
         "StateObserver",
     }
 

@@ -24,6 +24,36 @@ from ..state.state import UfoState
 logger = get_logger(__name__)
 
 # =============================================================================
+# HILFSFUNKTIONEN - Heading Wrap-around
+# =============================================================================
+
+
+def normalize_heading_delta(delta_d: float) -> float:
+    """
+    Normalisiert die Heading-Differenz auf den Bereich [-180, 180].
+
+    Behandelt Wrap-around-Fälle korrekt, z.B.:
+    - 350° → 10° ergibt +20° (nicht +340°)
+    - 10° → 350° ergibt -20° (nicht -340°)
+
+    Unterstützt auch mehrfache Umläufe (z.B. 720° → 0°).
+
+    Args:
+        delta_d: Rohdifferenz zwischen zwei Heading-Werten in Grad
+
+    Returns:
+        Normalisierte Differenz im Bereich [-180, 180] Grad
+    """
+    # Auf [-180, 180] normalisieren durch wiederholte Anwendung
+    while delta_d > 180:
+        delta_d -= 360
+    while delta_d < -180:
+        delta_d += 360
+
+    return delta_d
+
+
+# =============================================================================
 # PHASENMODELL - Zentral und threadsicher
 # =============================================================================
 
@@ -164,11 +194,8 @@ class StateObserver:
                 heading_changes = []
                 for i in range(1, len(recent)):
                     delta_d = recent[i].d - recent[i - 1].d
-                    # Wrap-around berücksichtigen
-                    if delta_d > 180:
-                        delta_d -= 360
-                    elif delta_d < -180:
-                        delta_d += 360
+                    # Wrap-around mit Hilfsfunktion normalisieren
+                    delta_d = normalize_heading_delta(delta_d)
                     heading_changes.append(abs(delta_d))
 
                 if heading_changes:
