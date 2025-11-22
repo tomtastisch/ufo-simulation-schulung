@@ -17,7 +17,6 @@ Interne Struktur:
     - decorators/: High-Level Decorators für Endnutzer
     - primitives/: Low-Level Building Blocks (nicht direkt nutzen)
 """
-
 # Import von internen Untermodulen
 from .decorators.conditional import conditional
 from .decorators.instance import synchronized

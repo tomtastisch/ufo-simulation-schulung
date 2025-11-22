@@ -10,10 +10,11 @@ Diese Tests prüfen:
 4. Kompatibilität: Funktioniert mit Lock und RLock
 """
 import threading
+
 import pytest
 
-from core.simulation.synchronization.module_lock import synchronized_module
-from conftest import create_decorated_counter, assert_race_condition_free
+from core.simulation.synchronization import synchronized_module
+from tests._helpers import assert_race_condition_free, create_decorated_counter
 
 
 def test_module_lock_module_import():
@@ -22,9 +23,9 @@ def test_module_lock_module_import():
     
     Prüft, dass keine Import-, Lazy-Loading- oder Initialisierungsfehler auftreten.
     """
-    from core.simulation.synchronization import module_lock
-    assert module_lock is not None
-    assert hasattr(module_lock, 'synchronized_module')
+    from core.simulation.synchronization.decorators import module
+    assert module is not None
+    assert hasattr(module, 'synchronized_module')
 
 
 def test_synchronized_module_decorator_exists():

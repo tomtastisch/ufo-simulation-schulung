@@ -2,18 +2,19 @@
 # -*- coding: utf-8 -*-
 """Unit-Tests für conditional Decorator."""
 
+import sys
 import threading
 import time
-import pytest
 from pathlib import Path
-import sys
+
+import pytest
 
 # Stelle sicher, dass das repo root-Verzeichnis im sys.path ist (damit `import src` funktioniert)
 repo_root = Path(__file__).resolve().parents[4]
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
-from src.core.simulation.synchronization.conditional_lock import conditional
+from src.core.simulation.synchronization import conditional
 from tests._helpers import run_threaded_workers
 
 
