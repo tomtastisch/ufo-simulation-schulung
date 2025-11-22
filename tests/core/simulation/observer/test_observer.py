@@ -359,12 +359,16 @@ class TestStateObserverAnalyze:
         """Wrap-around bei Heading (10° → 350°) wird korrekt behandelt."""
         observer = StateObserver()
 
+        # Benötigt mindestens 3 States für Trend-Analyse
+        observer.observe(UfoState(d=5.0, v=10.0, z=10.0))
         observer.observe(UfoState(d=10.0, v=10.0, z=10.0))
         observer.observe(UfoState(d=350.0, v=10.0, z=10.0))
 
         analysis = observer.analyze()
-        # Delta sollte 20° sein, nicht 340°
+        # Delta sollte ~20° sein (10→350 = -20° bzw. +340°, wrap gibt 20°)
+        # Durchschnitt: (5° + 20°) / 2 = 12.5°
         assert analysis.avg_heading_change < 30.0
+        assert 10.0 < analysis.avg_heading_change < 15.0  # Näherungsweise 12.5°
 
     def test_analyze_detects_stagnation(self):
         """Stagnation wird erkannt (geringe Bewegung trotz v>0)."""

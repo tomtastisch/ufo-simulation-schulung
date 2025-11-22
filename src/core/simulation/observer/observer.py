@@ -10,6 +10,7 @@ und trendbasierte Manöveranalyse ohne Schreibzugriffe auf den State.
 
 from __future__ import annotations
 
+import itertools
 from collections import deque
 from dataclasses import dataclass, replace as dataclass_replace
 from typing import Literal
@@ -146,8 +147,10 @@ class StateObserver:
         avg_heading_change: float = 0.0
 
         if len(self.history) >= 3:
-            # Berechne Durchschnitte über letzte N Zustände
-            recent = list(self.history)[-10:]  # Letzte 10 oder weniger
+            # Berechne Durchschnitte über letzte N Zustände (aus Config)
+            window_size = self.config.observer_analysis_window_size
+            start_idx = max(0, len(self.history) - window_size)
+            recent = list(itertools.islice(self.history, start_idx, len(self.history)))
 
             # Vertikale Bewegung
             vz_values = [s.vz for s in recent]
@@ -185,11 +188,12 @@ class StateObserver:
                 avg_distance_per_step = total_distance / (len(recent) - 1)
                 expected_distance = current.vel * self.config.dt
                 # Stagnation, nur wenn Sollgeschwindigkeit > 0 und
-                # tatsächliche Bewegung < 50% der erwarteten
+                # tatsächliche Bewegung unter Schwellenwert der erwarteten
+                threshold_ratio = self.config.stagnation_movement_threshold_ratio
                 is_stagnating = (
                         current.v > 0.0 and
                         expected_distance > 0.0 and
-                        avg_distance_per_step < expected_distance * 0.5
+                        avg_distance_per_step < expected_distance * threshold_ratio
                 )
 
         return ManeuverAnalysis(
