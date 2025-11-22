@@ -7,9 +7,6 @@ Testet grundlegende Import- und Instanziierungsfähigkeit von CommandType und Co
 sowie die korrekte Vermeidung von Importzyklen.
 """
 
-import sys
-from pathlib import Path
-
 
 def test_command_types_import():
     """Test: CommandType und Command können importiert werden."""
@@ -141,7 +138,6 @@ def test_command_package_import():
 
 def test_command_module_has_no_circular_imports():
     """Test: Command-Modul hat keine zirkulären Imports zu state."""
-    import importlib
     import sys
     
     # Speichere aktuell geladene Module
@@ -161,9 +157,6 @@ def test_command_module_has_no_circular_imports():
     # Ein reines Import von command.types sollte state.state NICHT laden
     loaded_after = set(sys.modules.keys())
     newly_loaded = loaded_after - loaded_before
-    
-    # Prüfe dass state.state nicht durch command.types Import geladen wurde
-    state_modules = [m for m in newly_loaded if 'state.state' in m]
     
     # Wenn state schon vorher geladen war, ist dieser Test nicht aussagekräftig
     # aber das ist ok - der Test verhindert neue zirkuläre Imports

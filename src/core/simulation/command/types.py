@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Command-Typen für deklarative Autopilot-Steuerung.
-
-Definiert CommandType (Enum) und Command (Dataclass) für die ereignisbasierte
-Steuerung der UFO-Simulation ohne aktive Warteschleifen.
-"""
+"""Command-Typen für deklarative Steuerung."""
 
 from __future__ import annotations
 
