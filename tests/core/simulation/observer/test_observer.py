@@ -142,8 +142,8 @@ class TestComputePhaseEdgeCases:
 
     def test_custom_landing_detection_height(self):
         """Benutzerdefinierte Landungshöhe wird korrekt verwendet."""
-        # landing_detection_height_m ist eine Property, kein Parameter
-        # Wir können es nicht direkt setzen, aber testen mit DEFAULT_CONFIG
+        # landing_detection_height_m ist eine abgeleitete Property von SimulationConfig –
+        # Anpassung über max_altitude_m in SimulationConfig möglich (hier DEFAULT_CONFIG).
         config = DEFAULT_CONFIG
 
         # Knapp unter Schwelle mit vz<0 -> landing
