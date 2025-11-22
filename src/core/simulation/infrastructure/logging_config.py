@@ -1,13 +1,26 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Thread-sichere Logging-Konfiguration und Logger-Factory."""
+"""
+Thread-sichere Logging-Konfiguration und Logger-Factory.
+
+Stellt zentrale Funktionen für Logging-Setup und Logger-Erzeugung bereit.
+Alle Funktionen sind thread-sicher durch @synchronized_module.
+
+Komponenten:
+    - configure_logging: Initialisiert das Logging-System (idempotent)
+    - get_logger: Factory für konfigurierte Logger
+
+Hinweis zu zukünftigen Erweiterungen:
+    Falls eine LoggingConfig-Klasse benötigt wird (z.B. für konfigurierbare
+    Log-Levels, Handler, Formatter), sollte diese in simulation_config.py definiert werden,
+    nicht hier. Dies gewährleistet Konsistenz mit anderen Konfigurationen.
+"""
 
 import logging
 import threading
 from typing import Optional
 
-from ..synchronization.module_lock import synchronized_module
-
+from ..synchronization import synchronized_module
 
 # Flag und Lock für thread-sichere Konfiguration
 _logging_configured = False

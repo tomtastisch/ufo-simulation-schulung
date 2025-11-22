@@ -4,6 +4,100 @@ Chronologische Auflistung aller Änderungen (neueste zuerst).
 
 ---
 
+## [2025-11-22] - Refactoring T9: Observer-Modul (Phase, StateObserver, ManeuverAnalysis)
+
+### Zusammenfassung
+
+Implementierung des Observer-Moduls mit Phasenbestimmung, Manövererkennung und State-Analyse gemäß Architektur-Zielbild.
+Das Modul bietet rein lesende Analyse-Logik ohne Schreibzugriffe auf den Zustand.
+
+### Problem/Motivation
+
+1. **Phasenlogik zentralisieren**: Flugphasen (Start, Steigflug, Kurvenflug, Landung) waren in verschiedenen Modulen
+   verstreut
+2. **Manövererkennung**: Heading-Änderungen und Manöver mussten konsistent erkannt werden
+3. **Architektur-Konformität**: Observer-Pattern für State-Analyse gemäß Ebene 2 der Importhierarchie
+
+### Lösung/Implementierung
+
+#### 1. Phase-Enum und Berechnung
+
+- **Datei**: `observer/phase.py`
+- **Enum**: `Phase` mit 4 Flugphasen (TAKEOFF, CLIMBING, CRUISING, LANDING)
+- **Funktion**: `compute_phase(state: UfoState) -> Phase`
+- **Logik**: Deterministisch basierend auf z-Position und Geschwindigkeit
+
+#### 2. StateObserver Protokoll
+
+- **Datei**: `observer/observer.py`
+- **Protokoll**: `StateObserver` mit `on_state_update(state: UfoState) -> None`
+- **Dataclass**: `ManeuverAnalysis` mit heading_delta, is_turning, turn_direction
+- **Funktion**: `analyze_maneuver(state: UfoState, prev_heading: float) -> ManeuverAnalysis`
+
+#### 3. Heading-Delta-Normalisierung
+
+- **Datei**: `observer/heading_delta.py`
+- **Funktion**: `normalize_heading_delta(current: float, previous: float) -> float`
+- **Logik**: Kürzeste Winkeldifferenz unter Berücksichtigung von 0°/360° Übergang
+- **Wertebereich**: [-180°, +180°]
+
+### Architektur-Konformität
+
+- ✅ **Ebene 2**: Importiert nur von Ebene 0 (exceptions, infrastructure) und Ebene 1 (state, utils)
+- ✅ **Framework-unabhängig**: Keine UI-, Threading- oder I/O-Abhängigkeiten
+- ✅ **Immutability**: Keine Zustandsänderungen, nur lesende Operationen
+- ✅ **Type Safety**: Vollständige Type Hints mit Protocol und Enum
+
+### Betroffene Dateien
+
+**Neu erstellt**:
+
+- `src/core/simulation/observer/__init__.py`: Zentrale API-Exports
+- `src/core/simulation/observer/phase.py`: Phase-Enum und compute_phase()
+- `src/core/simulation/observer/observer.py`: StateObserver, ManeuverAnalysis
+- `src/core/simulation/observer/heading_delta.py`: normalize_heading_delta()
+- `tests/core/simulation/observer/test_smoke.py`: Smoke-Tests (5 Tests)
+- `tests/core/simulation/observer/test_observer.py`: Observer-Tests (8 Tests)
+- `tests/core/simulation/observer/test_heading_delta.py`: Heading-Tests (11 Tests)
+
+**Öffentliche API**:
+
+```python
+from core.simulation.observer import (
+    Phase,
+    compute_phase,
+    StateObserver,
+    ManeuverAnalysis,
+    normalize_heading_delta,
+)
+```
+
+### Tests
+
+- ✅ **24 Tests gesamt** in 3 Test-Dateien
+- ✅ **test_smoke.py**: Import- und Instantiierungs-Tests (5 Tests)
+- ✅ **test_observer.py**: ManeuverAnalysis und StateObserver (8 Tests)
+- ✅ **test_heading_delta.py**: Winkel-Normalisierung, Edge-Cases (11 Tests)
+
+**Test-Coverage**:
+
+- Phase-Berechnung für alle 4 Flugphasen
+- Manöver-Erkennung (Geradeaus, Linkskurve, Rechtskurve)
+- Heading-Delta Edge-Cases (0°/360° Übergang, große Winkel)
+- StateObserver-Protokoll-Konformität
+
+### Breaking Changes
+
+**Keine** - Neues Modul, bestehende APIs unverändert.
+
+### Referenzen
+
+- **Zielbild**: Abschnitt "observer/" in `docs/specs/architecture/core-simulation-zielbild.md`
+- **Import-Regeln**: Ebene 2 in `docs/specs/architecture/core-simulation-importregeln.md`
+- **Tracker**: T9 in `docs/planning/refactoring-tracker.md`
+
+---
+
 ## [2025-11-21] - Lock-Verwendung validiert und verschachtelte Locks behoben
 
 ### Zusammenfassung

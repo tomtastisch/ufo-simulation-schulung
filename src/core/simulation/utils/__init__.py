@@ -10,14 +10,16 @@ Komponenten:
     - maths: Trigonometrie, Winkel-Normalisierung, Wertebegrenzung
     - validation: Wertebereichs-Validierung
     - geometry: 3D-Koordinatentransformationen (kartesisch ↔ sphärisch)
-    - threads: Thread-Synchronisations-Utilities
     - condition_waiter: Event-basiertes Warten auf Bedingungen
+
+Hinweis:
+    Thread-Synchronisation (synchronized, etc.) ist nach synchronization/ verschoben.
+    Nutze: from core.simulation.synchronization import synchronized
 """
 
 from .condition_waiter import ConditionWaiter
 from .geometry import cartesian_to_spherical, spherical_to_cartesian
 from .maths import clamp, deg_to_rad, rad_to_deg, wrap_angle_deg, wrap_angle_rad
-from .threads import synchronized
 from .validation import is_in_range, validate_range
 
 __all__ = [
@@ -33,9 +35,7 @@ __all__ = [
     # geometry
     "cartesian_to_spherical",
     "spherical_to_cartesian",
-    # threads
-    "synchronized",
-    # condition_waiter
+    # condition waiting
     "ConditionWaiter",
 ]
 

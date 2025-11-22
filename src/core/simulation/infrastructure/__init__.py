@@ -7,30 +7,25 @@ Stellt grundlegende Dienste bereit (Konfiguration, Logging) ohne
 Simulationslogik. Framework-unabhängig und thread-sicher.
 
 Komponenten:
-    - SimulationConfig: Zentrale Konfiguration als frozen dataclass
+    - SimulationConfig: Zentrale Konfigurations-Dataclass (immutable)
     - DEFAULT_CONFIG: Standard-Konfigurationsinstanz
-    - configure_logging: Logging-System initialisieren
-    - get_logger: Logger-Instanz erzeugen
+    - configure_logging: Logging-System initialisieren (thread-sicher)
+    - get_logger: Logger-Factory (thread-sicher)
+
+Architektur-Hinweis:
+    Alle Konfigurationsklassen (auch zukünftige) sollten in simulation_config.py
+    definiert werden, um eine einheitliche Konfigurationsverwaltung
+    sicherzustellen. Logging-Funktionen bleiben in logging_config.py.
 """
 
 from __future__ import annotations
 
-from .config import DEFAULT_CONFIG, SimulationConfig
-from .logging_setup import configure_logging, get_logger
+# Logging
+from .logging_config import configure_logging, get_logger
+# Konfiguration
+from .simulation_config import DEFAULT_CONFIG, SimulationConfig
 
-__all__ = [
-    "SimulationConfig",
-    "DEFAULT_CONFIG",
-    "configure_logging",
-    "get_logger",
-]
-
-from .config import DEFAULT_CONFIG, SimulationConfig
-
-# Import aller Logging-Funktionen
-from .logging_setup import configure_logging, get_logger
-
-# Definiere öffentliche API
+# Öffentliche API
 __all__ = [
     # Konfiguration
     "SimulationConfig",
@@ -39,4 +34,3 @@ __all__ = [
     "configure_logging",
     "get_logger",
 ]
-

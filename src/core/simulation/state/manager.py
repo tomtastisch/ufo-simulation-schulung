@@ -10,8 +10,7 @@ from dataclasses import replace as dataclass_replace
 from typing import Callable, List, Optional
 
 from .state import UfoState
-from ..synchronization import conditional
-from ..utils.threads import synchronized
+from ..synchronization import conditional, synchronized
 
 logger = logging.getLogger(__name__)
 

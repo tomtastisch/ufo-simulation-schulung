@@ -1,6 +1,6 @@
 # Refactoring-Tracker – core.simulation
 
-**Letzte Aktualisierung:** 2025-11-20
+**Letzte Aktualisierung:** 2025-11-22
 
 Dieser Tracker spiegelt den Ablaufplan aus `docs/specs/notes/introductions.md` und gliedert jede Phase in konkrete
 Tickets mit Branches, Verantwortlichkeiten und Prüfschritten. Alle Beschreibungen sind bewusst deutsch gehalten.
@@ -17,11 +17,11 @@ Tickets mit Branches, Verantwortlichkeiten und Prüfschritten. Alle Beschreibung
 | T3        | Abschnitt 2.2 | `UfoState` nach `state/state.py` verlagern                       | copilot/feat-refactor-phase2-state     | ✅ Merged      | Lead Dev | Peer Reviewer | 2025-11-16       | Self-Check: Typprüfungen; QA: Simulationslauf (10 Tests, PR #10)  |
 | T4        | Abschnitt 2.3 | `logging_setup.py` & `exceptions.py` anlegen                     | feature/refactor-phase2-config-state   | ✅ Merged      | Lead Dev | Peer Reviewer | 2025-11-18       | Self-Check: Logging-Test; QA: Thread-Safety validiert (PR #11)    |
 | T5        | Abschnitt 3.1 | `synchronization/` (`@synchronized`)                             | copilot/feat-refactor-phase3-threads   | ✅ Merged      | Lead Dev | Peer Reviewer | 2025-11-19       | Self-Check: Multithread-Test; QA: umfassende Tests (PR #12)       |
-| T6        | Abschnitt 3.2 | `utils/maths.py` (numerische Helfer)                             | copilot/refactor-maths-utils-phase-3-2 | ✅ Merged        | Lead Dev | Peer Reviewer | 2025-11-19       | Self-Check: Unit-Tests; QA: validation.py, geometry.py (PR #13)   |
-| T7        | Abschnitt 3.3 | `physics/engine.py` auslagern                                    | feature/refactor-phase3-physics        | ✅ Merged        | Lead Dev | Tech Reviewer | 2025-11-21       | Self-Check: Integrations-Test; QA: Physik-Tests erfolgreich       |
-| T8        | Abschnitt 4.1 | `StateManager` nach `state/manager.py`                           | feature/refactor-phase4-state-manager  | ✅ Merged        | Lead Dev | Peer Reviewer | 2025-11-21       | Self-Check: Observer-Pattern; QA: Threading-Tests erfolgreich     |
-| T9        | Abschnitt 4.2 | `Phase`, `compute_phase`, `StateObserver`                        | feature/refactor-phase4-state-observer | ⏹️ Ausstehend   | Lead Dev | Tech Reviewer | -                | Self-Check: Analysen; QA: Unit-Tests                              |
-| T10       | Abschnitt 5.1 | `CommandType`, `Command` nach `command/types.py`                 | feature/refactor-phase5-command        | ⏹️ Ausstehend | Lead Dev | Peer Reviewer | -                | Self-Check: Typchecker; QA: Test Queue                            |
+| T6        | Abschnitt 3.2 | `utils/maths.py` (numerische Helfer)                             | copilot/refactor-maths-utils-phase-3-2 | ✅ Merged      | Lead Dev | Peer Reviewer | 2025-11-19       | Self-Check: Unit-Tests; QA: validation.py, geometry.py (PR #13)   |
+| T7        | Abschnitt 3.3 | `physics/engine.py` auslagern                                    | feature/refactor-phase3-physics        | ✅ Merged      | Lead Dev | Tech Reviewer | 2025-11-21       | Self-Check: Integrations-Test; QA: Physik-Tests erfolgreich       |
+| T8        | Abschnitt 4.1 | `StateManager` nach `state/manager.py`                           | feature/refactor-phase4-state-manager  | ✅ Merged      | Lead Dev | Peer Reviewer | 2025-11-21       | Self-Check: Observer-Pattern; QA: Threading-Tests erfolgreich     |
+| T9        | Abschnitt 4.2 | `Phase`, `compute_phase`, `StateObserver`                        | feature/refactor-phase4-state-observer | ✅ Merged      | Lead Dev | Tech Reviewer | 2025-11-22       | Self-Check: Analysen; QA: Unit-Tests erfolgreich                  |
+| T10       | Abschnitt 5.1 | `CommandType`, `Command` nach `command/types.py`                 | copilot/feat-refactor-command-types    | 🚧 In Arbeit  | Lead Dev | Peer Reviewer | -                | Self-Check: Typchecker; QA: Test Queue                            |
 | T11       | Abschnitt 5.2 | `CommandQueue` nach `command/queue.py`                           | feature/refactor-phase5-command        | ⏹️ Ausstehend | Lead Dev | Peer Reviewer | -                | Self-Check: Szenario-Test; QA: Review                             |
 | T12       | Abschnitt 5.3 | `CommandExecutor` nach `command/executor.py`                     | feature/refactor-phase5-command        | ⏹️ Ausstehend | Lead Dev | Tech Reviewer | -                | Self-Check: Integration; QA: Deadlock-Test                        |
 | T13       | Abschnitt 6.1 | `UfoSim` als `controller/sim.py` orchestrieren                   | feature/refactor-phase6-controller     | ⏹️ Ausstehend | Lead Dev | Tech Reviewer | -                | Self-Check: Vollständiger Flug; QA: Regressionstest               |
@@ -43,15 +43,22 @@ Tickets mit Branches, Verantwortlichkeiten und Prüfschritten. Alle Beschreibung
 
 ## Nächste Schritte
 
-1. ✅ T0–T8 abgeschlossen (siehe Detailübersicht unten)
-2. ⏭️ T9 (`observer/` - Phase, compute_phase, StateObserver) als nächstes Ticket
+1. ✅ T0–T9 abgeschlossen (siehe Detailübersicht unten)
+2. 🚧 T10 (`command/types.py` - CommandType, Command) **in Arbeit** im Branch `copilot/feat-refactor-command-types`
+3. ⏭️ T11–T12 (CommandQueue, CommandExecutor) als nächste Tickets nach T10
 3. Für neue Anforderungen weitere Zeilen ergänzen und Branch-Schema beibehalten
 
 ---
 
 ## Detaillierte Ticket-Übersicht
 
-### ✅ Phase 1: Foundation & Cleanup (T0–T3)
+### ✅ Phase 0-2: Zielbild, Architektur & Basis-Infrastruktur (T0–T4)
+
+**Umfasst:**
+
+- Phase 0: Zielbild / Endzustand (T0)
+- Phase 1: Architektur- und Importregeln (T1)
+- Phase 2: Basis: Konfiguration, State, Logging (T2-T4)
 
 #### T0: Zielbild & API-Festlegung ✅
 
@@ -92,10 +99,6 @@ Tickets mit Branches, Verantwortlichkeiten und Prüfschritten. Alle Beschreibung
     - `PhysicsEngine` und `StateManager` refaktoriert
 - **Qualitätssicherung:** 10 neue Tests, alle erfolgreich
 
----
-
-### ✅ Phase 2: Infrastructure (T4–T6)
-
 #### T4: Exceptions & Logging ✅
 
 - **Datum:** 2025-11-18
@@ -108,6 +111,16 @@ Tickets mit Branches, Verantwortlichkeiten und Prüfschritten. Alle Beschreibung
     - Exception-Hierarchie: `SimulationError` als Basis
     - Thread-sicheres Logging mit RLock
 - **Qualitätssicherung:** Race-Condition behoben, Thread-Safety validiert
+
+---
+
+### ✅ Phase 3: Utilities & Physik (T5–T7)
+
+**Umfasst:**
+
+- Abschnitt 3.1: utils/threads.py → synchronization/ (T5)
+- Abschnitt 3.2: utils/maths.py (T6)
+- Abschnitt 3.3: physics/engine.py (T7)
 
 #### T5: Threading Utilities (synchronization/) ✅
 
@@ -137,6 +150,15 @@ Tickets mit Branches, Verantwortlichkeiten und Prüfschritten. Alle Beschreibung
     - Validierungs-Framework
     - Magic Numbers durch benannte Konstanten ersetzt
 - **Qualitätssicherung:** Unit-Tests, Performance-Optimierungen, Code-Review
+
+#### T7: Physics Engine ✅
+
+- **Datum:** 2025-11-21
+- **Deliverables:**
+    - `PhysicsEngine` als eigenständige Klasse nach `physics/engine.py` extrahiert
+    - Framework-unabhängige Physik-Berechnungen
+    - Integration in `StateManager`
+- **Qualitätssicherung:** Integrations-Tests erfolgreich
 
 ---
 
@@ -186,8 +208,56 @@ Gelöscht:
 
 ---
 
-### ⏭️ Phase 3: Observer & Physics (T7–T9)
+### ✅ Phase 4: StateManager & Observer (T8–T9)
 
-**Status:** Geplant  
-**Nächstes Ticket:** T7 (physics/engine.py)
+**Umfasst:**
+
+- Abschnitt 4.1: state/manager.py (StateManager) - T8
+- Abschnitt 4.2: observer/observer.py (Phase, compute_phase, ManeuverAnalysis) - T9
+
+**Status:** Abgeschlossen  
+**Nächste Phase:** T10 (command/types.py)
+
+#### T8: StateManager ✅
+
+- **Datum:** 2025-11-21
+- **Deliverables:**
+    - `StateManager` nach `state/manager.py` extrahiert
+    - Observer-Pattern für State-Updates
+    - Thread-sichere Synchronisation
+- **Qualitätssicherung:** Threading-Tests erfolgreich
+
+#### T9: Observer-Modul ✅
+
+- **Datum:** 2025-11-22
+- **Deliverables:**
+    - `Phase`-Enum in `observer/phase.py`
+    - `compute_phase()` für Phasenbestimmung
+    - `StateObserver`-Protokoll in `observer/observer.py`
+    - `ManeuverAnalysis` für Manövererkennung
+    - `normalize_heading_delta()` in `observer/heading_delta.py`
+- **Qualitätssicherung:** Unit-Tests erfolgreich (3 Test-Dateien)
+
+---
+
+### 🚧 Phase 5: Command System (T10–T12)
+
+**Status:** In Arbeit (T10)  
+**Aktueller Branch:** copilot/feat-refactor-command-types  
+**Nächste Tickets:** T11 (CommandQueue), T12 (CommandExecutor)
+
+#### T10: Command Types 🚧
+
+- **Status:** In Arbeit
+- **Branch:** copilot/feat-refactor-command-types
+- **Startdatum:** 2025-11-22
+- **Ziel:**
+    - `CommandType`-Enum nach `command/types.py` extrahieren
+    - `Command`-Dataclass nach `command/types.py` extrahieren
+    - TYPE_CHECKING für UfoState-Referenzen verwenden
+- **Geplante Deliverables:**
+    - `command/types.py` mit CommandType-Enum
+    - `command/types.py` mit Command-Dataclass
+    - Unit-Tests für Command-Typen
+    - Typchecker-Validierung (mypy)
 
