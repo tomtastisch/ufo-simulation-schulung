@@ -353,6 +353,7 @@ class TestStateObserverAnalyze:
         analysis = observer.analyze()
         # Delta sollte 20° sein, nicht 340°
         assert analysis.avg_heading_change < 30.0
+        assert analysis.is_turning is False
 
     def test_analyze_heading_wrap_around_negative(self):
         """Wrap-around bei Heading (10° → 350°) wird korrekt behandelt."""
