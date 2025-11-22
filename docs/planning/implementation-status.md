@@ -1,6 +1,6 @@
 # Implementierungsstatus – core.simulation Refactoring
 
-**Letzte Aktualisierung:** 2025-11-20  
+**Letzte Aktualisierung:** 2025-11-22  
 **Dokumenttyp:** Statusübersicht für laufende Refactoring-Arbeiten
 
 ---
@@ -96,7 +96,8 @@ Dieses Dokument verfolgt den Implementierungsstatus der einzelnen Refactoring-Ti
 
 **Referenzen:**
 
-- Config-Datei: [`src/core/simulation/infrastructure/config.py`](../../src/core/simulation/infrastructure/config.py)
+- Config-Datei: [
+  `src/core/simulation/infrastructure/config.py`](../../src/core/simulation/infrastructure/simulation_config.py)
 - Zielbild: Abschnitt "infrastructure/config.py"
 
 ---
@@ -125,12 +126,13 @@ src/core/simulation/state/
 - ✅ Öffentliche API (`from core.simulation.state import UfoState`) funktioniert
 - ✅ Rückwärtskompatibilität (`from core.simulation import UfoState`) erhalten
 
-#### Geänderte/Neue Dateien
+**Geänderte/Neue Dateien:**
 
 - **Neu erstellt**:
     - `src/core/simulation/state/__init__.py`
     - `src/core/simulation/state/state.py`
-    - `tests/test_state_import.py` (6 Smoke-Tests)
+  - `tests/core/simulation/state/test_state_import.py` (6 Smoke-Tests)
+  - `tests/core/simulation/state/test_state_module_independence.py`
 - **Geändert**:
     - `src/core/simulation/ufosim.py`: UfoState entfernt, Import hinzugefügt
     - `src/core/simulation/ufo_main.py`: Import aktualisiert
@@ -138,14 +140,14 @@ src/core/simulation/state/
 
 #### Tests
 
-- ✅ 6 Smoke-Tests in `tests/test_state_import.py`, alle bestanden
+- ✅ 6 Smoke-Tests in `tests/core/simulation/state/test_state_import.py`, alle bestanden
 - ✅ Integration mit `UfoSim` getestet und funktionsfähig
 - ✅ Modul-Unabhängigkeit verifiziert
 
 **Referenzen:**
 
 - Implementierung: [`src/core/simulation/state/state.py`](../../src/core/simulation/state/state.py)
-- Tests: [`tests/test_state_import.py`](../../tests/test_state_import.py)
+- Tests: [`tests/core/simulation/state/`](../../tests/core/simulation/state/)
 - Changelog: [`docs/dev/CHANGELOG.md`](../dev/CHANGELOG.md#2025-11-18---refactoring-t3-ufostate-nach-statestatepy)
 
 ---
@@ -194,93 +196,261 @@ src/core/simulation/exceptions/
 - Infrastructure: [`src/core/simulation/infrastructure/`](../../src/core/simulation/infrastructure/)
 - Exceptions: [`src/core/simulation/exceptions/`](../../src/core/simulation/exceptions/)
 - Changelog (Infrastructure): [
-  `docs/dev/CHANGELOG.md`](../dev/CHANGELOG.md#2025-11-19---infrastructure-modul-config-und-logging_setup)
+  `docs/dev/CHANGELOG.md`](../dev/CHANGELOG.md)
 - Changelog (Dokumentation): [`docs/dev/CHANGELOG.md`](../dev/CHANGELOG.md#2025-11-19---dokumentations-konsolidierung)
 
 ---
 
-## Phase 3: Utils & Physics
+## Phase 3: Utils & Physik
 
-### ⏹️ T5 – utils/threads.py (@synchronized)
+### ✅ T5 – synchronization/ (@synchronized)
 
-**Status:** Noch nicht begonnen  
-**Branch:** feature/refactor-phase3-utils-physics (geplant)
+**Status:** Abgeschlossen  
+**Branch:** copilot/feat-refactor-phase3-threads  
+**Merge-Datum:** 2025-11-19
 
-**Ziel:**
+**Ergebnis:**
 
-- `@synchronized`-Decorator extrahieren in `utils/threads.py`
-- Threading-Utilities zentralisieren
-- Thread-Safety gewährleisten
+#### Neue Struktur
 
-**Abhängigkeiten:** Keine
+```
+src/core/simulation/synchronization/
+├── __init__.py         # Export von @synchronized, @synchronized_global
+└── decorators.py       # Decorator-Implementierungen
+```
+
+#### Architektur-Konformität
+
+- ✅ `@synchronized` Decorator für Instanz-Locks
+- ✅ `@synchronized_global` Decorator für Modul-Locks
+- ✅ Refactoring aller Lock-Pattern im Codebase
+- ✅ Konsistente Thread-Safety durch Decorators
+
+#### Tests
+
+- ✅ Umfangreiche Threading-Tests
+- ✅ pytest-timeout, threadpoolctl, py-spy für Debugging
+
+**Hinweis:** Ursprünglich als `utils/threads.py` geplant (Abschnitt 3.1 in introductions.md), umbenannt zu
+`synchronization/` für bessere Semantik.
+
+**Referenzen:**
+
+- Implementierung: [`src/core/simulation/synchronization/`](../../src/core/simulation/synchronization/)
+- Tests: [`tests/core/simulation/synchronization/`](../../tests/core/simulation/synchronization/)
+- Changelog: [`docs/dev/CHANGELOG.md`](../dev/CHANGELOG.md#2025-11-19---refactoring-t5-threading-utilities)
 
 ---
 
-### ⏹️ T6 – utils/maths.py (numerische Helfer)
+### ✅ T6 – utils/maths.py (numerische Helfer)
 
-**Status:** Noch nicht begonnen  
-**Branch:** feature/refactor-phase3-utils-physics (geplant)
+**Status:** Abgeschlossen  
+**Branch:** copilot/refactor-maths-utils-phase-3-2  
+**Merge-Datum:** 2025-11-19
 
-**Ziel:**
+**Ergebnis:**
 
-- Numerische Helfer-Funktionen extrahieren
-- Mathematische Utilities zentralisieren
-- Unit-Tests für alle Funktionen
+#### Neue Struktur
 
-**Abhängigkeiten:** Keine
+```
+src/core/simulation/utils/
+├── __init__.py         # Export aller Utilities
+├── maths.py            # Numerische Hilfsfunktionen
+├── validation.py       # Eingabe-Validierung
+└── geometry.py         # Geometrische Berechnungen
+```
+
+#### Architektur-Konformität
+
+- ✅ Framework-unabhängige mathematische Utilities
+- ✅ Validierungs-Framework
+- ✅ Magic Numbers durch benannte Konstanten ersetzt
+- ✅ utils/maths.py importiert keine Simulationselemente
+
+#### Tests
+
+- ✅ Unit-Tests für alle Funktionen
+- ✅ Performance-Optimierungen
+
+**Referenzen:**
+
+- Implementierung: [`src/core/simulation/utils/`](../../src/core/simulation/utils/)
+- Tests: [`tests/core/simulation/utils/`](../../tests/core/simulation/utils/)
+- Changelog: [`docs/dev/CHANGELOG.md`](../dev/CHANGELOG.md#2025-11-19---refactoring-t6-mathematische-utilities)
 
 ---
 
-### ⏹️ T7 – physics/engine.py auslagern
+### ✅ T7 – physics/engine.py auslagern
 
-**Status:** Noch nicht begonnen  
-**Branch:** feature/refactor-phase3-utils-physics (geplant)
+**Status:** Abgeschlossen  
+**Branch:** feature/refactor-phase4-state-manager  
+**Merge-Datum:** 2025-11-21
 
-**Ziel:**
+**Ergebnis:**
 
-- Physik-Engine aus `ufosim.py` extrahieren
-- Eigenständiges `physics/`-Modul erstellen
-- Integrations-Tests und Regressionstest
+#### Neue Struktur
 
-**Abhängigkeiten:** T2, T3
+```
+src/core/simulation/physics/
+├── __init__.py         # Export von PhysicsEngine
+└── engine.py           # PhysicsEngine Klasse
+```
+
+#### Architektur-Konformität
+
+- ✅ `PhysicsEngine` als eigenständige Klasse extrahiert
+- ✅ Framework-unabhängige Physik-Berechnungen
+- ✅ Integration in `StateManager`
+- ✅ Integrations-Tests erfolgreich
+
+**Referenzen:**
+
+- Implementierung: [`src/core/simulation/physics/engine.py`](../../src/core/simulation/physics/engine.py)
+- Changelog: [`docs/dev/CHANGELOG.md`](../dev/CHANGELOG.md#2025-11-21---refactoring-t7-physicsengine)
 
 ---
 
 ## Phase 4: State Management & Observer
 
-### ⏹️ T8 – StateManager nach state/manager.py
+### ✅ T8 – StateManager nach state/manager.py
 
-**Status:** Noch nicht begonnen  
-**Branch:** feature/refactor-phase4-state-observer (geplant)
+**Status:** Abgeschlossen  
+**Branch:** feature/refactor-phase4-state-manager  
+**Merge-Datum:** 2025-11-21
 
-**Ziel:**
+**Ergebnis:**
 
-- `StateManager` extrahieren in `state/manager.py`
-- Observer-Pattern implementieren
-- Threading-Tests
+#### Neue Struktur
 
-**Abhängigkeiten:** T3, T5
+```
+src/core/simulation/state/
+├── __init__.py         # Export von UfoState und StateManager
+├── state.py            # UfoState Dataclass
+└── manager.py          # StateManager mit Observer-Pattern
+```
+
+#### Architektur-Konformität
+
+- ✅ `StateManager` nach `state/manager.py` extrahiert
+- ✅ Observer-Pattern für State-Updates implementiert
+- ✅ Thread-sichere Synchronisation
+- ✅ Threading-Tests erfolgreich
+
+**Referenzen:**
+
+- Implementierung: [`src/core/simulation/state/manager.py`](../../src/core/simulation/state/manager.py)
+- Changelog: [`docs/dev/CHANGELOG.md`](../dev/CHANGELOG.md#2025-11-21---refactoring-t8-statemanager)
 
 ---
 
-### ⏹️ T9 – Phase, compute_phase, StateObserver
+### ✅ T9 – Phase, compute_phase, StateObserver
 
-**Status:** Noch nicht begonnen  
-**Branch:** feature/refactor-phase4-state-observer (geplant)
+**Status:** Abgeschlossen  
+**Branch:** feature/refactor-phase4-state-observer  
+**Merge-Datum:** 2025-11-22
 
-**Ziel:**
+**Ergebnis:**
 
-- `Phase`-Enum definieren
-- `compute_phase()`-Funktion implementieren
-- `StateObserver`-Protokoll erstellen
+#### Neue Struktur
 
-**Abhängigkeiten:** T3
+```
+src/core/simulation/observer/
+├── __init__.py          # Zentrale API-Exports
+├── phase.py             # Phase-Enum und compute_phase()
+├── observer.py          # StateObserver, ManeuverAnalysis
+└── heading_delta.py     # normalize_heading_delta()
+```
+
+#### Architektur-Konformität
+
+- ✅ `Phase`-Enum in `observer/phase.py` (4 Flugphasen)
+- ✅ `compute_phase(state: UfoState) -> Phase` implementiert
+- ✅ `StateObserver`-Protokoll mit `on_state_update()` definiert
+- ✅ `ManeuverAnalysis` für Manövererkennung (heading_delta, is_turning, turn_direction)
+- ✅ `normalize_heading_delta()` für Winkel-Normalisierung [-180°, +180°]
+- ✅ Framework-unabhängig, immutabel, nur lesende Operationen
+- ✅ Ebene 2 der Importhierarchie (importiert nur Ebene 0-1)
+
+#### Tests
+
+- ✅ 24 Tests gesamt in 3 Test-Dateien
+- ✅ `test_smoke.py`: Import- und Instantiierungs-Tests (5 Tests)
+- ✅ `test_observer.py`: ManeuverAnalysis und StateObserver (8 Tests)
+- ✅ `test_heading_delta.py`: Winkel-Normalisierung, Edge-Cases (11 Tests)
+
+**Öffentliche API:**
+
+```python
+from core.simulation.observer import (
+    Phase,
+    compute_phase,
+    StateObserver,
+    ManeuverAnalysis,
+    normalize_heading_delta,
+)
+```
+
+**Referenzen:**
+
+- Implementierung: [`src/core/simulation/observer/`](../../src/core/simulation/observer/)
+- Tests: [`tests/core/simulation/observer/`](../../tests/core/simulation/observer/)
+- Changelog: [`docs/dev/CHANGELOG.md`](../dev/CHANGELOG.md#2025-11-22---refactoring-t9-observer-modul)
 
 ---
 
-## Phase 5–9: Command, Controller, View, API, Tests
+## Phase 5: Command System
 
-Tickets T10–T17 sind noch nicht begonnen. Details siehe [`refactoring-tracker.md`](refactoring-tracker.md).
+### 🚧 T10 – command/types.py (CommandType, Command)
+
+**Status:** In Arbeit  
+**Branch:** copilot/feat-refactor-command-types  
+**Startdatum:** 2025-11-22
+
+**Ziel:**
+
+Extraktion der Command-Typen aus `ufosim.py` in dediziertes Modul gemäß Abschnitt 5.1 in introductions.md.
+
+**Geplante Struktur:**
+
+```
+src/core/simulation/command/
+├── __init__.py         # Export von CommandType, Command
+└── types.py            # CommandType-Enum, Command-Dataclass
+```
+
+**Architektur-Anforderungen:**
+
+- ✓ `CommandType`-Enum definieren
+- ✓ `Command`-Dataclass mit TYPE_CHECKING für UfoState
+- ✓ Keine zirkulären Imports (TYPE_CHECKING Pattern)
+- ✓ Framework-unabhängig
+
+**Geplante Tests:**
+
+- Unit-Tests für CommandType-Enum
+- Command-Dataclass Instantiierung
+- Typchecker-Validierung (mypy)
+
+**Referenzen:**
+
+- Zielbild: Abschnitt "command/types.py" in `docs/specs/architecture/core-simulation-zielbild.md`
+- Ablaufplan: Abschnitt 5.1 in `docs/specs/notes/introductions.md`
+
+---
+
+## Phase 5-9: Weitere Tickets
+
+### ⏹️ T11 – CommandQueue nach command/queue.py
+
+**Status:** Noch nicht begonnen  
+**Abhängigkeiten:** T10
+
+### ⏹️ T12 – CommandExecutor nach command/executor.py
+
+**Status:** Noch nicht begonnen  
+**Abhängigkeiten:** T10, T11
+
+Tickets T13–T17 sind noch nicht begonnen. Details siehe [`refactoring-tracker.md`](refactoring-tracker.md).
 
 ---
 
@@ -288,19 +458,18 @@ Tickets T10–T17 sind noch nicht begonnen. Details siehe [`refactoring-tracker.
 
 ### Kurzfristig (diese Woche)
 
-1. **T2 validieren**: `config.py` gegen Zielbild prüfen
-2. **T5 vorbereiten**: Threading-Utilities analysieren
-3. **T6 vorbereiten**: Mathematische Funktionen identifizieren
+1. **T10 abschließen**: Command-Types im Branch `copilot/feat-refactor-command-types`
+2. **T2 validieren**: `config.py` gegen Zielbild prüfen (parallel möglich)
 
 ### Mittelfristig (nächste Wochen)
 
-1. **T5+T6 implementieren**: Utils-Modul aufbauen
-2. **T7 starten**: Physik-Engine extrahieren
-3. **T8+T9 vorbereiten**: State Management planen
+1. **T11 starten**: CommandQueue nach T10-Abschluss
+2. **T12 implementieren**: CommandExecutor (Phase 5 abschließen)
+3. **T13 vorbereiten**: Controller-Logik planen (Phase 6)
 
 ### Langfristig
 
-1. **Phase 5**: Command-System (T10–T12)
+1. **Phase 5**: Command-System abschließen (T10–T12)
 2. **Phase 6**: Controller (T13)
 3. **Phase 7**: View (T14)
 4. **Phase 8**: Autopilot (T15)

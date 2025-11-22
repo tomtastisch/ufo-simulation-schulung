@@ -23,21 +23,9 @@ from .infrastructure import DEFAULT_CONFIG, SimulationConfig, get_logger
 from .observer import Phase, ManeuverAnalysis, compute_phase, StateObserver
 from .physics import PhysicsEngine
 from .state import UfoState, StateManager
-from .synchronization.conditional_lock import conditional
-from .synchronization.instance_lock import synchronized
-
-# =============================================================================
-# LOGGING - Verwendet zentrale Konfiguration aus logging_setup
-# =============================================================================
+from .synchronization import conditional, synchronized
 
 logger = get_logger(__name__)
-
-
-# =============================================================================
-# KONFIGURATION - Importiert aus config.py
-# =============================================================================
-# SimulationConfig und DEFAULT_CONFIG sind nun in config.py definiert
-# und werden am Anfang dieser Datei importiert.
 
 
 # =============================================================================

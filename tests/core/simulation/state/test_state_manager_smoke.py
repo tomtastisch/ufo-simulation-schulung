@@ -86,14 +86,14 @@ def test_state_manager_has_no_forbidden_dependencies():
     
     # Mindestens die Kern-Dependencies sollten vorhanden sein
     assert 'from .state import UfoState' in content
-    assert 'from ..utils.threads import synchronized' in content
+    assert 'from ..synchronization import' in content  # Neuer Import-Pfad
     assert 'import threading' in content
 
 
 def test_synchronized_decorator_available():
-    """@synchronized Decorator ist aus utils.threads verfügbar."""
-    from core.simulation.utils.threads import synchronized
-    
+    """@synchronized Decorator ist aus synchronization verfügbar."""
+    from core.simulation.synchronization import synchronized
+
     assert synchronized is not None
     assert callable(synchronized)
 
@@ -105,6 +105,6 @@ def test_state_manager_uses_synchronized():
     # Überprüfe dass synchronized verwendet wird
     with open(manager_module.__file__, 'r') as f:
         content = f.read()
-    
-    assert 'from ..utils.threads import synchronized' in content
+
+    assert 'from ..synchronization import' in content  # Neuer Import-Pfad
     assert '@synchronized' in content

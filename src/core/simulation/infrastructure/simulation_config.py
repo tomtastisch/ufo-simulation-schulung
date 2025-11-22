@@ -1,7 +1,31 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Konfigurationsklasse für Simulationsparameter.
+Zentrale Konfigurationsklassen für die UFO-Simulation.
+
+Dieses Modul ist die zentrale Ablage für ALLE Konfigurationsklassen der Simulation.
+Alle Konfigurationen folgen einem einheitlichen Muster:
+    - Immutable Dataclasses (frozen=True, slots=True)
+    - Basis-Parameter als Instanzvariablen mit Defaults
+    - Abgeleitete Werte als Properties
+    - DEFAULT_XXX Konstanten für Standard-Konfigurationen
+
+Aktuell enthaltene Konfigurationen:
+    - SimulationConfig: Physikalische und visuelle Simulationsparameter
+
+Zukünftige Erweiterungen:
+    Weitere Konfigurationsklassen (z.B. NetworkConfig, AutopilotConfig,
+    LoggingConfig) sollten hier abgelegt werden, um eine einheitliche
+    Konfigurationsverwaltung zu gewährleisten.
+
+Wichtig - Konsistenz-Regel:
+    Neue Module sollten KEINE eigenen Config-Dataclasses intern definieren,
+    sondern sie hier zentralisieren. Dies vermeidet Inkonsistenzen in der
+    Handhabung von Konfigurationen und erleichtert die Wartung.
+
+    Beispiel:
+        ❌ FALSCH: Config in physics/simulation_config.py definieren
+        ✅ RICHTIG: Config hier definieren und in physics/ importieren
 
 Copyright (C) 2013-2025 R. Gold, tomtastisch (i-ki 1)
 Version: 5.2.0-tw-refactored
@@ -15,10 +39,21 @@ from dataclasses import dataclass
 @dataclass(frozen=True, slots=True)
 class SimulationConfig:
     """
-    Immutable Konfigurationsklasse mit allen physikalischen und visuellen Parametern.
+    Immutable Konfiguration für physikalische und visuelle Simulationsparameter.
 
-    Basis-Parameter sind als Instanzvariablen mit Defaults definiert.
-    Abgeleitete Werte werden als Properties berechnet.
+    Diese Klasse kapselt alle konfigurierbaren Parameter der UFO-Simulation.
+    Basis-Parameter sind als Instanzvariablen definiert, abgeleitete Werte
+    werden als Properties dynamisch berechnet.
+
+    Verwendung:
+        # Standard-Konfiguration nutzen
+        config = DEFAULT_CONFIG
+
+        # Custom-Konfiguration erstellen
+        config = SimulationConfig(vmax_kmh=20.0, dt=0.05)
+
+        # Werte ablesen
+        max_speed_ms = config.vmax_ms  # Property, automatisch berechnet
     """
 
     # === Basis-Physik-Parameter ===
