@@ -50,16 +50,18 @@ def test_command_instantiation_set_state():
     assert cmd.timeout is None
 
 
+def altitude_condition(s):
+    """Condition: Höhe >= 10.0"""
+    return s.z >= 10.0
+
+
 def test_command_instantiation_wait_condition():
     """Test: Command für WAIT_CONDITION kann instanziiert werden."""
     from core.simulation.command.types import CommandType, Command
     
-    # Lambda ohne tatsächliche UfoState-Instanz (nur Typ-Check)
-    condition = lambda s: s.z >= 10.0
-    
     cmd = Command(
         type=CommandType.WAIT_CONDITION,
-        condition=condition,
+        condition=altitude_condition,
         timeout=5.0
     )
     
