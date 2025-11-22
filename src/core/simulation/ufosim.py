@@ -11,7 +11,6 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass, replace as dataclass_replace
-from enum import Enum, auto
 from pathlib import Path
 from typing import Optional, List, Tuple, overload, Callable, Any, final
 
@@ -19,6 +18,7 @@ import numpy as np
 # noinspection PyPackageRequirements
 from PyQt5 import QtWidgets, QtGui, QtCore
 
+from .command import Command, CommandType
 from .infrastructure import DEFAULT_CONFIG, SimulationConfig, get_logger
 from .observer import Phase, ManeuverAnalysis, compute_phase, StateObserver
 from .physics import PhysicsEngine
@@ -43,30 +43,8 @@ logger = get_logger(__name__)
 # =============================================================================
 # COMMAND SYSTEM - Deklarative Steuerung ohne Warteschleifen
 # =============================================================================
-
-class CommandType(Enum):
-    """Typ der Steuerkommandos."""
-    SET_STATE = auto()  # Setze State-Attribut direkt
-    WAIT_CONDITION = auto()  # Warte auf Bedingung
-    EXECUTE_FUNC = auto()  # Führe Funktion aus
-    LOG_MESSAGE = auto()  # Gebe Nachricht aus
-
-
-@dataclass
-class Command:
-    """
-    Einzelnes Steuerkommando.
-
-    Statt Warteschleifen definierst du eine Sequenz von Commands.
-    Die Simulation führt diese automatisch aus.
-    """
-    type: CommandType
-    target: Optional[str] = None  # State-Attribut (für SET_STATE)
-    value: Optional[Any] = None  # Wert (für SET_STATE)
-    condition: Optional[Callable[[UfoState], bool]] = None  # Bedingung (für WAIT_CONDITION)
-    func: Optional[Callable] = None  # Funktion (für EXECUTE_FUNC)
-    message: Optional[str] = None  # Nachricht (für LOG_MESSAGE)
-    timeout: Optional[float] = None  # Timeout für WAIT_CONDITION
+# CommandType und Command sind nun in command/types.py definiert
+# und werden am Anfang dieser Datei importiert.
 
 
 class CommandQueue:
