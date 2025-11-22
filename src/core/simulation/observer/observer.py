@@ -44,12 +44,12 @@ def normalize_heading_delta(delta_d: float) -> float:
     Returns:
         Normalisierte Differenz im Bereich [-180, 180] Grad
     """
-    # Auf [-180, 180] normalisieren durch wiederholte Anwendung
-    while delta_d > 180:
+    # Auf [-180, 180] normalisieren mit Modulo-Arithmetik
+    delta_d = delta_d % 360
+    if delta_d > 180:
         delta_d -= 360
-    while delta_d < -180:
+    elif delta_d < -180:
         delta_d += 360
-
     return delta_d
 
 
