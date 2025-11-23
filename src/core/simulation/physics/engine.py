@@ -10,7 +10,7 @@ from typing import Tuple, Literal
 import numpy as np
 
 from core.simulation.infrastructure import SimulationConfig, DEFAULT_CONFIG, get_logger
-from ..state import UfoState
+from ..state.state import UfoState
 
 logger = get_logger(__name__)
 

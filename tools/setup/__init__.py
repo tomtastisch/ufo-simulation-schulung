@@ -1,5 +1,3 @@
-"""Setup-Pipeline und Konfiguration für das Projekt."""
-
 from __future__ import annotations
 
 from .bootstrap import main as run_setup

@@ -1,107 +1,179 @@
 from __future__ import annotations
 
-"""Strukturierte Konsolenausgaben, Fortschritt und Streams für das Setup."""
-
-import datetime
 from dataclasses import dataclass, field
 from enum import StrEnum
-from pathlib import Path
 from types import TracebackType
-from typing import Final, TextIO
+from typing import Final
 
 from rich.console import Console
-from rich.panel import Panel
 from rich.progress import (
     BarColumn,
     Progress,
+    SpinnerColumn,
     TaskID,
-    TaskProgressColumn,
     TextColumn,
     TimeElapsedColumn,
 )
 
 from tools.ui.resources import TextCatalog
-from tools.common import ErrorLog
-
-_TEXTS: Final[TextCatalog] = TextCatalog()
-_CONSOLE: Final[Console] = Console(highlight=False)
-
-
-class ConsoleMessage(StrEnum):
-    INFO = "info"
-    SUCCESS = "success"
-    WARNING = "warning"
-    ERROR = "error"
-    FIX = "fix"
-
-
-@dataclass(slots=True, frozen=True)
-class _ConsoleTheme:
-    style: str
-    icon_name: str
-
-
-_MESSAGE_THEMES: Final[dict[ConsoleMessage, _ConsoleTheme]] = {
-    ConsoleMessage.INFO: _ConsoleTheme(style="bold cyan", icon_name="info"),
-    ConsoleMessage.SUCCESS: _ConsoleTheme(style="bold green", icon_name="success"),
-    ConsoleMessage.WARNING: _ConsoleTheme(style="bold yellow", icon_name="warning"),
-    ConsoleMessage.ERROR: _ConsoleTheme(style="bold red", icon_name="error"),
-    ConsoleMessage.FIX: _ConsoleTheme(style="bold magenta", icon_name="fix"),
-}
 
 
 class ProgressStatus(StrEnum):
+    """Status eines Fortschrittsbalkens."""
+
     STARTING = "starting"
     RUNNING = "running"
-    SUCCESS = "success"
-    WARNING = "warning"
-    ERROR = "error"
+    FINISHED = "finished"
+    FAILED = "failed"
 
 
-@dataclass
+_TEXTS: Final[TextCatalog] = TextCatalog()
+
+_CONSOLE: Final[Console] = Console(
+    force_terminal=True,  # TTY erzwingen, auch in IDE-Konsolen
+    force_interactive=True,  # Live-Updates erzwingen
+)
+
+_PROGRESS_ICONS: Final[dict[ProgressStatus, str]] = {
+    ProgressStatus.STARTING: _TEXTS.icon("progress_start", "🔄"),
+    ProgressStatus.RUNNING: _TEXTS.icon("progress_run", "⏳"),
+    ProgressStatus.FINISHED: _TEXTS.icon("progress_ok", "✅"),
+    ProgressStatus.FAILED: _TEXTS.icon("progress_fail", "❌"),
+}
+
+
+class SetupConsole:
+    """Zentrale Hilfsklasse für formatierte Konsolenausgabe."""
+
+    @staticmethod
+    def header(title: str) -> None:
+        _CONSOLE.rule(title, style="bold green")
+
+    @staticmethod
+    def subheader(title: str) -> None:
+        """Optisch abgesetzte Zwischenüberschrift."""
+        _CONSOLE.rule(title, style="cyan")
+
+    @staticmethod
+    def info(message: str) -> None:
+        icon = _TEXTS.icon("info", "ℹ️")
+        _CONSOLE.print(f"{icon} {message}")
+
+    @staticmethod
+    def success(message: str) -> None:
+        icon = _TEXTS.icon("success", "✅")
+        _CONSOLE.print(f"{icon} {message}", style="bold green")
+
+    @staticmethod
+    def warning(message: str) -> None:
+        icon = _TEXTS.icon("warning", "⚠️")
+        _CONSOLE.print(f"{icon} {message}", style="yellow")
+
+    @staticmethod
+    def error(message: str) -> None:
+        icon = _TEXTS.icon("error", "❌")
+        _CONSOLE.print(f"{icon} {message}", style="bold red")
+
+    @staticmethod
+    def legend() -> None:
+        """Gibt die Legende der Symbole aus."""
+        text = _TEXTS.format(
+            "legend",
+            info=_TEXTS.icon("info", "ℹ️"),
+            success=_TEXTS.icon("success", "✅"),
+            warning=_TEXTS.icon("warning", "⚠️"),
+            error=_TEXTS.icon("error", "❌"),
+            rocket=_TEXTS.icon("rocket", "🚀"),
+        )
+        _CONSOLE.print(text)
+
+    @staticmethod
+    def from_resource(block: str, field: str = "body") -> None:
+        """Gibt einen Textblock aus der Ressourcen-Datei aus."""
+        _CONSOLE.print(_TEXTS.text(block, field))
+
+
+@dataclass(slots=True)
 class StepProgress:
-    """Kontextmanager für einen einfachen Fortschrittsbalken."""
+    """Kontextmanager für einen einfachen Fortschrittsbalken.
+
+    Die Beschreibung (Status) kann dynamisch angepasst werden, ohne die
+    Konsole mit neuen Zeilen zu überfluten.
+    """
 
     description: str
     total: int
     console: Console = field(default=_CONSOLE)
 
-    def __post_init__(self) -> None:
-        self._progress: Progress | None = None
-        self._task_id: TaskID | None = None
-        self._status: ProgressStatus = ProgressStatus.STARTING
+    _progress: Progress | None = field(default=None, init=False, repr=False)
+    _task_id: TaskID | None = field(default=None, init=False, repr=False)
+    _status: ProgressStatus = field(
+        default=ProgressStatus.STARTING,
+        init=False,
+        repr=False,
+    )
 
-    def __enter__(self) -> "StepProgress":
+    def __enter__(self) -> StepProgress:
         self._progress = Progress(
-            TextColumn("{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
+            SpinnerColumn(spinner_name="dots"),
+            TextColumn("[bold cyan]{task.description}", justify="left"),
+            BarColumn(bar_width=None),
             TimeElapsedColumn(),
             console=self.console,
-            transient=True,
+            transient=False,  # Zeile bleibt stehen
+            refresh_per_second=12,  # flüssigere Updates
+            disable=False,  # niemals automatisch abschalten
         )
         self._progress.start()
-        self._task_id = self._progress.add_task(self.description, total=self.total)
+        self._task_id = self._progress.add_task(
+            f"{_PROGRESS_ICONS[self._status]} {self.description}",
+            total=self.total if self.total > 0 else None,
+        )
         self._status = ProgressStatus.RUNNING
         return self
 
-    def advance(self, step: float = 1.0) -> None:
-        """Erhöht den Fortschritt um den angegebenen Schritt."""
-        if self._progress is None or self._task_id is None:
+    def _update_description(self, text: str) -> None:
+        if not self._progress or self._task_id is None:
             return
-        self._progress.update(self._task_id, advance=step)
+        icon = _PROGRESS_ICONS[self._status]
+        self._progress.update(self._task_id, description=f"{icon} {text}")
 
-    def mark_success(self) -> None:
-        """Markiert den Schritt als erfolgreich."""
-        self._status = ProgressStatus.SUCCESS
+    def advance(self, step: int = 1, *, status: str | None = None) -> None:
+        """Erhöht den Fortschritt und aktualisiert optional den Status."""
+        if status is not None:
+            self._update_description(status)
+        if self._progress and self._task_id is not None and self.total > 0:
+            self._progress.advance(self._task_id, step)
 
-    def mark_warning(self) -> None:
-        """Markiert den Schritt mit Warnung."""
-        self._status = ProgressStatus.WARNING
+    def update_status(self, status: str) -> None:
+        """Aktualisiert nur den Beschreibungstext."""
+        self._update_description(status)
 
-    def mark_error(self) -> None:
-        """Markiert den Schritt als fehlerhaft."""
-        self._status = ProgressStatus.ERROR
+    def set_status(self, status: str) -> None:
+        """Alias für update_status für eine klarere API."""
+        self.update_status(status)
+
+    def mark_finished(self) -> None:
+        """Markiert den Fortschritt als erfolgreich abgeschlossen."""
+        self._status = ProgressStatus.FINISHED
+        if self._progress and self._task_id is not None:
+            current = self._progress.tasks[self._task_id].description
+            clean = current.split(" ", 1)[-1] if " " in current else current
+            self._progress.update(
+                self._task_id,
+                description=f"{_PROGRESS_ICONS[ProgressStatus.FINISHED]} {clean}",
+            )
+
+    def mark_failed(self) -> None:
+        """Markiert den Fortschritt als fehlgeschlagen."""
+        self._status = ProgressStatus.FAILED
+        if self._progress and self._task_id is not None:
+            current = self._progress.tasks[self._task_id].description
+            clean = current.split(" ", 1)[-1] if " " in current else current
+            self._progress.update(
+                self._task_id,
+                description=f"{_PROGRESS_ICONS[ProgressStatus.FAILED]} {clean}",
+            )
 
     def __exit__(
             self,
@@ -109,92 +181,12 @@ class StepProgress:
             exc: BaseException | None,
             tb: TracebackType | None,
     ) -> None:
-        if exc is not None:
-            self._status = ProgressStatus.ERROR
-        if self._progress is not None and self._task_id is not None:
-            self._progress.update(self._task_id, completed=self.total)
+        if exc_type is None and self._status == ProgressStatus.RUNNING:
+            self.mark_finished()
+        elif exc_type is not None:
+            self.mark_failed()
+
+        if self._progress is not None:
             self._progress.stop()
-        icon = _TEXTS.icon("step", "🧩")
-        if self._status is ProgressStatus.SUCCESS:
-            icon = _TEXTS.icon("success", "✅")
-        elif self._status is ProgressStatus.WARNING:
-            icon = _TEXTS.icon("warning", "⚠️")
-        elif self._status is ProgressStatus.ERROR:
-            icon = _TEXTS.icon("error", "❌")
-        _CONSOLE.print(f"{icon} {self.description}")
-
-
-class SetupConsole:
-    """Zentrale Helferklasse für strukturierte Konsolenausgaben."""
-
-    @staticmethod
-    def _print(message: str, level: ConsoleMessage) -> None:
-        theme = _MESSAGE_THEMES[level]
-        icon = _TEXTS.icon(theme.icon_name, "")
-        prefix = f"{icon} " if icon else ""
-        _CONSOLE.print(f"{prefix}{message}", style=theme.style)
-
-    @staticmethod
-    def header(title: str) -> None:
-        """Zeigt einen hervorgehobenen Haupttitel an."""
-        icon = _TEXTS.icon("ufo", "🛸")
-        panel = Panel.fit(f"{icon} {title}", style="bold blue", border_style="blue")
-        _CONSOLE.print(panel)
-        _CONSOLE.print()
-
-    @staticmethod
-    def subheader(text: str) -> None:
-        """Zeigt einen Abschnittstitel an."""
-        _CONSOLE.print()
-        _CONSOLE.print(text, style="bold white")
-        _CONSOLE.print()
-
-    @staticmethod
-    def info(message: str) -> None:
-        SetupConsole._print(message, ConsoleMessage.INFO)
-
-    @staticmethod
-    def success(message: str) -> None:
-        SetupConsole._print(message, ConsoleMessage.SUCCESS)
-
-    @staticmethod
-    def warning(message: str) -> None:
-        SetupConsole._print(message, ConsoleMessage.WARNING)
-
-    @staticmethod
-    def error(message: str) -> None:
-        SetupConsole._print(message, ConsoleMessage.ERROR)
-
-    @staticmethod
-    def fix(message: str) -> None:
-        SetupConsole._print(message, ConsoleMessage.FIX)
-
-    @staticmethod
-    def from_resource(block: str, field: str = "body") -> None:
-        """Gibt einen Textblock aus der Ressourcen-Datei aus."""
-        text = _TEXTS.text(block, field=field)
-        if text:
-            _CONSOLE.print(text)
-
-    @staticmethod
-    def legend() -> None:
-        """Zeigt die Legende der verwendeten Icons."""
-        text = _TEXTS.format(
-            "legend",
-            info=_TEXTS.icon("info", "ℹ️"),
-            success=_TEXTS.icon("success", "✅"),
-            warning=_TEXTS.icon("warning", "⚠️"),
-            error=_TEXTS.icon("error", "❌"),
-            step=_TEXTS.icon("step", "🧩"),
-            start=_TEXTS.icon("start", "🚀"),
-        )
-        _CONSOLE.print(text)
-
-
-def echo_stream(stream: TextIO, prefix: str = "") -> None:
-    """Leitet einen Textstrom Zeile für Zeile an die Konsole weiter."""
-    for line in stream:
-        if prefix:
-            _CONSOLE.print(f"{prefix}{line.rstrip()}")
-        else:
-            _CONSOLE.print(line.rstrip())
+            self._progress = None
+            self._task_id = None

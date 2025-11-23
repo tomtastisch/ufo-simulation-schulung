@@ -1,0 +1,83 @@
+[icons]
+info = "ℹ️"
+success = "✅"
+warning = "⚠️"
+error = "❌"
+progress_start = "🔄"
+progress_run = "⏳"
+progress_ok = "✅"
+progress_fail = "❌"
+rocket = "🚀"
+
+[setup_header]
+title = """
+🛸 UFO-Simulation Schulung – Setup
+"""
+intro = """
+Willkommen zum automatisierten Setup der UFO-Simulation.
+
+Dieses Programm richtet eine isolierte Python-Umgebung ein,
+installiert alle benötigten Abhängigkeiten und prüft die Installation.
+"""
+
+[legend]
+body = """
+Legende der Symbole:
+
+{info}  – Information / Hinweis
+{success} – Schritt erfolgreich abgeschlossen
+{warning} – Warnung (Setup kann weiterlaufen, Ergebnis prüfen)
+{error} – Fehler (Setup wird abgebrochen)
+🧩 – Einzelschritt innerhalb des Setups
+{rocket} – Hinweise zu Start und nächsten Schritten
+"""
+
+[next_steps]
+body = """
+{rocket} Nächste Schritte:
+
+1. Aktiviere das Virtual Environment in deiner Shell.
+2. Starte die UFO-Simulation über das vorgesehene Startskript oder
+   den Python-Einstiegspunkt.
+3. Nutze die Dokumentation im Ordner 'docs/', um die Schulungsaufgaben
+   Schritt für Schritt zu bearbeiten.
+"""
+
+[troubleshooting]
+body = """
+Wenn Probleme auftreten:
+
+1. Prüfe zuerst die vollständige Fehlermeldung im Terminal.
+2. Öffne die Datei 'setup.log' im Projekt-Root, um Details einzusehen.
+3. Stelle sicher, dass deine Python-Version zu 'requires-python' in
+   'pyproject.toml' passt.
+4. Überprüfe deine Internetverbindung, damit das Installieren der
+   Abhängigkeiten funktioniert.
+5. Wenn das Problem weiterhin besteht, notiere:
+   - Betriebssystem
+   - Python-Version
+   - vollständige Fehlermeldung
+   und wende dich an die betreuende Person.
+"""
+
+[tests]
+success_hint = """
+Alle Tests wurden erfolgreich ausgeführt.
+"""
+failed_hint = """
+Setup abgeschlossen, aber mindestens ein Test ist fehlgeschlagen.
+Bitte prüfe die Ausgabe und 'setup.log' für Details.
+"""
+skipped_hint = """
+Tests wurden auf Wunsch (--skip-tests) übersprungen.
+"""
+
+[import_linter]
+enabled = "true"
+success = """
+Import-Linter: Alle definierten Contracts wurden eingehalten.
+"""
+failed = """
+Import-Linter hat mindestens einen Contract-Verstoß festgestellt.
+Bitte Ausgabe und 'setup.log' prüfen.
+"""
