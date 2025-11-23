@@ -30,9 +30,10 @@ class ProgressStatus(StrEnum):
 _TEXTS: Final[TextCatalog] = TextCatalog()
 
 _CONSOLE: Final[Console] = Console(
-    force_terminal=True,  # TTY erzwingen, auch in IDE-Konsolen
+    force_terminal=True,  # TTY erzwingen, auch in PyCharm
     force_interactive=True,  # Live-Updates erzwingen
 )
+
 
 _PROGRESS_ICONS: Final[dict[ProgressStatus, str]] = {
     ProgressStatus.STARTING: _TEXTS.icon("progress_start", "🔄"),
@@ -48,11 +49,6 @@ class SetupConsole:
     @staticmethod
     def header(title: str) -> None:
         _CONSOLE.rule(title, style="bold green")
-
-    @staticmethod
-    def subheader(title: str) -> None:
-        """Optisch abgesetzte Zwischenüberschrift."""
-        _CONSOLE.rule(title, style="cyan")
 
     @staticmethod
     def info(message: str) -> None:
@@ -92,6 +88,11 @@ class SetupConsole:
         """Gibt einen Textblock aus der Ressourcen-Datei aus."""
         _CONSOLE.print(_TEXTS.text(block, field))
 
+    @staticmethod
+    def subheader(title: str) -> None:
+        """Optisch abgesetzte Zwischenüberschrift."""
+        _CONSOLE.rule(title, style="cyan")
+
 
 @dataclass(slots=True)
 class StepProgress:
@@ -120,9 +121,9 @@ class StepProgress:
             BarColumn(bar_width=None),
             TimeElapsedColumn(),
             console=self.console,
-            transient=False,  # Zeile bleibt stehen
-            refresh_per_second=12,  # flüssigere Updates
-            disable=False,  # niemals automatisch abschalten
+            transient=False,
+            refresh_per_second=12,
+            disable=False,
         )
         self._progress.start()
         self._task_id = self._progress.add_task(
@@ -156,24 +157,43 @@ class StepProgress:
     def mark_finished(self) -> None:
         """Markiert den Fortschritt als erfolgreich abgeschlossen."""
         self._status = ProgressStatus.FINISHED
-        if self._progress and self._task_id is not None:
-            current = self._progress.tasks[self._task_id].description
-            clean = current.split(" ", 1)[-1] if " " in current else current
-            self._progress.update(
-                self._task_id,
-                description=f"{_PROGRESS_ICONS[ProgressStatus.FINISHED]} {clean}",
-            )
+        if not self._progress or self._task_id is None:
+            return
+
+        task = self._progress.tasks[self._task_id]
+
+        # indeterminate Tasks (total=None) als abgeschlossen markieren
+        if task.total is None:
+            self._progress.update(self._task_id, total=1, completed=1)
+        else:
+            self._progress.update(self._task_id, completed=task.total)
+
+        current = task.description
+        clean = current.split(" ", 1)[-1] if " " in current else current
+        self._progress.update(
+            self._task_id,
+            description=f"{_PROGRESS_ICONS[ProgressStatus.FINISHED]} {clean}",
+        )
 
     def mark_failed(self) -> None:
         """Markiert den Fortschritt als fehlgeschlagen."""
         self._status = ProgressStatus.FAILED
-        if self._progress and self._task_id is not None:
-            current = self._progress.tasks[self._task_id].description
-            clean = current.split(" ", 1)[-1] if " " in current else current
-            self._progress.update(
-                self._task_id,
-                description=f"{_PROGRESS_ICONS[ProgressStatus.FAILED]} {clean}",
-            )
+        if not self._progress or self._task_id is None:
+            return
+
+        task = self._progress.tasks[self._task_id]
+
+        if task.total is None:
+            self._progress.update(self._task_id, total=1, completed=1)
+        else:
+            self._progress.update(self._task_id, completed=task.total)
+
+        current = task.description
+        clean = current.split(" ", 1)[-1] if " " in current else current
+        self._progress.update(
+            self._task_id,
+            description=f"{_PROGRESS_ICONS[ProgressStatus.FAILED]} {clean}",
+        )
 
     def __exit__(
             self,

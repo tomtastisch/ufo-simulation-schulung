@@ -1,7 +1,19 @@
 from __future__ import annotations
 
+"""Bootstrap-Logik für das Setup der UFO-Simulation.
+
+Verantwortlichkeiten:
+- Python-Version prüfen
+- virtuelle Umgebung anlegen
+- Runtime- und Dev-Abhängigkeiten installieren
+- Import-Linter ausführen
+- pytest-Tests starten und Ergebnis auswerten
+"""
+
 import subprocess
 import sys
+from collections.abc import Mapping, Sequence
+from typing import Final
 from venv import create as venv_create
 
 from tools.analysis.imports import run_import_linter
@@ -11,21 +23,27 @@ from tools.setup.profile import PyProjectProfile, load_pyproject_profile
 from tools.ui import SetupConsole, StepProgress
 from tools.ui.resources import TextCatalog
 
-_TEXTS = TextCatalog()
+_TEXTS: Final[TextCatalog] = TextCatalog()
+PYTEST_MODULE: Final[str] = "pytest"
+PYTEST_SUMMARY_TOKEN: Final[str] = " passed "
+PYTEST_TIME_TOKEN: Final[str] = " in "
 
 
 def _check_python_version(profile: PyProjectProfile) -> bool:
     """Prüft, ob die laufende Python-Version die Mindestanforderung erfüllt."""
-    if profile.requires_min_python is None:
+    required = profile.requires_min_python
+    if required is None:
         return True
-    major, minor = profile.requires_min_python
-    if sys.version_info[:2] < (major, minor):
-        SetupConsole.error(
-            f"Python {major}.{minor} oder neuer erforderlich, gefunden: "
+
+    major, minor = required
+    if sys.version_info[:2] >= (major, minor):
+        return True
+
+    SetupConsole.error(
+        f"Python {major}.{minor} oder neuer erforderlich, gefunden: "
             f"{sys.version_info.major}.{sys.version_info.minor}",
-        )
-        return False
-    return True
+    )
+    return False
 
 
 def _create_venv(config: BootstrapConfig) -> bool:
@@ -39,9 +57,35 @@ def _create_venv(config: BootstrapConfig) -> bool:
     return True
 
 
+def _run_command(
+        args: Sequence[str],
+        *,
+        cwd: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Führt einen einfachen Subprozess mit Textausgabe aus (kein Exception-Throw)."""
+    return subprocess.run(
+        args,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _short_output(output: str, *, max_lines: int = 10) -> str:
+    """Begrenzt Ausgaben auf die ersten max_lines Zeilen."""
+    stripped = output.strip()
+    if not stripped:
+        return ""
+    lines = stripped.splitlines()
+    if len(lines) <= max_lines:
+        return stripped
+    return "\n".join(lines[:max_lines])
+
+
 def _install_requirements_batch(
         python_venv: str,
-        requirements: dict[str, str],
+        requirements: Mapping[str, str],
         category_name: str,
         success_message: str,
         log: ErrorLog,
@@ -60,26 +104,26 @@ def _install_requirements_batch(
             spec = f"{name}{version_spec}"
             progress.set_status(f"Paket: {name}")
 
-            try:
-                subprocess.run(
-                    [python_venv, "-m", "pip", "install", spec, "--progress-bar", "off"],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
+            result = _run_command(
+                (python_venv, "-m", "pip", "install", spec, "--progress-bar", "off"),
+            )
+
+            if result.returncode == 0:
                 installed += 1
                 progress.advance()
-            except subprocess.CalledProcessError as exc:
-                SetupConsole.error(f"Fehler bei der Installation von {spec}")
-                msg = exc.stderr or exc.stdout or str(exc)
-                if msg:
-                    SetupConsole.info(msg)
-                log.write_error(
-                    f"{category_name} Installation: {spec}",
-                    f"Fehler beim Installieren von {spec}",
-                    details=(exc.stdout or "") + (exc.stderr or ""),
-                )
-                return False
+                continue
+
+            SetupConsole.error(f"Fehler bei der Installation von {spec}")
+            short = _short_output(result.stderr or result.stdout or "")
+            if short:
+                SetupConsole.info(short)
+
+            log.write_error(
+                f"{category_name} Installation: {spec}",
+                f"Fehler beim Installieren von {spec}",
+                details=(result.stdout or "") + (result.stderr or ""),
+            )
+            return False
 
     SetupConsole.success(f"{success_message.strip()} ({installed}/{total})\n")
     return True
@@ -114,7 +158,11 @@ def _install_all_dependencies(
     )
 
 
-def _run_import_checks(config: BootstrapConfig, profile: PyProjectProfile, log: ErrorLog) -> bool:
+def _run_import_checks(
+        config: BootstrapConfig,
+        profile: PyProjectProfile,
+        log: ErrorLog,
+) -> bool:
     """Führt Import-Linter aus, falls im Profil aktiviert."""
     if not profile.uses_import_linter:
         return True
@@ -143,9 +191,9 @@ def _run_import_checks(config: BootstrapConfig, profile: PyProjectProfile, log: 
 
     SetupConsole.info(human)
 
-    if output.strip():
-        first_lines = "\n".join(output.strip().splitlines()[:10])
-        SetupConsole.info(first_lines)
+    short = _short_output(output)
+    if short:
+        SetupConsole.info(short)
 
     log.write_error(
         "Import-Linter",
@@ -155,6 +203,14 @@ def _run_import_checks(config: BootstrapConfig, profile: PyProjectProfile, log: 
     return False
 
 
+def _detect_pytest_summary(output: str) -> str:
+    """Extrahiert die pytest-Zusammenfassung aus der Ausgabe, falls vorhanden."""
+    for line in reversed(output.splitlines()):
+        if PYTEST_SUMMARY_TOKEN in line and PYTEST_TIME_TOKEN in line:
+            return line.strip()
+    return ""
+
+
 def _run_tests(config: BootstrapConfig, log: ErrorLog) -> bool:
     """Führt pytest mit kompakter Ausgabe, Progress-Bar und dynamischem Status aus."""
     python_venv = config.venv_python
@@ -162,29 +218,27 @@ def _run_tests(config: BootstrapConfig, log: ErrorLog) -> bool:
 
     SetupConsole.subheader("Tests ausführen (Validierung der Installation)")
 
-    try:
-        result = subprocess.run(
-            [python_venv, "-m", "pytest", "--version"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        SetupConsole.info(f"pytest Version: {result.stdout.strip()}\n")
-    except subprocess.CalledProcessError:
+    # 1) pytest-Version prüfen
+    version_result = _run_command(
+        (python_venv, "-m", PYTEST_MODULE, "--version"),
+    )
+    if version_result.returncode != 0:
         SetupConsole.error("pytest konnte nicht gestartet werden – überspringe Tests.")
         log.write_error(
             "pytest",
             "pytest konnte nicht gestartet werden",
-            "Aufruf von 'pytest --version' ist fehlgeschlagen.",
+            version_result.stdout or version_result.stderr or "",
         )
         return False
 
-    cmd = [python_venv, "-m", "pytest"]
+    SetupConsole.info(f"pytest Version: {version_result.stdout.strip()}\n")
 
+    # 2) eigentlicher Testlauf mit Live-Streaming
+    cmd = (python_venv, "-m", PYTEST_MODULE)
     stdout_lines: list[str] = []
+    summary_line = ""
 
-    from tools.ui import StepProgress  # falls nicht oben importiert
-
+    # total=0 -> indeterministischer Balken (roter Spinner)
     with StepProgress("pytest-Testlauf", total=0) as progress:
         progress.set_status("Tests werden ausgeführt...")
 
@@ -204,28 +258,36 @@ def _run_tests(config: BootstrapConfig, log: ErrorLog) -> bool:
             if not stripped:
                 continue
 
+            # Testnamen erkennen und als Status setzen
             if stripped.startswith("tests/") and "::" in stripped:
                 first_token = stripped.split(" ", 1)[0]
                 parts = first_token.split("::")
-
-                # parts[0] = Pfad zur Testdatei
-                # parts[1:-1] = ggf. Testklasse / Parametrisierungen
-                # parts[-1] = eigentlicher Funktionsname
                 func_name = parts[-1]
                 progress.set_status(func_name)
 
-        returncode = proc.wait()
+            # mögliche pytest-Summary merken
+            if PYTEST_SUMMARY_TOKEN in stripped and PYTEST_TIME_TOKEN in stripped:
+                summary_line = stripped
+
+        condition = proc.wait()
+
+        # Status für die Abschlusszeile setzen; mark_finished/mark_failed
+        # wandeln indeterminate Tasks in "fertige" Tasks um.
+        if condition == 0:
+            if summary_line:
+                progress.set_status(summary_line)
+            else:
+                progress.set_status("Tests erfolgreich abgeschlossen.")
+
+        else:
+            progress.set_status("pytest-Fehler – Details siehe setup.log.")
+            progress.mark_failed()
 
     stdout = "".join(stdout_lines)
     output = stdout
 
-    if returncode == 0:
-        summary = ""
-        for line in reversed(stdout.splitlines()):
-            if " passed " in line and " in " in line:
-                summary = line.strip()
-                break
-
+    if condition == 0:
+        summary = summary_line or _detect_pytest_summary(stdout)
         if summary:
             SetupConsole.success(f"Tests erfolgreich: {summary}")
         else:
@@ -240,8 +302,8 @@ def _run_tests(config: BootstrapConfig, log: ErrorLog) -> bool:
 
     SetupConsole.error("pytest hat Fehler gemeldet. Details siehe setup.log.")
 
-    if output.strip():
-        short = "\n".join(output.strip().splitlines()[:10])
+    short = _short_output(output)
+    if short:
         SetupConsole.info(short)
 
     log.write_error(
