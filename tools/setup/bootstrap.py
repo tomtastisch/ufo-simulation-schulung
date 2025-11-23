@@ -12,6 +12,8 @@ Verantwortlichkeiten:
 
 import subprocess
 import sys
+import time
+import re
 from collections.abc import Mapping, Sequence
 from typing import Final
 from venv import create as venv_create
@@ -27,6 +29,17 @@ _TEXTS: Final[TextCatalog] = TextCatalog()
 PYTEST_MODULE: Final[str] = "pytest"
 PYTEST_SUMMARY_TOKEN: Final[str] = " passed "
 PYTEST_TIME_TOKEN: Final[str] = " in "
+
+# dezente Standardpausen für eine flüssige, professionelle Ausgabe
+PAUSE_VERY_SHORT: Final[float] = 0.25
+PAUSE_SHORT: Final[float] = 0.50
+PAUSE_MEDIUM: Final[float] = 0.75
+
+
+def _pause(seconds: float) -> None:
+    """Zentrale Wartefunktion für eine sanfte, konsistente Ausgabe."""
+    if seconds > 0:
+        time.sleep(seconds)
 
 
 def _check_python_version(profile: PyProjectProfile) -> bool:
@@ -236,7 +249,6 @@ def _run_tests(config: BootstrapConfig, log: ErrorLog) -> bool:
     # 2) eigentlicher Testlauf mit Live-Streaming
     cmd = (python_venv, "-m", PYTEST_MODULE)
     stdout_lines: list[str] = []
-    summary_line = ""
 
     # total=0 -> indeterministischer Balken (roter Spinner)
     with StepProgress("pytest-Testlauf", total=0) as progress:
@@ -265,20 +277,12 @@ def _run_tests(config: BootstrapConfig, log: ErrorLog) -> bool:
                 func_name = parts[-1]
                 progress.set_status(func_name)
 
-            # mögliche pytest-Summary merken
-            if PYTEST_SUMMARY_TOKEN in stripped and PYTEST_TIME_TOKEN in stripped:
-                summary_line = stripped
+        returncode = proc.wait()
 
-        condition = proc.wait()
-
-        # Status für die Abschlusszeile setzen; mark_finished/mark_failed
-        # wandeln indeterminate Tasks in "fertige" Tasks um.
-        if condition == 0:
-            if summary_line:
-                progress.set_status(summary_line)
-            else:
-                progress.set_status("Tests erfolgreich abgeschlossen.")
-
+        # Abschluss-Status für den Progressbalken (ohne pytest-'===='-Zeilen)
+        if returncode == 0:
+            progress.set_status("Tests erfolgreich abgeschlossen.")
+            # __exit__ ruft mark_finished() -> grauer OK-Balken
         else:
             progress.set_status("pytest-Fehler – Details siehe setup.log.")
             progress.mark_failed()
@@ -286,10 +290,12 @@ def _run_tests(config: BootstrapConfig, log: ErrorLog) -> bool:
     stdout = "".join(stdout_lines)
     output = stdout
 
-    if condition == 0:
-        summary = summary_line or _detect_pytest_summary(stdout)
-        if summary:
-            SetupConsole.success(f"Tests erfolgreich: {summary}")
+    if returncode == 0:
+        nice_summary = _format_pytest_summary(stdout)
+
+        if nice_summary:
+            # kompakte, einzeilige Zusammenfassung
+            SetupConsole.success(f"Tests erfolgreich: {nice_summary}")
         else:
             SetupConsole.success("Tests erfolgreich abgeschlossen.")
 
@@ -314,10 +320,51 @@ def _run_tests(config: BootstrapConfig, log: ErrorLog) -> bool:
     return False
 
 
+def _format_pytest_summary(output: str) -> str | None:
+    """Formatiert die pytest-Zusammenfassung ohne '====' sauber für die Ausgabe."""
+    line = _detect_pytest_summary(output)
+    if not line:
+        return None
+
+    match = re.search(r"(\d+)\s+passed\s+in\s+([\d\.]+)s", line)
+    if not match:
+        # Fallback: original Zeile ohne weitere Aufbereitung
+        return line
+
+    count, seconds = match.groups()
+    return f"{count} Tests in {seconds}s"
+
+
+def _get_activate_command(config: BootstrapConfig) -> str:
+    """Gibt den passenden Aktivierungsbefehl für das Virtualenv zurück."""
+    # Falls du später den Pfad in BootstrapConfig parametrisieren willst,
+    # kannst du hier aus config.venv_dir ableiten.
+    if sys.platform.startswith("win"):
+        # PowerShell-Variante
+        return r".\.venv\Scripts\Activate.ps1"
+    # macOS / Linux
+    return "source .venv/bin/activate"
+
+
+def _print_next_steps(config: BootstrapConfig) -> None:
+    """Zeigt empfohlene Schritte nach erfolgreichem Bootstrap an (Next Steps)."""
+    title = _TEXTS.text("next_steps", field="title")
+    if title:
+        # entspricht deinem print_header("🎉 Setup erfolgreich abgeschlossen!")
+        SetupConsole.header(title)
+
+    body = _TEXTS.format(
+        "next_steps",
+        activate_cmd=_get_activate_command(config),
+    )
+    # entspricht den vielen print()-Zeilen in deinem Beispiel
+    SetupConsole.info(body)
+
 def main(argv: list[str] | None = None) -> int:
     """Haupteinstieg für das Setup (wird von setup.py aufgerufen)."""
     args = list(sys.argv[1:] if argv is None else argv)
     skip_tests = "--skip-tests" in args
+
     if skip_tests:
         args.remove("--skip-tests")
 
@@ -325,25 +372,57 @@ def main(argv: list[str] | None = None) -> int:
     profile = load_pyproject_profile()
     log = ErrorLog(config.log_path)
 
+    # 1) Lizenz- / Projektkopf
+    SetupConsole.from_resource("license_header")
+    _pause(PAUSE_SHORT)
+
+    # 2) Begrüßung und Überblick über den Setup-Ablauf
     SetupConsole.header(_TEXTS.text("setup_header", field="title"))
     SetupConsole.info(_TEXTS.text("setup_header", field="intro"))
+
+    setup_body = _TEXTS.text("setup_header", field="body")
+    if setup_body:
+        _pause(PAUSE_VERY_SHORT)
+        SetupConsole.info(setup_body)
+
+    _pause(PAUSE_SHORT)
+
+    # 3) Legende und Systeminformationen – optischer „Preflight-Check“
     SetupConsole.legend()
+    _pause(PAUSE_VERY_SHORT)
     SetupConsole.info(f"Betriebssystem: {sys.platform}\n")
 
+    _pause(PAUSE_MEDIUM)
+
+    # 4) Technische Schritte des Setups
+
+    # 4.1 Python-Version prüfen
     if not _check_python_version(profile):
         return 1
 
+    _pause(PAUSE_VERY_SHORT)
+
+    # 4.2 Virtuelle Umgebung erstellen oder wiederverwenden
     if not _create_venv(config):
         return 1
 
+    _pause(PAUSE_VERY_SHORT)
+
+    # 4.3 Abhängigkeiten installieren
     if not _install_all_dependencies(config, profile, log):
         SetupConsole.from_resource("troubleshooting")
         return 1
 
+    _pause(PAUSE_VERY_SHORT)
+
+    # 4.4 Import-Contracts prüfen
     if not _run_import_checks(config, profile, log):
         SetupConsole.from_resource("troubleshooting")
         return 1
 
+    _pause(PAUSE_VERY_SHORT)
+
+    # 4.5 Tests ausführen (falls aktiviert)
     if profile.uses_pytest and not config.skip_tests:
         if not _run_tests(config, log):
             SetupConsole.from_resource("troubleshooting")
@@ -351,5 +430,8 @@ def main(argv: list[str] | None = None) -> int:
     elif profile.uses_pytest and config.skip_tests:
         SetupConsole.info(_TEXTS.text("tests", field="skipped_hint"))
 
-    SetupConsole.from_resource("next_steps")
+    _pause(PAUSE_SHORT)
+
+    # Nächste Schritte analog zur alten print_next_steps-Funktion
+    _print_next_steps(config)
     return 0

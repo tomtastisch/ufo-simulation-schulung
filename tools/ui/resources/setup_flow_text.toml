@@ -1,0 +1,97 @@
+# setup-flow-texts.toml
+
+[license_header]
+body = """
+UFO-Simulation Schulung – Lizenzhinweise (Kurzfassung)
+
+Dieses Schulungsprojekt basiert auf der im Repository angegebenen Lizenz.
+Die Nutzung erfolgt im Rahmen von Ausbildung, Studium und interner Schulung.
+"""
+
+[setup_header]
+title = "UFO-Simulation – Setup"
+intro = """
+Willkommen zum automatisierten Setup der UFO-Simulation.
+
+Dieses Programm richtet eine isolierte Python-Umgebung ein,
+installiert alle benötigten Abhängigkeiten und prüft die Installation.
+"""
+body = """
+In diesem Setup werden nacheinander ausgeführt:
+
+1. Prüfung der Python-Version
+2. Erzeugen bzw. Wiederverwenden der virtuellen Umgebung (.venv)
+3. Installation der Runtime-Dependencies
+4. Installation der Dev-Dependencies
+5. Import-Contract-Prüfung via import-linter
+6. Ausführen der pytest-Tests zur Validierung der Installation
+
+Dies kann einen Moment dauern – bitte warte, bis alle Schritte abgeschlossen sind.
+"""
+
+[next_steps]
+title = "🎉 Setup erfolgreich abgeschlossen!"
+body = """
+📍 Nächste Schritte (Überblick)
+
+1️⃣  Virtualenv aktivieren
+    [dim]# im Projekt-Root im Terminal:[/]
+    [bold]{activate_cmd}[/]
+
+2️⃣  Demo-Simulation mit Demo-Autopilot starten
+    [bold](.venv) $ python -m core.simulation.ufo_main[/]
+
+3️⃣  Autopilot-Aufgabe öffnen
+    [bold]src/task/autopilot/autopilot.py[/]
+
+    Implementiere die Methoden:
+    • [bold]takeoff()[/] – Startphase
+    • [bold]cruise()[/]  – Reiseflug
+    • [bold]landing()[/] – Landephase
+
+4️⃣  Demo deaktivieren
+    Setze in [bold]Autopilot.USE_DEMO[/] den Wert auf [bold]False[/].
+
+5️⃣  Demo erneut ausführen und Autopiloten testen
+    [bold](.venv) $ python -m core.simulation.ufo_main[/]
+
+Viel Erfolg und guten Flug! 🚀
+"""
+
+[troubleshooting]
+body = """
+Wenn Probleme auftreten:
+
+1. Prüfe zuerst die vollständige Fehlermeldung im Terminal.
+2. Öffne die Datei 'setup.log' im Projekt-Root, um Details einzusehen.
+3. Stelle sicher, dass deine Python-Version zu 'requires-python' in
+   'pyproject.toml' passt.
+4. Überprüfe deine Internetverbindung, damit das Installieren der
+   Abhängigkeiten funktioniert.
+5. Wenn das Problem weiterhin besteht, notiere:
+   - Betriebssystem
+   - Python-Version
+   - komplette Fehlermeldung
+   und reiche diese Informationen bei der Anfrage um Unterstützung mit ein.
+"""
+
+[tests]
+success_hint = """
+Alle Tests wurden erfolgreich ausgeführt.
+"""
+failed_hint = """
+Setup abgeschlossen, aber mindestens ein Test ist fehlgeschlagen.
+Bitte prüfe die Ausgabe und 'setup.log' für Details.
+"""
+skipped_hint = """
+Tests wurden auf Wunsch (--skip-tests) übersprungen.
+"""
+
+[import_linter]
+success = """
+Import-Linter: Alle definierten Contracts wurden eingehalten.
+"""
+failed = """
+Import-Linter hat mindestens einen Contract-Verstoß festgestellt.
+Bitte Ausgabe und 'setup.log' prüfen.
+"""

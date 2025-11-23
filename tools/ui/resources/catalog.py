@@ -11,7 +11,7 @@ class TextCatalog:
     """Zentrale Verwaltung von Text- und Icon-Ressourcen aus TOML-Dateien."""
 
     path: Path = field(
-        default_factory=lambda: Path(__file__).with_name("text_blocks.toml"),
+        default_factory=lambda: Path(__file__).with_name("setup_flow_text.toml"),
     )
     _data: Mapping[str, Any] | None = field(default=None, init=False, repr=False)
 
