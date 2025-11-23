@@ -1,3 +1,4 @@
+gradio
 # Runtime-Dependencies für die UFO-Simulation
 # HINWEIS: Die primären Dependencies sind jetzt in pyproject.toml definiert.
 # Diese Datei wird für Kompatibilität mit älteren Tools beibehalten.

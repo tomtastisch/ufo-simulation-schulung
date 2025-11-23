@@ -58,8 +58,6 @@ def _install_requirements_batch(
     with StepProgress(f"{category_name}-Installation", total=total) as progress:
         for name, version_spec in requirements.items():
             spec = f"{name}{version_spec}"
-
-            # Text über dem Balken: "Paket: <name>"
             progress.set_status(f"Paket: {name}")
 
             try:
@@ -117,11 +115,7 @@ def _install_all_dependencies(
 
 
 def _run_import_checks(config: BootstrapConfig, profile: PyProjectProfile, log: ErrorLog) -> bool:
-    """Führt Import-Linter aus, falls im Profil aktiviert.
-
-    Gibt bei Fehlern eine generische Beschreibung plus einen Auszug der
-    Original-Ausgabe aus und schreibt alles ins Log.
-    """
+    """Führt Import-Linter aus, falls im Profil aktiviert."""
     if not profile.uses_import_linter:
         return True
 
@@ -133,10 +127,8 @@ def _run_import_checks(config: BootstrapConfig, profile: PyProjectProfile, log: 
         SetupConsole.info(_TEXTS.text("import_linter", field="success"))
         return True
 
-    # Generische Fehlermeldung
     SetupConsole.error(_TEXTS.text("import_linter", field="failed"))
 
-    # Kurzbeschreibung nach Muster – aber bewusst simpel gehalten
     text_lower = output.lower()
     if "no module named" in text_lower and "importlinter" in text_lower:
         human = (
@@ -164,13 +156,12 @@ def _run_import_checks(config: BootstrapConfig, profile: PyProjectProfile, log: 
 
 
 def _run_tests(config: BootstrapConfig, log: ErrorLog) -> bool:
-    """Führt pytest mit kompakter Ausgabe und Progress-Bar aus."""
+    """Führt pytest mit kompakter Ausgabe, Progress-Bar und dynamischem Status aus."""
     python_venv = config.venv_python
     project_root = config.repo_root
 
     SetupConsole.subheader("Tests ausführen (Validierung der Installation)")
 
-    # pytest-Version kurz prüfen (optional)
     try:
         result = subprocess.run(
             [python_venv, "-m", "pytest", "--version"],
@@ -188,31 +179,47 @@ def _run_tests(config: BootstrapConfig, log: ErrorLog) -> bool:
         )
         return False
 
-    cmd = [python_venv, "-m", "pytest", "-q"]
+    cmd = [python_venv, "-m", "pytest"]
 
-    # Ein einziger Balken für den ganzen Testlauf (indeterminierter Fortschritt)
+    stdout_lines: list[str] = []
+
+    from tools.ui import StepProgress  # falls nicht oben importiert
+
     with StepProgress("pytest-Testlauf", total=0) as progress:
         progress.set_status("Tests werden ausgeführt...")
 
-        result = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
             cwd=project_root,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
+            bufsize=1,
         )
 
-        # Text im Balken anpassen, bevor der Kontext endet
-        if result.returncode == 0:
-            progress.set_status("Tests erfolgreich abgeschlossen")
-        else:
-            progress.set_status("Tests fehlgeschlagen")
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            stdout_lines.append(line)
+            stripped = line.strip()
+            if not stripped:
+                continue
 
-    stdout = result.stdout or ""
-    stderr = result.stderr or ""
-    output = stdout + stderr
+            if stripped.startswith("tests/") and "::" in stripped:
+                first_token = stripped.split(" ", 1)[0]
+                parts = first_token.split("::")
 
-    if result.returncode == 0:
-        # Versuche eine Zusammenfassung wie "309 passed in 8.95s" zu finden
+                # parts[0] = Pfad zur Testdatei
+                # parts[1:-1] = ggf. Testklasse / Parametrisierungen
+                # parts[-1] = eigentlicher Funktionsname
+                func_name = parts[-1]
+                progress.set_status(func_name)
+
+        returncode = proc.wait()
+
+    stdout = "".join(stdout_lines)
+    output = stdout
+
+    if returncode == 0:
         summary = ""
         for line in reversed(stdout.splitlines()):
             if " passed " in line and " in " in line:
@@ -224,7 +231,6 @@ def _run_tests(config: BootstrapConfig, log: ErrorLog) -> bool:
         else:
             SetupConsole.success("Tests erfolgreich abgeschlossen.")
 
-        # Vollständigen Output ins Log schreiben (zur Fehlersuche, falls nötig)
         log.write_error(
             "pytest",
             "Testlauf erfolgreich (Details)",
@@ -232,7 +238,6 @@ def _run_tests(config: BootstrapConfig, log: ErrorLog) -> bool:
         )
         return True
 
-    # Fehlerfall: kurze Info + Ausschnitt, Rest ins Log
     SetupConsole.error("pytest hat Fehler gemeldet. Details siehe setup.log.")
 
     if output.strip():
@@ -258,42 +263,31 @@ def main(argv: list[str] | None = None) -> int:
     profile = load_pyproject_profile()
     log = ErrorLog(config.log_path)
 
-    # Header & Legende
     SetupConsole.header(_TEXTS.text("setup_header", field="title"))
     SetupConsole.info(_TEXTS.text("setup_header", field="intro"))
     SetupConsole.legend()
     SetupConsole.info(f"Betriebssystem: {sys.platform}\n")
 
-    # Schritt 1: Python-Version + venv
     if not _check_python_version(profile):
         return 1
 
     if not _create_venv(config):
         return 1
 
-    # Schritt 2: Dependencies
     if not _install_all_dependencies(config, profile, log):
         SetupConsole.from_resource("troubleshooting")
         return 1
 
-    # Schritt 3: Import-Checks
     if not _run_import_checks(config, profile, log):
         SetupConsole.from_resource("troubleshooting")
         return 1
 
-    # Schritt 4: Tests
     if profile.uses_pytest and not config.skip_tests:
         if not _run_tests(config, log):
             SetupConsole.from_resource("troubleshooting")
             return 1
-
     elif profile.uses_pytest and config.skip_tests:
         SetupConsole.info(_TEXTS.text("tests", field="skipped_hint"))
 
-    # Abschluss
     SetupConsole.from_resource("next_steps")
     return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
