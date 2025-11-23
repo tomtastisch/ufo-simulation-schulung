@@ -7,8 +7,20 @@ PyQt5>=5.15.11
 PyQt5-sip>=12.17.1
 numpy>=2.3.5
 
+# Console UI für Setup-Tools
+rich>=13.0.0
+
 # Testing & Development Tools (siehe auch pyproject.toml [project.optional-dependencies.dev])
+
+## Test-Framework und Testlauf
 pytest>=8.0.0
 pytest-timeout>=2.3.1
 threadpoolctl>=3.5.0
+
+## Profiling und Performance-Analyse
 py-spy>=0.3.14
+
+## Code-Qualität, Linting und Import-Regeln
+black>=24.4.0
+flake8>=7.0.0
+import-linter>=2.0.0

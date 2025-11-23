@@ -1,0 +1,98 @@
+[icons]
+info = "ℹ️"
+success = "✅"
+warning = "⚠️"
+error = "❌"
+fix = "🔧"
+step = "🧩"
+start = "🚀"
+ufo = "🛸"
+
+[setup_header]
+title = """
+🛸 UFO-Simulation Schulung – Setup
+"""
+intro = """
+Willkommen zum automatisierten Setup der UFO-Simulation.
+
+Dieses Programm richtet eine isolierte Python-Umgebung ein,
+installiert alle benötigten Abhängigkeiten und prüft die Installation.
+"""
+
+[legend]
+body = """
+Legende der Symbole:
+
+{info}  – Information / Hinweis
+{success} – Schritt erfolgreich abgeschlossen
+{warning} – Warnung (Setup kann weiterlaufen, Ergebnis prüfen)
+{error} – Fehler (Setup wird abgebrochen)
+{step} – Einzelschritt innerhalb des Setups
+{start} – Hinweise zu Start und nächsten Schritten
+"""
+
+[next_steps]
+body = """
+{start} Nächste Schritte:
+
+1. Aktiviere das virtuelle Environment:
+   - Unix/macOS:  source .venv/bin/activate
+   - Windows:     .venv\\Scripts\\activate
+
+2. Starte die UFO-Simulation gemäß Projektdokumentation
+   (z. B. über ein Startskript oder einen Python-Einstiegspunkt).
+
+3. Lies die Einführung im Ordner docs/, um die Schulungsaufgaben
+   Schritt für Schritt zu bearbeiten.
+"""
+
+[troubleshooting]
+body = """
+{warning} Fehlerbehebung bei Setup-Problemen:
+
+1. Prüfe die vollständige Fehlermeldung im Terminal.
+2. Öffne die Datei 'setup.log' im Projekt-Root für Detailinformationen.
+3. Stelle sicher, dass die Python-Version die Vorgabe in 'pyproject.toml'
+   (requires-python) erfüllt.
+4. Prüfe deine Internetverbindung, damit alle Abhängigkeiten installiert
+   werden können.
+5. Wenn das Problem bestehen bleibt, dokumentiere:
+   - Betriebssystem
+   - Python-Version
+   - vollständige Fehlermeldung
+   und gib diese Informationen bei einer Support-Anfrage an.
+"""
+
+[install_project_phases]
+body = """
+Phasen der Projektinstallation:
+
+1. Vorbereitung der Python-Umgebung und Erstellung des virtuellen Environments.
+2. Installation der Laufzeit-Abhängigkeiten aus [project.dependencies].
+3. Installation der Dev-Tools aus [project.optional-dependencies.dev].
+4. Installation des Projekts im Editable-Modus.
+5. Verifikation der Installation über Paket-Checks.
+"""
+
+[run_tests_phases]
+body = """
+Phasen der Testausführung:
+
+1. Aktivierung des virtuellen Environments.
+2. Sammeln aller Tests mit pytest.
+3. Ausführung der Testsuite.
+4. Auswertung der Ergebnisse und Zusammenfassung.
+5. Ausgabe einer kompakten Übersicht im Terminal.
+"""
+
+[tests]
+skipped_hint = """
+{warning} Tests wurden auf Wunsch (--skip-tests) übersprungen.
+"""
+failed_hint = """
+{warning} Setup abgeschlossen, aber Tests sind fehlgeschlagen.
+Bitte 'setup.log' und die Testausgabe prüfen.
+"""
+success_hint = """
+{success} Alle Tests wurden erfolgreich ausgeführt.
+"""

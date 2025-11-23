@@ -27,9 +27,11 @@ jobs:
 
     steps:
       - name: Checkout
+        # noinspection UnresolvedGitHubAction
         uses: actions/checkout@v4
 
       - name: Set up Python
+        # noinspection UnresolvedGitHubAction
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix['python-version'] }}

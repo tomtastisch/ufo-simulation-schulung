@@ -336,7 +336,7 @@ Extrahiert Fehler-Zusammenfassung aus pytest-Output (nur FAILED/ERROR Zeilen).
 ```bash
 python setup.py --skip-tests
 # oder
-python tools/bootstrap_env.py --skip-tests
+python tools/setup/bootstrap.py --skip-tests
 ```
 
 **Verwendung**:
