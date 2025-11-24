@@ -1,6 +1,107 @@
 # Changelog – UFO-Simulation-Schulung
 
-Chronologische Auflistung aller Änderungen (neueste zuerst).
+## [2025-11-23] – Setup-System, Tools-Struktur und Rich UI Integration (tools/)
+
+### Zusammenfassung
+
+Refactoring und Konsolidierung des `tools/`-Moduls: Einführung einer klaren Submodul-Struktur (`setup/`, `analysis/`,
+`ui/`), Integration der Rich-basierten Konsolen-UI für Setup- und Analyse-Tools, robuste Import-Linter-Integration sowie
+Bugfixes rund um Textressourcen, Progress-Balken und Error-Logging.
+
+### Problem/Motivation
+
+- Das bisherige Setup- und Tools-System war:
+    - strukturell uneinheitlich (flache Dateien, alte Namen, Duplikate),
+    - vom UI-Verhalten her inkonsistent (manuelle `print()`-Aufrufe, ASCII-Balken),
+    - fehleranfällig bei Import-Analyse und Textressourcen (Import-Linter Root, `slots=True` + `@cached_property`,
+      TOML-Schlüssel).
+- Die Dokumentation war über mehrere einzelne Markdown-Dateien verteilt und schwer zu pflegen.
+
+### Lösung/Implementierung
+
+1. **Struktur-Refactoring `tools/`**
+    - Einführung der Submodule:
+        - `tools/setup/` (bootstrap, config, steps),
+        - `tools/analysis/` (files, imports),
+        - `tools/ui/` (console, resources/).
+    - Entfernen veralteter Dateien (`tools/ui.py`, `tools/config.py`, `tools/setup_step.py`,
+      `tools/ui/resources/text_catalog.py`).
+    - Sicherstellung PEP-8-konformer Dateinamen.
+
+2. **Rich UI Integration**
+    - Einführung von `SetupConsole`, `StepProgress` und `ErrorLog` in `tools/ui/console.py`.
+    - Nutzung von `rich` für:
+        - formatierte Header/Infos/Warnungen/Fehler,
+        - persistente Fortschrittsbalken beim Installieren von Dependencies und beim Testlauf,
+        - strukturierte Fehlerprotokollierung in `setup.log`.
+    - Anpassung der Setup- und Analyse-Skripte auf die neue UI-Schicht.
+
+3. **Import-Linter Integration**
+    - Korrekte Verwendung von `AnalyzerResult` (kein Tuple-Unpacking mehr).
+    - Korrekte Bestimmung des Projekt-Roots zur Auffindung von `pyproject.toml`.
+    - Verbesserte Ausgabe und Fehlerbehandlung bei gebrochenen Contracts.
+
+4. **Textressourcen & TextCatalog**
+    - Entfernung von `slots=True` beim TextCatalog, um `@cached_property` zu ermöglichen.
+    - Umstellung von Punkt-Notation in TOML auf flache Schlüssel.
+    - Robuste Fallbacks für Phasenlisten (Installations- und Testphasen).
+
+5. **Bugfixes Rich UI**
+    - Entfernung von `slots=True` bei `StepProgress` und `ErrorLog` zur Vermeidung von `AttributeError`.
+    - Setzen von `transient=False`, damit Progress-Balken nach Abschluss sichtbar bleiben.
+    - Hintergrund-Thread + Progress-Bar während `import-linter` läuft.
+    - Verifikation der `setup.log`-Erstellung nur bei Fehlern.
+
+6. **Dokumentations-Konsolidierung**
+    - Zusammenführung bisheriger Einzel-Dokumente zu einem zentralen Entwicklerdokument:
+        - `docs/dev/setup-system-tools.md`
+    - Audit der `__init__.py`-Dokumentation im `tools/`-Modul nach `general-gd.md`.
+
+### Betroffene Dateien
+
+**Neu/konkretisiert** (Auszug):
+
+- `tools/setup/bootstrap.py`
+- `tools/setup/config.py`
+- `tools/setup/steps.py`
+- `tools/analysis/files.py`
+- `tools/analysis/imports.py`
+- `tools/ui/console.py`
+- `tools/ui/resources/__init__.py`
+- `tools/ui/resources/catalog.py`
+- `tools/ui/resources/text_blocks.toml`
+- `docs/dev/setup-system-tools.md` (neu, konsolidiertes Entwickler-Dokument)
+
+**Entfernt/ersetzt**:
+
+- `tools/ui.py`
+- `tools/config.py`
+- `tools/setup_step.py`
+- `tools/ui/resources/text_catalog.py`
+
+### Tests
+
+- `python setup.py`:
+    - Installation von Runtime- und Dev-Dependencies mit sichtbarem Progress.
+    - Erfolgreicher pytest-Lauf mit Live-Status (Testnamen, abschließende Zusammenfassung).
+- `python tools/imports.py`:
+    - Import-Linter findet `pyproject.toml` und wertet Contracts korrekt aus.
+- `python -m py_compile tools/**/*.py`:
+    - Syntax-Check aller Tools-Module ohne Fehler.
+
+### Breaking Changes
+
+- Keine Breaking Changes an der öffentlichen Setup-API (Aufruf weiterhin via `python setup.py`).
+- Intern:
+    - Tools werden künftig über die Submodule (`tools.setup`, `tools.analysis`, `tools.ui`) referenziert.
+    - Alte Einzelfiles (`tools/ui.py` etc.) sollten nicht mehr verwendet werden.
+
+### Referenzen
+
+- `docs/dev/setup-system-tools.md`
+- `docs/guidelines/general-gd.md`
+- `pyproject.toml` (`[tool.importlinter]`)
+- `tools/ui/resources/text_blocks.toml`
 
 ---
 

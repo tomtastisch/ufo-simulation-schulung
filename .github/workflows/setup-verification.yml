@@ -22,6 +22,7 @@ jobs:
       pull-requests: write
 
     strategy:
+      fail-fast: false
       matrix:
         python-version: ['3.11', '3.12']
 
@@ -35,6 +36,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix['python-version'] }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
       # Upgrade pip to avoid installation errors
       # pip is legacy
@@ -42,11 +45,35 @@ jobs:
       - name: Upgrade pip
         run: pip install --upgrade pip
 
-      - name: Install Setuptools
-        run: pip install setuptools
+      - name: Cache pip downloads
+        # noinspection UnresolvedGitHubAction
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ matrix['python-version'] }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-${{ matrix['python-version'] }}-
+            ${{ runner.os }}-pip-
 
-      - name: Install Dependencies
-        run: pip install -r requirements.txt
+      - name: Install build tooling
+        run: pip install build pip-tools
 
-      - name: Validate setup.py
-        run: python setup.py --version
+      - name: Install project with extras
+        run: pip install .[dev]
+
+      - name: Validate dependency graph
+        run: pip check
+
+      - name: Collect test imports
+        run: pytest --collect-only --maxfail=1 --strict-markers
+
+      - name: Validate pyproject build
+        run: python -m build --sdist --wheel
+
+      - name: Upload build artifacts
+        if: always()
+        # noinspection UnresolvedGitHubAction
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix['python-version'] }}
+          path: dist
