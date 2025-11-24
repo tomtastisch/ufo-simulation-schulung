@@ -355,7 +355,7 @@ Nach Abschluss der Schulung:
 ### Troubleshooting
 
 - [Setup-Probleme](setup-anleitung.md#probleme-beheben)
-- [Testing-Tools](../dev/testing-tools.md)
+- [Testing-Tools](../dev/temp/testing-tools.md)
 - [Setup-System](../dev/setup-system.md)
 
 ---

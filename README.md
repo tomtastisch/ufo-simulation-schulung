@@ -56,7 +56,7 @@ Du implementierst nur **3 Funktionen** – den Rest erledigt die Simulation für
 
 - **[Changelog](docs/dev/changelog.md)** – Änderungshistorie
 - **[Setup-System](docs/dev/setup-system.md)** – Setup-Dokumentation
-- **[Testing-Tools](docs/dev/testing-tools.md)** – Testing und Debugging
+- **[Testing-Tools](docs/dev/temp/testing-tools.md)** – Testing und Debugging
 
 ### Architektur & Planung
 
