@@ -11,7 +11,7 @@ Python.
 
 ```bash
 # 1. Setup (einziger Befehl!)
-python setup.py
+python setup_new.py
 
 # 2. Demo anschauen
 python -m core.simulation.ufo_main
@@ -78,7 +78,7 @@ Du implementierst nur **3 Funktionen** – den Rest erledigt die Simulation für
 ```bash
 git clone https://github.com/tomtastisch/ufo-simulation-schulung.git
 cd ufo-simulation-schulung
-python setup.py
+python setup_new.py
 ```
 
 Das Setup:

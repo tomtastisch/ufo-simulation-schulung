@@ -1,0 +1,81 @@
+[texts.setup_header]
+license = """
+UFO-Simulation Schulung – Lizenzhinweise (Kurzfassung)
+
+Dieses Schulungsprojekt basiert auf der im Repository angegebenen Lizenz.
+Die Nutzung erfolgt im Rahmen von Ausbildung, Studium und interner Schulung.
+"""
+title = "──────────────────────────── UFO-Simulation – Setup ────────────────────────────"
+intro = "Willkommen zum automatisierten Setup der UFO-Simulation."
+body = """
+Dieses Programm richtet eine isolierte Python-Umgebung ein,
+installiert alle benötigten Abhängigkeiten und prüft die Installation.
+
+In diesem Setup werden nacheinander ausgeführt:
+
+1. Prüfung der Python-Version
+2. Erzeugen bzw. Wiederverwenden der virtuellen Umgebung (.venv)
+3. Installation der Runtime-Dependencies
+4. Installation der Dev-Dependencies
+5. Import-Contract-Prüfung via import-linter
+6. Ausführen der pytest-Tests zur Validierung der Installation
+
+Dies kann einen Moment dauern – bitte warte, bis alle Schritte abgeschlossen sind.
+"""
+[texts.module_setup]
+default = "Setup-{typ} {module}: {info}"
+
+[texts.tests]
+skipped_hint = "pytest wurde aufgrund der Skip-Konfiguration nicht ausgeführt."
+
+[texts.args]
+default = "{type} wurde aufgrund des arguments {arg} {action}"
+
+[texts.next]
+title = "Nächste Schritte (Überblick)"
+body = """
+1. Virtuelle Umgebung aktivieren:
+   {activate_cmd}
+
+2. Projekt starten ...
+"""
+
+[texts.legend]
+body = """
+Legende der Symbole:
+
+{info}    – Information / Hinweis
+{success} – Schritt erfolgreich abgeschlossen
+{warning} – Warnung (Setup kann weiterlaufen, Ergebnis prüfen)
+{error}   – Fehler (Setup wird abgebrochen)
+{continue} – Hinweise zu Start und nächsten Schritten
+"""
+
+[icons]
+info = "ℹ️"
+success = "✅"
+warning = "⚠️"
+error = "❌"
+continue = "🚀"
+start = "🔄"
+run = "⏳"
+ok = "✅"
+fail = "❌"
+
+[texts.step_default]
+success = "{step}: erfolgreich abgeschlossen."
+failure = "{step}: Fehler unter {env}: {cause}\n{details}"
+default = "{step}: {details}"
+
+# Neu: generische Progress-Zeile für laufende Arbeiten
+progress_running = "Running  /   {details}"
+progress_failed = "Failed   /   {details}"
+progress_finished = "Finished /   {details}"
+
+# Neu: Standard-Details für Installationsfortschritt (kann von anderen Steps wiederverwendet werden)
+install_details = "Installiere: {package} ({index}/{total})"
+install_done = "Alle Abhängigkeiten installiert."
+install_failed = "{package}: {details}"
+
+[texts.RunTestsStep]
+failure = "Tests im Schritt {step} unter {env} fehlgeschlagen: {cause}\n{details}"

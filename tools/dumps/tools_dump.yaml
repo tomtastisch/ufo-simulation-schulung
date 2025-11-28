@@ -1,0 +1,2907 @@
+dump_path: /Users/tomwerner/PycharmProjects/ufo-simulation-schulung/tools/dumps/tools_dump.yaml
+root: /Users/tomwerner/PycharmProjects/ufo-simulation-schulung/tools
+hash: f215333575d18ff732c1f1bf80808c146cb6c06ebc1f7f340c83a9980c754543
+dirs:
+  - setup
+  - setup/domain
+  - setup/steps
+  - setup/steps/base
+  - setup/ui
+  - setup/ui/output
+  - setup/ui/progress
+  - setup/ui/resources
+  - setup/utils
+files:
+  - rel_path: __init__.py
+    hash: 94fd0f93eaf6ca13dac6ca0064af24923b6c8dd18ca7e5113bdb92f2b233f3be
+    content: |-
+      # tools/__init__.py
+      from __future__ import annotations
+      """
+      Werkzeugpaket für das Projekt »ufo-simulation-schulung«.
+      
+      Dieses Paket bündelt interne Hilfstools.
+      Der Setup-Einstieg liegt in ``tools.bootstrap.execute``.
+      """
+      
+      __all__: list[str] = []
+  - rel_path: bootstrap.py
+    hash: 101f3489723927e556a9e427dcf10d53c80f40052017edb3aefdfa96ba3fba44
+    content: |-
+      # tools/bootstrap.py
+      from __future__ import annotations
+      
+      import sys
+      from dataclasses import dataclass, fields
+      from typing import Iterable
+      
+      from tools.setup.domain import BootstrapConfig, build_profile
+      from tools.setup.logging import ErrorLog
+      from tools.setup.steps.base import StepContext
+      from tools.setup.ui import SetupConsole
+      from tools.setup.ui.resources import CATALOG
+      from tools.setup.domain import PyProjectProfile
+      from tools.setup.steps import BaseStep, STEPS  # nur für Typ-Hints
+      
+      # ------------------------------------------------------------
+      # 1) SETUP HEADER AUFBAUEN
+      # ------------------------------------------------------------
+      
+      @dataclass(slots=True)
+      class Segment:
+          license: str
+          title: str
+          intro: str
+          body: str
+      
+          def __iter__(self) -> Iterable[str]:
+              return (getattr(self, f.name) for f in fields(self))
+      
+          @classmethod
+          def from_catalog(cls, cat=CATALOG) -> "Segment":
+              return cls(
+                  **{
+                      f.name: cat.text("setup_header", field=f.name, default="")
+                      for f in fields(cls)
+                  }
+              )
+      
+      
+      # ------------------------------------------------------------
+      # 2) Low-Level-Utility-Funktionen
+      # ------------------------------------------------------------
+      
+      def _build_log(config: BootstrapConfig) -> ErrorLog:
+          """Bereitet das ErrorLog vor (leert bestehende Datei)."""
+          path = config.log_path
+          path.write_text("", encoding="utf-8")
+          return ErrorLog(path)
+      
+      
+      def _select_steps(profile: PyProjectProfile) -> tuple[type[BaseStep[object]], ...]:
+          """
+          Wählt die auszuführenden Steps ausschließlich auf Basis ihrer stid
+          und der Konfiguration aus [tool.setup].
+      
+          Regeln:
+          - Standard: alle bekannten Steps
+          - steps    → Whitelist (nur diese stid-Werte)
+          - exclude  → Blacklist (diese stid-Werte entfernen)
+          - uses-import-linter/uses-pytest setzen implizite Excludes
+          """
+          from tools.setup.steps import STEPS  # tatsächliche Klassen
+      
+          # Mapping stid → Step-Klasse mit Schutz gegen Duplikate
+          by_stid: dict[str, type[BaseStep[object]]] = {}
+          for cls in STEPS:
+              stid = cls.stid
+              if stid in by_stid and by_stid[stid] is not cls:
+                  other = by_stid[stid].__name__
+                  raise ValueError(
+                      f"Doppelte stid {stid!r} bei {cls.__name__} und {other}."
+                  )
+              by_stid[stid] = cls
+      
+          all_ids = set(by_stid.keys())
+      
+          # Whitelist aus [tool.setup].steps
+          include_ids = set(profile.step_include) if profile.step_include else set(all_ids)
+      
+          # Blacklist aus [tool.setup].exclude
+          exclude_ids = set(profile.step_exclude)
+      
+          # implizite Excludes auf Basis der Feature-Flags
+          if not profile.uses_import_linter:
+              exclude_ids.add("import_linter")
+          if not profile.uses_pytest:
+              exclude_ids.add("tests")
+      
+          effective_ids = include_ids - exclude_ids
+          classes = [
+              by_stid[stid]
+              for stid in effective_ids
+              if stid in by_stid
+          ]
+      
+          # Priorität bleibt wie gehabt: höchste priority zuerst
+          classes.sort(key=lambda c: c.priority, reverse=True)
+          return tuple(classes)
+      
+      
+      # ------------------------------------------------------------
+      # 3) Step-Orchestrierung
+      # ------------------------------------------------------------
+      
+      def leaf(ctx: StepContext) -> bool:
+          """
+          Führt alle konfigurierten Setup-Schritte aus und bricht nach dem
+          ersten fehlgeschlagenen Step ab.
+          """
+          process = (cls() for cls in _select_steps(ctx.profile))
+          return all((ok := step.run(ctx)) for step in process)
+      
+      
+      # ------------------------------------------------------------
+      # 4) High-Level-Orchestrator
+      # ------------------------------------------------------------
+      
+      def execute(argv: list[str] | None = None) -> int:
+          """
+          Führt den kompletten Setup-Prozess aus:
+      
+          - Config, Profile, Log, Konsole erzeugen
+          - Header anzeigen
+          - Steps via leaf(ctx) ausführen
+          - ggf. Next-Steps anzeigen
+      
+          CLI-Argumente (argv) werden bewusst ignoriert; das Verhalten
+          wird ausschließlich über die pyproject.toml gesteuert.
+          """
+          config = BootstrapConfig()
+          profile = build_profile(config.repo_root)
+          log = _build_log(config)
+      
+          console = SetupConsole()
+          ctx = StepContext(
+              config=config,
+              profile=profile,
+              log=log,
+              console=console,
+          )
+      
+          seg = Segment.from_catalog(CATALOG)
+          if seg.license:
+              console.info(seg.license)
+          if seg.title:
+              console.header(seg.title)
+          for part in (seg.intro, seg.body):
+              if part:
+                  console.info(part)
+      
+          ok = leaf(ctx)
+      
+          if ok:
+              title = CATALOG.text("next", field="title", default="")
+              body = CATALOG.text("next", field="body", default="").format(
+                  activate_cmd=config.activation_command,
+              )
+              if title:
+                  console.info(title)
+              if body:
+                  console.info(body)
+      
+          return 0 if ok else 1
+      
+      
+      def console_script() -> None:
+          """Entry-Point für pyproject.toml / setup_new.py."""
+          raise SystemExit(execute(sys.argv[1:]))
+  - rel_path: setup/__init__.py
+    hash: db2a27dcb1ed5cfb176905de04d71c005b419c2d1b10243709aebe907028341d
+    content: |-
+      # tools/setup/__init__.py
+      from __future__ import annotations
+      """
+      Setup-Paket für das Projekt »ufo-simulation-schulung«.
+      
+      Kapselt:
+      - Konfiguration und Projektprofil (``domain``),
+      - Setup-Schritte (``steps``),
+      - Konsolen- und UI-Hilfen (``ui``),
+      - Hilfsfunktionen (``utils``).
+      """
+      
+      __all__: list[str] = []
+  - rel_path: setup/domain/__init__.py
+    hash: 52ee58491d6ac3db83ad9a849f683aa58c08640c1f950bd3257ae3397119b7ea
+    content: |-
+      from __future__ import annotations
+      """
+      Domänenspezifische Typen und Profile für das Setup.
+      
+      Dieses Unterpaket stellt die zentralen Modelle bereit:
+      - :class:`BootstrapConfig` für Pfade und Laufzeitparameter,
+      - :class:`PyProjectProfile` für abgeleitete Projektinformationen,
+      - :func:`load_pyproject_profile` zum Laden des Profils aus der ``pyproject.toml``.
+      """
+      
+      from .config import BootstrapConfig
+      from .profile import PyProjectProfile, build_profile
+      
+      __all__: list[str] = [
+          "BootstrapConfig",
+          "PyProjectProfile",
+          "build_profile",
+      ]
+  - rel_path: setup/domain/config.py
+    hash: c70b8c42c2249ac86a521e8e9fd36c32566d4a56598370c2e68ce8af68383f41
+    content: |-
+      # tools/setup/domain/config.py
+      from __future__ import annotations
+      
+      from dataclasses import dataclass, field
+      from enum import Enum
+      from pathlib import Path
+      from sys import platform as _platform
+      
+      
+      class Platform(Enum):
+          """Logische Plattformklasse für Venv-Layout (WINDOWS / POSIX)."""
+      
+          WINDOWS = "windows"
+          POSIX = "posix"
+      
+      
+      def default_repo_root() -> Path:
+          """Liefert die Projektwurzel relativ zu diesem Modul."""
+          return Path(__file__).resolve().parents[3]
+      
+      
+      @dataclass(slots=True)
+      class BootstrapConfig:
+          """
+          Zentrale technische Konfiguration für das Setup.
+      
+          Beinhaltet:
+          - Projektwurzel (repo_root)
+          - abgeleitete Pfade/Kommandos (venv_dir, venv_python, log_path, activation_command)
+      
+          Projekt- / Step-spezifisches Verhalten (Step-Auswahl, Optionen etc.)
+          wird ausschließlich über die pyproject.toml im PyProjectProfile konfiguriert.
+          """
+      
+          repo_root: Path = field(default_factory=default_repo_root)
+      
+          @property
+          def platform(self) -> Platform:
+              """Ermittelt die logische Plattform (WINDOWS oder POSIX)."""
+              normalized = _platform.lower()
+              if normalized.startswith(("win", "msys", "cygwin")):
+                  return Platform.WINDOWS
+              return Platform.POSIX
+      
+          @property
+          def venv_dir(self) -> Path:
+              """.venv-Verzeichnis unterhalb der Projektwurzel."""
+              return self.repo_root / ".venv"
+      
+          @property
+          def venv_python(self) -> str:
+              """Pfad zur Python-Binary im Virtualenv."""
+              rel = (
+                  "Scripts/python.exe"
+                  if self.platform is Platform.WINDOWS
+                  else "bin/python"
+              )
+              return str(self.venv_dir / rel)
+      
+          @property
+          def log_path(self) -> Path:
+              """Pfad zur Setup-Logdatei."""
+              return self.repo_root / "setup.log"
+      
+          @property
+          def activation_command(self) -> str:
+              """Shell-Befehl zur Aktivierung der virtuellen Umgebung."""
+              if self.platform is Platform.WINDOWS:
+                  return r".\.venv\Scripts\Activate.ps1"
+              return "source .venv/bin/activate"
+  - rel_path: setup/domain/profile.py
+    hash: 35687d352a8ba3884b59bf08de2500aab4b3f14e559e1dc7120880ad257e8bc8
+    content: |-
+      # tools/setup/domain/profile.py
+      from __future__ import annotations
+      """
+      Projektprofil auf Basis von pyproject.toml.
+      """
+      
+      from dataclasses import dataclass, field
+      from enum import StrEnum
+      from pathlib import Path
+      from typing import Any, Final, Mapping
+      
+      import tomllib
+      
+      PYPROJECT_FILENAME: Final[str] = "pyproject.toml"
+      
+      
+      class RequirementOperator(StrEnum):
+          """Unterstützte Vergleichsoperatoren für Dependency-Spezifikationen."""
+      
+          NOT_EQUAL = "!="
+          EQUAL = "=="
+          GTE = ">="
+          LTE = "<="
+          GT = ">"
+          LT = "<"
+          COMPAT = "~="
+          EXACT = "==="
+      
+          @classmethod
+          def detect(cls, entry: str) -> tuple[str, str] | None:
+              """
+              Extrahiert (name, versionsspezifikation) aus einem Eintrag oder None.
+      
+              Beispiel:
+                  "pytest>=8.0"  -> ("pytest", ">=8.0")
+                  "pytest"       -> None
+              """
+              result: tuple[str, str] | None = None
+              for op in sorted(cls, key=lambda o: len(o.value), reverse=True):
+                  if op in entry:
+                      name, spec = entry.split(op, 1)
+                      result = (name.strip(), f"{op}{spec.strip()}")
+                      break
+              return result
+      
+      
+      @dataclass(slots=True)
+      class PyProjectProfile:
+          """Setup-relevante Inhalte aus pyproject.toml."""
+      
+          requires_min_python: tuple[int, int] | None
+          runtime_requirements: Mapping[str, str] = field(default_factory=dict)
+          dev_requirements: Mapping[str, str] = field(default_factory=dict)
+          uses_import_linter: bool = True
+          uses_pytest: bool = True
+      
+          # Step-Steuerung aus [tool.setup]
+          step_include: tuple[str, ...] = field(default_factory=tuple)
+          step_exclude: tuple[str, ...] = field(default_factory=tuple)
+          step_options: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+          verbosity: int = 1
+          auto_install: bool = True
+      
+          # Vollständige pyproject-Struktur für generische Zugriffe
+          pyproject_data: Mapping[str, Any] = field(default_factory=dict)
+      
+          def get_path(self, *path: str, default: Any = None) -> Any:
+              """
+              Generischer Zugriff auf verschachtelte pyproject.toml-Werte.
+      
+              Beispiel:
+                  profile.get_path("tool", "importlinter", "contracts", default=[])
+      
+              Gibt default zurück, wenn ein Segment fehlt oder der Pfad nicht
+              auf ein Mapping zeigt.
+              """
+              data: Any = self.pyproject_data
+              for key in path:
+                  if not isinstance(data, Mapping):
+                      return default
+                  data = data.get(key)
+                  if data is None:
+                      return default
+              return data
+      
+      
+      def _min_version_from_segment(segment: str) -> tuple[int, int] | None:
+          """
+          Extrahiert eine Mindestversion (major, minor) aus einem Segment.
+      
+          Erwartet Einträge wie ">=3.10" und ignoriert fachlich unpassende Werte.
+          """
+          result: tuple[int, int] | None = None
+          detection: tuple[str, str] | None = RequirementOperator.detect(segment)
+      
+          if detection is not None:
+              name, version_spec = detection
+      
+              # für requires-python sind Paketnamen unerwartet
+              if not name:
+                  gte: str = RequirementOperator.GTE
+                  if version_spec.startswith(gte):
+                      version: str = version_spec.removeprefix(gte).strip()
+                      parts: list[str] = version.split(".")
+      
+                      if len(parts) >= 2:
+                          major_str: str = parts[0]
+                          minor_str: str = parts[1]
+      
+                          if major_str.isdecimal() and minor_str.isdecimal():
+                              major: int = int(major_str)
+                              minor: int = int(minor_str)
+                              result = (major, minor)
+          return result
+      
+      
+      def _parse_requires_python(spec: str | None) -> tuple[int, int] | None:
+          """
+          Interpretiert `project.requires-python` als Mindestversion (major, minor).
+      
+          Ausgewertet wird nur die erste untere Schranke vom Typ ">=X.Y".
+          """
+          result: tuple[int, int] | None = None
+      
+          if spec:
+              segments = (segment.strip() for segment in spec.split(","))
+              for segment in segments:
+                  if not segment:
+                      continue
+      
+                  version: tuple[int, int] | None = _min_version_from_segment(segment)
+                  if version is not None:
+                      result = version
+                      break
+      
+          return result
+      
+      
+      def _normalize_requirements(entries: list[str]) -> Mapping[str, str]:
+          """
+          Normalisiert eine Liste von Abhängigkeiten in ein Mapping name -> spec.
+          """
+          result: dict[str, str] = {}
+      
+          for raw in entries:
+              entry: str = raw.strip()
+              if not entry:
+                  continue
+      
+              detection: tuple[str, str] | None = RequirementOperator.detect(entry)
+              if detection is None:
+                  result[entry] = ""
+              else:
+                  name, version_spec = detection
+                  result[name] = version_spec
+      
+          return result
+      
+      
+      def _load_pyproject_data(path: Path) -> Mapping[str, Any]:
+          """
+          Lädt pyproject.toml.
+      
+          Falls keine Datei existiert, wird ein leeres Mapping geliefert,
+          so dass das Setup mit Standardprofil weiterlaufen kann.
+          """
+          if not path.exists():
+              return {}
+      
+          with path.open("rb") as handle:
+              data: Mapping[str, Any] = tomllib.load(handle)
+      
+          return data
+      
+      
+      def _normalize_str_list(value: Any) -> tuple[str, ...]:
+          """
+          Normalisiert Werte aus der pyproject-Konfiguration auf eine
+          geordnete Tupel-Liste von Strings.
+          """
+          if value is None:
+              return ()
+          if isinstance(value, str):
+              value = [value]
+      
+          result: list[str] = []
+          for item in value:
+              text = str(item).strip()
+              if text:
+                  result.append(text)
+          return tuple(result)
+      
+      
+      def build_profile(repo_root: Path) -> PyProjectProfile:
+          """
+          Baut ein PyProjectProfile aus der pyproject.toml im repo_root.
+      
+          Die Datei wird genau einmal geladen; weitere Auswertungen (z. B.
+          Contracts für import-linter) greifen über `pyproject_data` / `get_path`
+          auf diese Struktur zu.
+          """
+          pyproject_path = repo_root / PYPROJECT_FILENAME
+      
+          if not pyproject_path.exists():
+              # Vollständig definierte Default-Konfiguration
+              return PyProjectProfile(
+                  requires_min_python=None,
+                  runtime_requirements={},
+                  dev_requirements={},
+                  uses_import_linter=True,
+                  uses_pytest=True,
+                  step_include=(),
+                  step_exclude=(),
+                  step_options={},
+                  verbosity=1,
+                  auto_install=True,
+                  pyproject_data={},
+              )
+      
+          data: Mapping[str, Any] = _load_pyproject_data(pyproject_path)
+      
+          project_table: Mapping[str, Any] = data.get("project", {})
+          requires_python_str: str | None = project_table.get("requires-python")
+          requires_min_python: tuple[int, int] | None = _parse_requires_python(
+              requires_python_str,
+          )
+      
+          # Laufzeit-Abhängigkeiten kommen aus [project].dependencies
+          deps_list: list[str] = project_table.get("dependencies", [])
+          runtime_requirements: Mapping[str, str] = _normalize_requirements(deps_list)
+      
+          # Dev-Abhängigkeiten kommen aus [project.optional-dependencies].dev
+          optional_deps: Mapping[str, list[str]] = project_table.get(
+              "optional-dependencies",
+              {},
+          )
+          dev_requirements: Mapping[str, str] = _normalize_requirements(
+              optional_deps.get("dev", []),
+          )
+      
+          tool_table: Mapping[str, Any] = data.get("tool", {})
+          setup_table: Mapping[str, Any] = tool_table.get("setup", {})
+      
+          uses_import_linter: bool = bool(setup_table.get("uses-import-linter", True))
+          uses_pytest: bool = bool(setup_table.get("uses-pytest", True))
+      
+          step_include: tuple[str, ...] = _normalize_str_list(setup_table.get("steps"))
+          step_exclude: tuple[str, ...] = _normalize_str_list(setup_table.get("exclude"))
+      
+          raw_options: Any = setup_table.get("options", {})
+          step_options: Mapping[str, Mapping[str, Any]]
+          if isinstance(raw_options, Mapping):
+              tmp: dict[str, Mapping[str, Any]] = {}
+              for key, value in raw_options.items():
+                  if isinstance(value, Mapping):
+                      tmp[str(key)] = dict(value)
+              step_options = tmp
+          else:
+              step_options = {}
+      
+          profile: PyProjectProfile = PyProjectProfile(
+              requires_min_python=requires_min_python,
+              runtime_requirements=runtime_requirements,
+              dev_requirements=dev_requirements,
+              uses_import_linter=uses_import_linter,
+              uses_pytest=uses_pytest,
+              step_include=step_include,
+              step_exclude=step_exclude,
+              step_options=step_options,
+              # neu: vollständige pyproject-Struktur für alle Steps
+              pyproject_data=data,
+          )
+          return profile
+  - rel_path: setup/logging.py
+    hash: 1463db9addbd5fffe1b24440e3989d8efa43d962b8d504ea12e74e04c6809b5e
+    content: |-
+      """
+      Fehlerprotokollierung für den Setup-Prozess.
+      
+      Dieses Modul stellt eine schlanke `ErrorLog`-Klasse bereit, die Einträge
+      in eine Log-Datei des Setup-Prozesses schreibt.
+      """
+      from __future__ import annotations
+      
+      from dataclasses import dataclass, field
+      from pathlib import Path
+      
+      
+      @dataclass(slots=True)
+      class ErrorLog:
+          """
+          Einfache Fehlerprotokollierung in eine Textdatei.
+      
+          Die Klasse kapselt die I/O-Logik und wird von den Setup-Schritten
+          genutzt, um technische Details konsistent zu protokollieren.
+          """
+      
+          path: Path = field()
+      
+          def write_error(self, section: str, message: str, details: str | None = None) -> None:
+              """
+              Schreibt einen Fehlerabschnitt in die Log-Datei.
+      
+              Parameter:
+                  section:
+                      Grober Kontext des Fehlers (z. B. 'pytest', 'Import-Linter').
+                  message:
+                      Kurzbeschreibung des Fehlers.
+                  details:
+                      Optionaler, ausführlicherer Text (z. B. stdout/stderr).
+              """
+              lines: list[str] = [
+                  "",
+                  f"[SECTION] {section}",
+                  f"[MESSAGE] {message}",
+              ]
+      
+              if details:
+                  lines.append("[DETAILS]")
+                  lines.append(details)
+      
+              lines.append("")
+      
+              with self.path.open("a", encoding="utf-8") as log_file:
+                  log_file.write("\n".join(lines))
+  - rel_path: setup/steps/__init__.py
+    hash: bf7406863dd65f07587d2ff2075f55c9acc9d2e14376966dffb4d6d5a53d7390
+    content: |-
+      from __future__ import annotations
+      """
+      Fassade für die Setup-Schritte der UFO-Simulation.
+      
+      Dieses Paket bündelt die von außen genutzten Funktionen der einzelnen
+      Setup-Step-Module und stellt einen stabilen Importpunkt für den Bootstrap
+      bereit.
+      """
+      
+      from .base import BaseStep
+      from .create_env import CreateEnvStep
+      from .install_deps import InstallDepsStep
+      from .linter_check import EvaluateImportsStep
+      from .test_runner import RunTestsStep
+      
+      STEPS: tuple[type[BaseStep[object]], ...] = (
+          CreateEnvStep,
+          InstallDepsStep,
+          EvaluateImportsStep,
+          RunTestsStep,
+      )
+      
+      __all__ = [cls.__name__ for cls in STEPS]
+  - rel_path: setup/steps/base/__init__.py
+    hash: 5b0542ca565368e30cc2b85d9ab08123f876dc147b53d91a860d41f9a498225b
+    content: |-
+      # tools/setup/steps/base/__init__.py
+      from __future__ import annotations
+      """
+      Basis-API für Setup-Schritte.
+      
+      Bündelt die zentrale Step-Basis und den StepContext.
+      """
+      
+      from .step import BaseStep
+      from .meta import StepContext
+      
+      __all__: list[str] = [
+          "BaseStep",
+          "StepContext",
+      ]
+  - rel_path: setup/steps/base/meta.py
+    hash: 92e023fe5be9e9e7053905f4399070b7bf49dc9674fa11166fb16e3f6565886f
+    content: |-
+      # tools/setup/steps/base/meta.py
+      from __future__ import annotations
+      
+      import re
+      from abc import ABCMeta
+      from dataclasses import dataclass
+      from typing import Any, TYPE_CHECKING
+      
+      from tools.setup.domain import BootstrapConfig, PyProjectProfile
+      from tools.setup.logging import ErrorLog
+      from tools.setup.ui import SetupConsole
+      
+      if TYPE_CHECKING:
+          # Nur für Typprüfer; zur Laufzeit kein Import → kein Zirkel.
+          from tools.setup.steps.base import BaseStep
+      
+      _STID_PATTERN = re.compile(r"^[a-z0-9_]+$")
+      
+      
+      @dataclass(slots=True)
+      class StepContext:
+          """
+          Gemeinsamer Ausführungskontext für Setup-Schritte.
+          """
+      
+          config: BootstrapConfig
+          profile: PyProjectProfile
+          console: SetupConsole
+          log: ErrorLog
+      
+      
+      class BaseStepMeta(ABCMeta):
+          """
+          Metaklasse für Setup-Steps.
+      
+          Validiert:
+          - stid existiert und ist ein String
+          - stid erfüllt das Pattern [a-z0-9_]+
+          - stid ist über alle Steps eindeutig
+          """
+      
+          # Für Debug/Inspektion reicht ein „breiter“ Typ:
+          _registry: dict[str, type[Any]] = {}
+      
+          def __init__(
+              cls,
+              name: str,
+              bases: tuple[type, ...],
+              namespace: dict[str, Any],
+              **kwargs: Any,  # type: ignore[override]
+          ) -> None:
+              # WICHTIG: keine @dataclass-Dekoration auf der Metaklasse selbst,
+              # damit super().__init__ sauber den ABCMeta/type-MRO-Pfad nutzt.
+              super().__init__(name, bases, namespace, **kwargs)
+      
+              # Basis-Klasse selbst nicht validieren
+              if name == "BaseStep":
+                  return
+      
+              registry = BaseStepMeta._registry
+      
+              # ------------------------------------------------------------
+              # Sonderfall: dataclass(slots=True) erzeugt Klasse intern neu.
+              # Beim zweiten Aufruf kommt eine Klasse mit gleichem Namen und
+              # Modul, aber die Attribute (z.B. stid) sind bereits Deskriptoren.
+              # -> In diesem Fall NICHT neu validieren, sondern die bereits
+              #    registrierte Klasse durch die neue ersetzen.
+              # ------------------------------------------------------------
+              for existing_stid, existing_cls in list(registry.items()):
+                  if (
+                      existing_cls.__name__ == cls.__name__
+                      and existing_cls.__module__ == cls.__module__
+                      and existing_cls is not cls
+                  ):
+                      registry[existing_stid] = cls
+                      return
+      
+              # Normalfall: erste Definition dieser Step-Klasse
+              stid = getattr(cls, "stid", None)
+      
+              if not isinstance(stid, str) or not _STID_PATTERN.fullmatch(stid):
+                  raise ValueError(
+                      f"Step {name} hat eine ungültige stid {stid!r} – "
+                      "erlaubt sind nur Kleinbuchstaben, Ziffern und Unterstrich."
+                  )
+      
+              if stid in registry and registry[stid] is not cls:
+                  other = registry[stid].__name__
+                  raise ValueError(
+                      f"Step {name} verwendet stid {stid!r}, "
+                      f"die bereits von {other} genutzt wird."
+                  )
+      
+              registry[stid] = cls  # type: ignore[assignment]
+      
+          @classmethod
+          def registry(mcls) -> dict[str, type[Any]]:
+              """Optionale Debug-API, falls du die registrierten Steps inspizieren willst."""
+              return dict(mcls._registry)
+  - rel_path: setup/steps/base/step.py
+    hash: d99a66f7e0040f905bcb467885e4689b3188d98f6ac734d23c141424ea76f44c
+    content: |-
+      # tools/setup/steps/base/step.py
+      from __future__ import annotations
+      
+      import time
+      import traceback
+      from collections.abc import Sized
+      from abc import ABC, abstractmethod
+      from dataclasses import dataclass
+      from typing import ClassVar, Generic, Iterable, TypeVar, Mapping, Any
+      
+      from tools.setup.steps.base.meta import BaseStepMeta, StepContext
+      from tools.setup.ui import CATALOG
+      from tools.setup.ui.progress import ProgressMode, ProgressStep
+      from tools.setup.ui.output.error import error
+      
+      T = TypeVar("T")  # Typ des prepare()-Ergebnisses
+      
+      
+      @dataclass(slots=True)
+      class BaseStep(Generic[T], ABC, metaclass=BaseStepMeta):
+          """
+          Abstrakte Basis eines Setup-Schritts.
+      
+          Vereinheitlicht:
+          - Vorbereitungsphase (prepare)
+          - fachliche Ausführung (step)
+          - zentralen Orchestrator (run)
+          """
+      
+          # Instanzzustand
+          mode: ProgressMode = ProgressMode.AUTO
+      
+          # Metadaten – Klassenattribute, NICHT Dataclass-Felder
+          stid: ClassVar[str] = "generic"
+          priority: ClassVar[int] = 0
+      
+          @property
+          def name(self) -> str:
+              return type(self).__name__
+      
+          @property
+          def auto_install(self) -> bool:
+              """
+              Flag für automatische Installation in prepare().
+              Default: False – Steps überschreiben bei Bedarf.
+              Globale Voreinstellung kann über ctx.profile.auto_install interpretiert werden.
+              """
+              return False
+      
+          # ------------------------------------------------------------
+          # Konfig-/Text-Helfer
+          # ------------------------------------------------------------
+      
+          def options(self, ctx: StepContext) -> dict[str, object]:
+              """
+              Liefert Step-spezifische Optionen aus [tool.setup.options.<stid>].
+      
+              Beispiel-TOML:
+                  [tool.setup.options.tests]
+                  marker = "not slow"
+                  max-workers = 4
+              """
+              raw: Mapping[str, Any] | None = ctx.profile.step_options.get(self.stid)
+              return dict(raw or {})
+      
+          def output(
+              self,
+              ctx: StepContext,
+              *,
+              field: str = "default",
+              **extra: object,
+          ) -> str:
+              """
+              Liefert einen formatierten Text aus setup_ui.toml mit Fallback.
+      
+              Für field="header":
+                  - texts.<StepName>.header
+                  - texts.step_default.header
+                  - Fallback: "Setup-{stid} {StepName}"
+      
+              Für andere Felder:
+                  - texts.<StepName>.<field>
+                  - texts.step_default.<field>
+                  - Fallback: "StepName: status – cause"
+              """
+              placeholders: dict[str, object] = {
+                  "step": self.name,
+                  "env": ctx.config.platform.name,
+                  "type": self.stid,
+                  "module": self.name,
+                  **extra,
+              }
+      
+              status = str(extra.get("status", "")).strip()
+              cause = str(extra.get("cause", "")).strip()
+              parts = [p for p in (status, cause) if p]
+      
+              if field == "header":
+                  fallback = f"Setup-{self.stid} {self.name}"
+              else:
+                  fallback = f"{self.name}: {' – '.join(parts)}" if parts else self.name
+      
+              for block in (self.name, "step_default"):
+                  if text := CATALOG.format(block, field=field, default="", **placeholders):
+                      return text
+      
+              return fallback
+      
+      
+          def estimate_total(self, prepared: T | None) -> int | None:
+              """
+              Liefert eine Schätzung der Anzahl Arbeitseinheiten für den Progress-Balken.
+      
+              Default:
+              - Wenn prepared Sized ist (z.B. list/tuple), verwende len(prepared)
+              - Sonst None → indeterminierter Fortschritt
+              """
+              if isinstance(prepared, Sized):
+                  # type: ignore[arg-type] ist hier okay, weil Sized len() garantiert
+                  return len(prepared)  # type: ignore[arg-type]
+              return None
+      
+      
+          # noinspection PyMethodMayBeStatic
+          def _ensure(
+              self,
+              ctx: StepContext,
+              *,
+              spec: str | None = None,
+              cmd: Iterable[str] | None = None,
+          ) -> bool:
+              """
+              Führe eine Installation über tools.setup.utils.install aus.
+      
+              Entweder:
+                  _ensure(ctx, spec="paket")
+              oder:
+                  _ensure(ctx, cmd=("sh", "-c", "..."))
+              """
+              from tools.setup.utils import install  # Fassade
+      
+              assert (spec is not None) ^ (cmd is not None)
+      
+              kwargs: dict[str, object] = {"cmd": cmd} if cmd else {
+                  "python": str(ctx.config.venv_python),
+                  "spec": spec,
+              }
+      
+              rc, *_ = install(
+                  cwd=ctx.config.repo_root,
+                  **kwargs,
+              )
+              return rc == 0
+      
+          # ------------------------------------------------------------
+          # Template-Method
+          # ------------------------------------------------------------
+      
+          def prepare(self, ctx: StepContext) -> T | None:
+              """
+              Optionaler Vorbereitungsschritt.
+      
+              Default: nichts vorbereiten – Subklassen überschreiben.
+              """
+              return None
+      
+          @abstractmethod
+          def step(
+              self,
+              ctx: StepContext,
+              prepared: T | None,
+              progress: ProgressStep | None,
+          ) -> bool:
+              """
+              Fachlicher Kern des Schritts.
+      
+              Rückgabe:
+                  True  → Step erfolgreich
+                  False → Step fehlgeschlagen
+              """
+              raise NotImplementedError
+      
+          # ------------------------------------------------------------
+          # Orchestrator
+          # ------------------------------------------------------------
+      
+          def run(self, ctx: StepContext) -> bool:
+              prepared = self.prepare(ctx)
+      
+              header_text = self.output(ctx, field="header")
+              if not header_text:
+                  header_text = f"Setup-{self.stid} {self.name}"
+      
+              with self.mode.make_context(header_text, ctx.console) as progress:
+                  # Total generisch aus prepared ableiten
+                  if progress is not None:
+                      total_hint = self.estimate_total(prepared)
+                      if total_hint is not None:
+                          progress.set_total(total_hint)
+      
+                  try:
+                      ok = self.step(ctx, prepared, progress)
+                  except BaseException as exc:
+                      exc_type_name = type(exc).__name__
+                      exc_message = str(exc) or repr(exc)
+                      tb_text = "".join(
+                          traceback.format_exception(type(exc), exc, exc.__traceback__)
+                      )
+      
+                      msg = self.output(
+                          ctx,
+                          field="failure",
+                          cause=exc_type_name,
+                          details=exc_message,
+                      )
+      
+                      if progress is not None:
+                          progress.set_status(msg)
+                          progress.mark_failed()
+      
+                      # YAML-Fehlerblock bauen und auf Konsole schreiben
+                      block = error(
+                          step=self.name,
+                          stid=self.stid,
+                          exc_type=exc_type_name,
+                          message=exc_message,
+                          traceback_text=tb_text,
+                      )
+                      ctx.console.error(block)
+      
+                      ctx.log.write_error(
+                          section=self.name,
+                          message=msg,
+                          details=tb_text,
+                      )
+                      return False
+      
+                  if progress is not None:
+                      total = getattr(progress, "total", None)
+                      completed = getattr(progress, "completed", 0)
+      
+                      if total and completed < total:
+                          progress.advance(total - completed)  # type: ignore[arg-type]
+      
+                      if ok:
+                          progress.mark_finished()
+                      else:
+                          progress.mark_failed()
+      
+                  time.sleep(1.5)
+                  return ok
+  - rel_path: setup/steps/create_env.py
+    hash: c05a12e383600a8dd08bdae6dc997bd84d44d45f7ca97100ae6b6e4358702920
+    content: |-
+      # tools/setup/steps/create_env.py
+      from __future__ import annotations
+      
+      import sys
+      from dataclasses import dataclass
+      from typing import override
+      
+      from tools.setup.steps.base import BaseStep, StepContext
+      from tools.setup.ui.progress import ProgressStep
+      from tools.setup.utils.version import check_python_version, ensure_venv
+      
+      
+      @dataclass(slots=True)
+      class CreateEnvStep(BaseStep[None]):
+          """
+          Setup-Schritt zum Erzeugen der Projekt-Virtualenv.
+          """
+      
+          stid = "create_env"
+          priority = sys.maxsize - 1000
+      
+      
+          @override
+          def step(
+              self,
+              ctx: StepContext,
+              _prepared: None,
+              progress: ProgressStep | None,
+          ) -> bool:
+              # 1) Python-Version prüfen
+              ok, cause, details = check_python_version(ctx)
+              if not ok:
+                  msg = self.output(
+                      ctx,
+                      field="failure",
+                      cause=cause,
+                      details=details,
+                  )
+                  if progress is not None:
+                      progress.set_status(msg)
+                  ctx.log.write_error(
+                      section=self.name,
+                      message=msg,
+                      details=details,
+                  )
+                  return False
+      
+              # 2) venv erzeugen
+              ok, cause, details = ensure_venv(ctx, True)
+              field = "success" if ok else "failure"
+              msg = self.output(
+                  ctx,
+                  field=field,
+                  cause=cause,
+                  details=details,
+              )
+      
+              if progress is not None:
+                  progress.set_status(msg)
+      
+              if not ok:
+                  ctx.log.write_error(
+                      section=self.name,
+                      message=msg,
+                      details=details,
+                  )
+      
+              return ok
+  - rel_path: setup/steps/install_deps.py
+    hash: 49e71eeaa2ea3eaba9053615169839626578f8be398b162b5690c6803f2d6d56
+    content: |-
+      from __future__ import annotations
+      
+      from collections.abc import Sequence
+      from dataclasses import dataclass
+      from typing import Final, override
+      
+      from tools.setup.steps.base import BaseStep, StepContext
+      from tools.setup.ui import CATALOG
+      from tools.setup.ui.progress import ProgressStep
+      from tools.setup.utils import run_command, short_output
+      
+      
+      Command = tuple[tuple[str, ...], str]  # (argv, label)
+      
+      
+      @dataclass(slots=True)
+      class InstallDepsStep(BaseStep[Sequence[Command]]):
+          """
+          Setup-Schritt zur Installation der Projekt-Abhängigkeiten aus pyproject.toml.
+      
+          Strategie:
+          - Projekt im Editable-Modus installieren: python -m pip install -e .
+          - Laufzeit-Dependencies aus [project].dependencies einzeln installieren
+          - Dev-Dependencies aus [project.optional-dependencies].dev einzeln installieren
+          """
+      
+          stid        = "dependencies"
+          priority    = 9999
+      
+          @override
+          def prepare(self, ctx: StepContext) -> Sequence[Command]:
+              python = str(ctx.config.venv_python)
+      
+              runtime = ctx.profile.runtime_requirements
+              dev = ctx.profile.dev_requirements
+      
+              def build_spec(name: str, spec: str) -> str:
+                  return f"{name}{spec}" if spec else name
+      
+              commands: list[Command] = [((python, "-m", "pip", "install", "-e", "."), "Projekt (editable)",)]
+      
+              for name, spec in runtime.items():
+                  pkg_spec = build_spec(name, spec)
+                  commands.append(((python, "-m", "pip", "install", pkg_spec), pkg_spec))
+      
+              for name, spec in dev.items():
+                  pkg_spec = build_spec(name, spec)
+                  commands.append(((python, "-m", "pip", "install", pkg_spec), pkg_spec))
+      
+              return tuple(commands)
+      
+          @override
+          def step(
+                  self,
+                  ctx: StepContext,
+                  prepared: Sequence[Command] | None,
+                  progress: ProgressStep | None,
+          ) -> bool:
+              assert prepared is not None, "InstallDepsStep.prepare() muss Commands liefern."
+      
+              cwd = str(ctx.config.repo_root)
+              total = len(prepared) or 1
+      
+              def fmt(field: str, default: str, **kwargs: object) -> str:
+                  return CATALOG.format(
+                      "step_default",
+                      field=field,
+                      default=default,
+                      **kwargs,
+                  )
+      
+              def set_status(field: str, default: str, **kwargs: object) -> None:
+                  if progress:
+                      progress.set_status(fmt(field=field, default=default, **kwargs))
+      
+              for index, (argv, label) in enumerate(prepared, start=1):
+                  set_status(
+                      "progress_running",
+                      "Running  /   {details}",
+                      details=fmt(
+                          "install_details",
+                          "Installiere: {package} ({index}/{total})",
+                          package=label,
+                          index=index,
+                          total=total,
+                      ),
+                  )
+      
+                  result = run_command(argv, cwd=cwd)
+                  raw = (result.stdout or "") + (result.stderr or "")
+      
+                  if result.returncode != 0:
+                      details_text = short_output(raw) or raw or "keine Ausgabe"
+      
+                      set_status(
+                          "progress_failed",
+                          "Failed   /   {details}",
+                          details=fmt(
+                              "install_failed",
+                              "{package}: {details}",
+                              package=label,
+                              details=details_text,
+                          ),
+                      )
+                      if progress:
+                          progress.mark_failed()
+      
+                      msg = self.output(
+                          ctx,
+                          field="failure",
+                          cause="pip_install_failed",
+                          details=details_text,
+                      )
+                      ctx.log.write_error(
+                          section=self.name,
+                          message=msg,
+                          details=raw or "keine Ausgabe",
+                      )
+                      return False
+      
+                  if progress:
+                      progress.advance(1)
+      
+              set_status(
+                  "progress_finished",
+                  "Finished /   {details}",
+                  details=fmt(
+                      "install_done",
+                      "Alle Abhängigkeiten installiert.",
+                  ),
+              )
+      
+              if progress:
+                  progress.mark_finished()
+      
+              return True
+  - rel_path: setup/steps/linter_check.py
+    hash: 9751af8018e000e5afecf487eb82724a14a6148a7c85cc9386872cc98501921e
+    content: |-
+      # tools/setup/steps/linter_check.py
+      from __future__ import annotations
+      
+      from dataclasses import dataclass
+      from typing import Any, Mapping, override
+      
+      from tools.setup.steps.base import BaseStep, StepContext
+      from tools.setup.ui.progress import ProgressStep
+      from tools.setup.ui import CATALOG
+      from tools.setup.utils import module
+      
+      from collections.abc import Mapping
+      
+      @dataclass(slots=True)
+      class EvaluateImportsStep(BaseStep[tuple[str, ...]]):
+          """
+          Setup-Schritt zum Ausführen von import-linter (Import-Regelprüfung).
+      
+          Design:
+          - prepare()
+              * prüft, ob importlinter.cli aufrufbar ist (Probe).
+              * versucht bei Bedarf Auto-Installation.
+              * liest Contracts aus dem bereits geladenen PyProjectProfile und gibt
+                die Contract-Namen als Arbeitseinheiten zurück.
+          - estimate_total()
+              * leitet die Progress-Balkenlänge aus der Anzahl Contracts ab.
+          - step()
+              * führt import-linter pro Contract logisch als eigene Einheit aus
+                (technisch kann derselbe CLI-Aufruf mehrfach sein) und aktualisiert
+                den Fortschritt/Status entsprechend.
+          """
+      
+          stid = "import_linter"
+          priority = 40
+      
+          @override
+          @property
+          def auto_install(self) -> bool:
+              """import-linter darf bei Bedarf automatisch nachinstalliert werden."""
+              return True
+      
+          # -------------------------------------------------------------
+          # Hilfsfunktionen
+          # -------------------------------------------------------------
+          def _collect_contracts(self, ctx: StepContext) -> tuple[str, ...]:
+              """
+              Versucht, Contract-Namen aus dem bereits geladenen PyProjectProfile
+              zu extrahieren.
+      
+              Erwartete (vereinfachte) Struktur in pyproject.toml:
+      
+                  [tool.importlinter]
+                  root_package = "..."
+      
+                  [[tool.importlinter.contracts]]
+                  name = "Contract 1"
+                  ...
+      
+              Rückgabe:
+                  Tuple aller gefundenen Contract-Namen.
+                  Fallback: leeres Tuple, falls nichts gefunden werden kann.
+              """
+              data = ctx.profile.pyproject_data
+              if not isinstance(data, Mapping):
+                  return ()
+      
+              import_cfg = data.get("tool", {}).get("importlinter")
+              if not isinstance(import_cfg, Mapping):
+                  return ()
+      
+              contracts_raw = import_cfg.get("contracts", [])
+              names: list[str] = []
+      
+              from collections.abc import Mapping
+      
+              if isinstance(contracts_raw, list):
+                  names.extend(
+                      stripped
+                      for item in contracts_raw
+                      if isinstance(item, Mapping)
+                      if isinstance(name := item.get("name"), str)
+                      if (stripped := name.strip())
+                  )
+      
+              return tuple(names)
+      
+          @override
+          def prepare(self, ctx: StepContext) -> tuple[str, ...]:
+              """
+              Prüft importlinter.cli, versucht ggf. Auto-Installation und liefert
+              die Contract-Namen als Arbeitseinheiten.
+              """
+              python = str(ctx.config.venv_python)
+              cwd = ctx.config.repo_root
+      
+              def probe() -> tuple[bool, str, str | None]:
+                  return module.evaluate(
+                      python=python,
+                      module="importlinter.cli",
+                      cwd=cwd,
+                      extra_args=("--help",),
+                  )
+      
+              def fail(prefix: str, exc_info: str | None, output: str) -> None:
+                  cause, details = module.classify(
+                      exc_info=exc_info,
+                      output=output,
+                      module="importlinter",
+                  )
+                  text = details or output or ""
+                  msg = self.output(ctx, field="failure", cause=cause, details=text)
+                  ctx.log.write_error(section=self.name, message=msg, details=text)
+                  raise RuntimeError(f"{prefix}: {cause}: {details}")
+      
+              # 1. Probe
+              ok, output, exc_info = probe()
+      
+              # 2. Optional: Auto-Installation + erneute Probe
+              if self.auto_install and not ok:
+                  rc, raw_install, short_install = module.install(
+                      python=python,
+                      spec="import-linter",
+                      cwd=cwd,
+                  )
+                  ok_install = rc == 0
+                  if not ok_install:
+                      # Für install() haben wir kein separates exc_info,
+                      # nur den Output der Installation.
+                      fail(
+                          "import-linter konnte nicht installiert werden",
+                          exc_info=None,
+                          output=raw_install,
+                      )
+      
+                  ok, output, exc_info = probe()
+      
+              # 3. Finale Prüfung
+              if not ok:
+                  fail(
+                      "import-linter Probe fehlgeschlagen",
+                      exc_info=exc_info,
+                      output=output,
+                  )
+      
+              # Contracts kommen jetzt ausschließlich aus dem bereits geladenen Profil
+              return self._collect_contracts(ctx)
+      
+          @override
+          def estimate_total(self, prepared: tuple[str, ...] | None) -> int | None:
+              """
+              Balkenlänge = Anzahl Contracts, mindestens 1 für sinnvolle Visualisierung.
+              """
+              if prepared:
+                  return len(prepared)
+              return 1
+      
+          @override
+          def step(
+              self,
+              ctx: StepContext,
+              prepared: tuple[str, ...] | None,
+              progress: ProgressStep | None,
+          ) -> bool:
+              python = str(ctx.config.venv_python)
+              cwd = ctx.config.repo_root
+      
+              contracts = prepared or tuple()
+              if not contracts:
+                  # Fallback: eine logische Einheit, z. B. "Gesamtkonfiguration"
+                  contracts = ("Konfigurationsprüfung",)
+      
+              total = len(contracts)
+      
+              ok_overall = True
+              cause = ""
+              details = ""
+              last_output = ""
+      
+              for index, contract in enumerate(contracts, start=1):
+                  if progress is not None:
+                      contract_details = CATALOG.format(
+                          "ImportLinterStep",
+                          field="import_details",
+                          default="Contract {index}/{total}: {contract}",
+                          index=index,
+                          total=total,
+                          contract=contract,
+                      )
+                      running = CATALOG.format(
+                          "step_default",
+                          field="progress_running",
+                          default="Running  /   {details}",
+                          details=contract_details,
+                      )
+                      progress.set_status(running)
+      
+                  # Technisch wird hier die gesamte Konfiguration geprüft – die
+                  # Contract-Namen dienen primär der Visualisierung.
+                  ok, output, exc_info = module.evaluate(
+                      python=python,
+                      module="importlinter.cli",
+                      cwd=cwd,
+                      extra_args=(),
+                  )
+                  last_output = output or ""
+      
+                  if not ok:
+                      kind, det = module.classify(
+                          exc_info=exc_info,
+                          output=output,
+                          module="importlinter",
+                      )
+                      ok_overall = False
+                      cause = kind
+                      details = det or output or "keine Ausgabe"
+      
+                  if progress is not None:
+                      progress.advance(1)
+      
+                  if not ok:
+                      break
+      
+              msg = self.output(
+                  ctx,
+                  field="success" if ok_overall else "failure",
+                  cause=cause,
+                  details=details or last_output or "",
+              )
+      
+              if progress is not None:
+                  field = "import_done" if ok_overall else "import_failed"
+                  default_details = (
+                      "Alle Import-Regeln eingehalten."
+                      if ok_overall
+                      else "Import-Regeln verletzt – Details siehe Log."
+                  )
+                  details_text = CATALOG.format(
+                      "ImportLinterStep",
+                      field=field,
+                      default=default_details,
+                  )
+      
+                  status_field = "progress_finished" if ok_overall else "progress_failed"
+                  status_default = (
+                      "Finished /   {details}"
+                      if ok_overall
+                      else "Failed   /   {details}"
+                  )
+      
+                  progress.set_status(
+                      CATALOG.format(
+                          "step_default",
+                          field=status_field,
+                          default=status_default,
+                          details=details_text,
+                      )
+                  )
+      
+              if not ok_overall:
+                  ctx.log.write_error(
+                      section=self.name,
+                      message=msg,
+                      details=details or last_output or "",
+                  )
+      
+              return ok_overall
+  - rel_path: setup/steps/test_runner.py
+    hash: 8e260a492190a1cf748973be37cfa31f4ffeb3b63a1d55d1cedbefc73ab47265
+    content: |-
+      # tools/setup/steps/test_runner.py
+      from __future__ import annotations
+      
+      from dataclasses import dataclass
+      from typing import override
+      
+      from tools.setup.steps.base import BaseStep, StepContext
+      from tools.setup.ui.progress import ProgressStep
+      from tools.setup.ui import CATALOG
+      from tools.setup.utils import module
+      
+      
+      @dataclass(slots=True)
+      class RunTestsStep(BaseStep[tuple[str, ...]]):
+          """
+          Setup-Schritt zum Ausführen der Test-Suite via pytest.
+      
+          Design:
+          - prepare() sammelt alle Test-NodeIDs via "pytest --collect-only -q".
+          - estimate_total() leitet die Balkenlänge aus der Anzahl Tests ab.
+          - step() führt jeden Test einzeln aus und aktualisiert Progress/Status.
+          """
+      
+          stid = "tests"
+          priority = 0
+      
+      
+          @override
+          def prepare(self, ctx: StepContext) -> tuple[str, ...]:
+              """Sammelt alle Test-NodeIDs, die später als Arbeitseinheiten dienen."""
+              ok, output, exc_info = module.evaluate(
+                  python=str(ctx.config.venv_python),
+                  module="pytest",
+                  cwd=ctx.config.repo_root,
+                  extra_args=("--collect-only", "-q"),
+              )
+      
+              if not ok:
+                  kind, details = module.classify(
+                      exc_info=exc_info,
+                      output=output,
+                      module="pytest",
+                  )
+                  msg = self.output(
+                      ctx,
+                      field="failure",
+                      cause=kind,
+                      details=details or output or "pytest --collect-only fehlgeschlagen",
+                  )
+                  ctx.log.write_error(
+                      section=self.name,
+                      message=msg,
+                      details=details or output or "",
+                  )
+                  # Harte Exception → BaseStep.run() behandelt das wie einen Step-Fehler
+                  raise RuntimeError(f"pytest Collect-Phase fehlgeschlagen: {kind}: {details}")
+      
+              tests: list[str] = []
+              for line in (output or "").splitlines():
+                  stripped = line.strip()
+                  if not stripped:
+                      continue
+                  # Grober Filter: pytest gibt bei -q pro Test üblicherweise eine NodeID aus.
+                  if stripped.startswith(("collected ", "<", "=")):
+                      continue
+                  tests.append(stripped)
+      
+              return tuple(tests)
+      
+          @override
+          def step(
+              self,
+              ctx: StepContext,
+              prepared: tuple[str, ...] | None,
+              progress: ProgressStep | None,
+          ) -> bool:
+              tests = prepared or tuple()
+              python = str(ctx.config.venv_python)
+              cwd = ctx.config.repo_root
+      
+              # Fall: keine Tests gefunden → einmaliger pytest-Run als Fallback.
+              if not tests:
+                  ok, output, exc_info = module.evaluate(
+                      python=python,
+                      module="pytest",
+                      cwd=cwd,
+                      extra_args=(),
+                  )
+      
+                  cause = ""
+                  details = ""
+      
+                  match exc_info, ok:
+                      case str() as err, _:
+                          cause = "tests_running_error"
+                          details = err
+                      case None, False:
+                          cause = "tests_failed"
+                          details = output or "keine Ausgabe"
+      
+                  msg = self.output(
+                      ctx,
+                      field="success" if ok else "failure",
+                      cause=cause,
+                      details=details,
+                  )
+      
+                  if progress is not None:
+                      # Status über CATALOG (Running/Finished/Failed) aktualisieren
+                      field = "progress_finished" if ok else "progress_failed"
+                      default = (
+                          "Finished /   Alle Tests erfolgreich."
+                          if ok
+                          else "Failed   /   Tests fehlgeschlagen – Details siehe Log."
+                      )
+                      progress.set_status(
+                          CATALOG.format(
+                              "step_default",
+                              field=field,
+                              default=default,
+                              details=details or output or "",
+                          )
+                      )
+      
+                  if not ok:
+                      ctx.log.write_error(
+                          section=self.name,
+                          message=msg,
+                          details=details or output or "",
+                      )
+      
+                  return ok
+      
+              total = len(tests)
+              ok_overall = True
+              cause = ""
+              details = ""
+              last_output = ""
+      
+              for index, nodeid in enumerate(tests, start=1):
+                  # Fortschritts-Text: konkreter Testname
+                  if progress is not None:
+                      test_details = CATALOG.format(
+                          "RunTestsStep",
+                          field="test_details",
+                          default="Test {index}/{total}: {test}",
+                          index=index,
+                          total=total,
+                          test=nodeid,
+                      )
+                      running = CATALOG.format(
+                          "step_default",
+                          field="progress_running",
+                          default="Running  /   {details}",
+                          details=test_details,
+                      )
+                      progress.set_status(running)
+      
+                  ok, output, exc_info = module.evaluate(
+                      python=python,
+                      module="pytest",
+                      cwd=cwd,
+                      extra_args=(nodeid,),
+                  )
+                  last_output = output or ""
+      
+                  test_cause = ""
+                  test_details = ""
+      
+                  match exc_info, ok:
+                      case str() as err, _:
+                          test_cause = "tests_running_error"
+                          test_details = err
+                      case None, False:
+                          test_cause = "tests_failed"
+                          test_details = output or "keine Ausgabe"
+      
+                  if progress is not None:
+                      progress.advance(1)
+      
+                  if not ok:
+                      ok_overall = False
+                      cause = test_cause
+                      details = test_details
+                      break
+      
+              msg = self.output(
+                  ctx,
+                  field="success" if ok_overall else "failure",
+                  cause=cause,
+                  details=details or last_output or "",
+              )
+      
+              # Finaler Status unter dem Balken
+              if progress is not None:
+                  field = "tests_done" if ok_overall else "tests_failed"
+                  default_details = (
+                      "Alle Tests erfolgreich."
+                      if ok_overall
+                      else "Tests fehlgeschlagen – Details siehe Log."
+                  )
+                  details_text = CATALOG.format(
+                      "RunTestsStep",
+                      field=field,
+                      default=default_details,
+                  )
+      
+                  status_field = "progress_finished" if ok_overall else "progress_failed"
+                  status_default = (
+                      "Finished /   {details}"
+                      if ok_overall
+                      else "Failed   /   {details}"
+                  )
+      
+                  progress.set_status(
+                      CATALOG.format(
+                          "step_default",
+                          field=status_field,
+                          default=status_default,
+                          details=details_text,
+                      )
+                  )
+      
+              if not ok_overall:
+                  ctx.log.write_error(
+                      section=self.name,
+                      message=msg,
+                      details=details or last_output or "",
+                  )
+      
+              return ok_overall
+  - rel_path: setup/ui/__init__.py
+    hash: 04842397aa2b02e419b70877d971350ac7274e16bf78813e0e0ab98e73e77b47
+    content: |-
+      # tools/setup/ui/__init__.py
+      from __future__ import annotations
+      """
+      Öffentliche UI-Schnittstellen für das Setup.
+      """
+      
+      from tools.setup.ui.console import SetupConsole
+      
+      from tools.setup.ui.progress.step import ProgressStep
+      from tools.setup.ui.progress.mode import ProgressMode
+      
+      from tools.setup.ui.resources import (
+          TextBlock,
+          TextCatalog,
+          CATALOG,
+      )
+      from tools.setup.ui.resources.icons import (
+          MessageLevel,
+          ProgressStatus,
+      )
+      
+      __all__ = [
+          "SetupConsole",
+          "ProgressStep",
+          "ProgressMode",
+          "TextBlock",
+          "TextCatalog",
+          "CATALOG",
+          "MessageLevel",
+          "ProgressStatus",
+      ]
+  - rel_path: setup/ui/console.py
+    hash: eec452b6fe7ae3b4e4f4cea770fe1c7d7315e8b8be26fc3b4d5d7f38e83d8c4f
+    content: |-
+      # tools/setup/ui/console.py
+      from __future__ import annotations
+      
+      from dataclasses import dataclass
+      
+      from tools.setup.ui.resources.icons import MessageLevel
+      
+      
+      @dataclass(slots=True)
+      class SetupConsole:
+          """
+          Schlankes Konsolen-Frontend für das Setup ohne externe Abhängigkeiten.
+      
+          Bietet eine kleine, klar definierte API für Setup-Schritte.
+          """
+      
+          # noinspection PyMethodMayBeStatic
+          def _emit(self, level: MessageLevel, message: str) -> None:
+              prefix = level.icon
+              line = f"{prefix} {message}" if prefix else message
+              print(line)
+      
+          # öffentliche API – von Steps verwendet
+          def info(self, message: str) -> None:
+              self._emit(MessageLevel.INFO, message)
+      
+          def warning(self, message: str) -> None:
+              self._emit(MessageLevel.WARNING, message)
+      
+          def error(self, message: str) -> None:
+              self._emit(MessageLevel.ERROR, message)
+      
+          def result(self, message: str, ok: bool) -> None:
+              level = MessageLevel.SUCCESS if ok else MessageLevel.ERROR
+              self._emit(level, message)
+      
+          # noinspection PyMethodMayBeStatic
+          def header(self, message: str) -> None:
+              # Header bewusst ohne Level-Icon, um die Einleitung nicht zu überfrachten
+              print(message)
+  - rel_path: setup/ui/output/__init__.py
+    hash: cc9605f07945a009481394fcdc91417486fac557df83e663ebb8d6adacf1feb7
+    content: |-
+      from __future__ import annotations
+      
+      from .message import Message
+      from .error import error
+      
+      __all__ = ["Message", "error"]
+  - rel_path: setup/ui/output/error.py
+    hash: 374f3148de8e45e09106eb96fbce838e0356d0026962e76db782c51643956f10
+    content: |-
+      # tools/setup/ui/error.py
+      from __future__ import annotations
+      
+      from datetime import datetime, timezone
+      
+      def error(
+          *,
+          step: str,
+          stid: str,
+          exc_type: str,
+          message: str,
+          traceback_text: str,
+          timestamp: datetime | None = None,
+      ) -> str:
+          ts = timestamp or datetime.now(timezone.utc)
+          iso = ts.isoformat(timespec="seconds")
+      
+          lines: list[str] = [
+              "error:",
+              f"  step: {step}",
+              f"  stid: {stid}",
+              f"  type: {exc_type}",
+              f"  message: {message}",
+              "  traceback: |",
+          ]
+          for line in traceback_text.rstrip().splitlines():
+              lines.append(f"    {line}")
+          lines.append(f"  timestamp: {iso}")
+          lines.append("")
+      
+          return "\n".join(lines)
+  - rel_path: setup/ui/output/message.py
+    hash: 9f607a2d47be0077ca0a9477abdba30c87ec39d5ab7c72904458b923bb7bdcfb
+    content: |-
+      from __future__ import annotations
+      """
+      Strukturiertes Nachrichtenmodell für die Setup-Konsole.
+      
+      Dieses Modul kapselt den Nachrichtentyp, der von der SetupConsole
+      für eine einheitliche Ausgabe verwendet wird.
+      """
+      
+      from dataclasses import dataclass
+      
+      from tools.setup.ui.resources.icons import MessageLevel
+      
+      
+      @dataclass(slots=True, frozen=True)
+      class Message:
+          """
+          Strukturierte Nachricht für die Setup-Konsole.
+      
+          Attributes:
+              level: Logische Stufe der Nachricht (info, success, warning, error, plain).
+              content: Auszugebender Nachrichtentext (muss nichtleer sein).
+          """
+      
+          level: MessageLevel
+          content: str
+      
+          def __post_init__(self) -> None:
+              if not self.content:
+                  raise ValueError("Message.content must not be empty")
+  - rel_path: setup/ui/progress/__init__.py
+    hash: 3949bff183e0c0d403d47f0225310b1ae8b735b28f4e919b7eb4b8680f9f0b88
+    content: |-
+      # tools/setup/ui/progress/__init__.py
+      from __future__ import annotations
+      """
+      Interne Prozessdarstellungsebene für das Setup.
+      
+      Dieses Paket bündelt:
+      - ProgressStep (Fortschrittsanzeige)
+      - ProgressMode (Steuerung des Fortschrittsverhaltens)
+      """
+      
+      from .mode import ProgressMode
+      from .step import ProgressStep
+      
+      __all__: list[str] = ["ProgressMode", "ProgressStep"]
+  - rel_path: setup/ui/progress/mode.py
+    hash: 659b3d5faacfae805b659ff4aa08dbc7654cda6241b195fb33783c81ff159def
+    content: |-
+      # tools/setup/ui/progress/mode.py
+      from __future__ import annotations
+      """
+      Steuerung des Fortschrittsverhaltens von Setup-Schritten.
+      """
+      
+      from contextlib import nullcontext
+      from enum import Enum, auto
+      from typing import ContextManager, TYPE_CHECKING
+      
+      from tools.setup.ui.console import SetupConsole
+      
+      if TYPE_CHECKING:
+          from .step import ProgressStep
+      
+      
+      class ProgressMode(Enum):
+          """
+          Steuerung des Fortschrittsverhaltens eines Setup-Schritts.
+      
+          NONE   → keine Fortschrittsanzeige
+          AUTO   → Standard-Fortschrittsanzeige
+          SIMPLE → aktuell identisch zu AUTO, für spätere Varianten reserviert
+          """
+      
+          NONE = auto()
+          AUTO = auto()
+          SIMPLE = auto()
+      
+          def make_context(
+              self,
+              description: str,
+              console: SetupConsole,
+          ) -> ContextManager["ProgressStep | None"]:
+              """
+              Liefert den passenden Kontextmanager:
+      
+              - NONE  → nullcontext(None) (kein Fortschritt)
+              - AUTO/SIMPLE → ProgressStep mit initial indeterminiertem Balken.
+              """
+              if self is ProgressMode.NONE:
+                  return nullcontext(None)
+      
+              from .step import ProgressStep
+      
+              return ProgressStep(
+                  description=description,
+                  total=None,
+                  console=console,
+              )
+  - rel_path: setup/ui/progress/step.py
+    hash: 8c1a45d7891ce2d40aa5ad5352e97e4c70e5109fcacc8ed07b116f46e250e1d6
+    content: |-
+      from __future__ import annotations
+      
+      from tools.setup.ui.console import SetupConsole
+      from tools.setup.ui.resources.icons import ProgressStatus
+      
+      from dataclasses import dataclass, field
+      from threading import Lock
+      from types import TracebackType
+      from typing import Final
+      
+      # einfache ANSI-Farben (funktionieren in PyCharm/Unix-Terminals)
+      _RESET = "\x1b[0m"
+      _GREEN = "\x1b[32m"
+      _RED = "\x1b[31m"
+      _DIM = "\x1b[2m"
+      
+      _BAR_WIDTH: Final[int] = 40
+      
+      
+      @dataclass(slots=True)
+      class ProgressStep:
+          """
+          Minimalistisch-moderner Fortschrittsblock.
+      
+          Layout:
+              <header>        (description)
+              <bar>           ([██░░…]  42%  /  "Aktueller Schritt …")
+              <status>        (Icon + Text)
+              <Leerzeile>
+      
+          Der Block wird bei jedem relevanten Update neu gezeichnet.
+          """
+      
+          description: str
+          total: int | None
+          console: SetupConsole
+      
+          _status: ProgressStatus = field(default=ProgressStatus.STARTING, init=False, repr=False,)
+          _completed: int = field(default=0, init=False, repr=False)
+          _printed_lines: int = field(default=0, init=False, repr=False)
+          _status_text: str = field(default="", init=False, repr=False)
+          _lock: Lock = field(default_factory=Lock, init=False, repr=False)
+          _last_bar: str = field(default="", init=False, repr=False)
+          _last_status: str = field(default="", init=False, repr=False)
+      
+          # ------------------------------------------------------------
+          # Eigenschaften, die BaseStep.run erwartet
+          # ------------------------------------------------------------
+      
+          @property
+          def completed(self) -> int:
+              return self._completed
+      
+          @property
+          def status(self) -> ProgressStatus:
+              return self._status
+      
+          # ------------------------------------------------------------
+          # Kontextmanager
+          # ------------------------------------------------------------
+      
+          def __enter__(self) -> "ProgressStep":
+              with self._lock:
+                  self._status = ProgressStatus.STARTING
+                  self._status_text = self._status.label
+                  self._completed = 0
+                  self._render_locked()
+              return self
+      
+          def __exit__(
+                  self,
+                  exc_type: type[BaseException] | None,
+                  exc: BaseException | None,
+                  tb: TracebackType | None,
+          ) -> bool:
+              # Status-Wechsel werden ausschließlich von BaseStep.run gesteuert.
+              # Hier nur: Exception nicht unterdrücken.
+              return False
+      
+          # ------------------------------------------------------------
+          # Öffentliche API für Steps / BaseStep.run
+          # ------------------------------------------------------------
+      
+          def set_total(self, total: int | None) -> None:
+              """
+              Schaltet auf deterministischen oder indeterministischen Modus um.
+      
+              total=None → indeterminiert (Text "Aktueller Schritt …")
+              total>0    → deterministischer Prozentbalken
+              """
+              with self._lock:
+                  self.total = total
+                  if total is None:
+                      self._completed = 0
+                  else:
+                      self._completed = min(self._completed, total)
+                      # sinnvoller Default: bei gesetztem total in RUNNING wechseln
+                      if self._status is ProgressStatus.STARTING:
+                          self._status = ProgressStatus.RUNNING
+                          if not self._status_text:
+                              self._status_text = self._status.label
+      
+                  self._render_locked()
+      
+      
+          def advance(self, steps: int = 1) -> None:
+              """
+              Erhöht den Fortschritt um `steps` Einheiten und rendert sofort neu.
+              """
+              with self._lock:
+                  if self.total and self.total > 0:
+                      self._completed = min(self.total, self._completed + steps)
+                      if self._status is ProgressStatus.STARTING:
+                          self._status = ProgressStatus.RUNNING
+                  self._render_locked()
+      
+      
+          def set_status(self, text: str) -> None:
+              """
+              Aktualisiert den Status-Text (z.B. Unterarbeit "Datei 3/14: ...").
+              """
+              with self._lock:
+                  self._status_text = text
+                  self._render_locked()
+      
+          def mark_finished(self) -> None:
+              with self._lock:
+                  self._status = ProgressStatus.FINISHED
+                  if self.total and self.total > 0:
+                      self._completed = self.total
+                  if not self._status_text:
+                      self._status_text = self._status.label
+                  self._render_locked()
+                  print()  # Block abschließen
+      
+          def mark_failed(self) -> None:
+              with self._lock:
+                  self._status = ProgressStatus.FAILED
+                  if self.total and self.total > 0:
+                      self._completed = self.total
+                  if not self._status_text:
+                      self._status_text = self._status.label
+                  self._render_locked()
+                  print()  # Block abschließen
+      
+      
+          # noinspection NonStaticMethodUsed
+          def emit_info(self, *, step: str, message: str) -> None:
+              print(f"info: {step}: {message}", flush=True)
+      
+      
+          # ------------------------------------------------------------
+          # Rendering
+          # ------------------------------------------------------------
+      
+          def _build_header(self) -> str:
+              # description wird von BaseStep.run geliefert, z. B.:
+              # "Setup-{stid} {StepName}: <info>"
+              return self.description
+      
+          def _build_bar(self) -> str:
+              if self.total is None or self.total <= 0:
+                  return "Aktueller Schritt …"
+      
+              ratio = self._completed / self.total if self.total else 0.0
+              filled = int(_BAR_WIDTH * ratio)
+              empty = _BAR_WIDTH - filled
+              bar = f"[{'█' * filled}{'░' * empty}] {ratio * 100:3.0f}%"
+              return bar
+      
+          def _build_status(self) -> str:
+              text = self._status_text or self._status.label
+              base = f"{self._status.icon} {text}"
+      
+              if self._status is ProgressStatus.FINISHED:
+                  return f"{_GREEN}{base}{_RESET}"
+              if self._status is ProgressStatus.FAILED:
+                  return f"{_RED}{base}{_RESET}"
+      
+              # STARTING/RUNNING: leicht abgetönt, aber nicht grell
+              return f"{_DIM}{base}{_RESET}"
+      
+          def _render_locked(self) -> None:
+              """
+              Zeichnet den Fortschritt als kompakten Block:
+      
+                  <header>
+                  <bar>
+                  <status>
+      
+              Bei Updates wird der gesamte Block mit ANSI-Cursorsteuerung
+              neu gezeichnet, ohne zusätzliche Zeilen zu produzieren.
+              """
+              header = self._build_header()
+              bar = self._build_bar()
+              status = self._build_status()
+      
+              # beim ersten Mal: Header + Bar + Status
+              if not self._printed_lines:
+                  print(header, flush=True)
+                  print(bar, flush=True)
+                  print(status, flush=True)
+                  self._printed_lines = 3
+                  self._last_bar = bar
+                  self._last_status = status
+                  return
+      
+              # wenn sich nichts geändert hat → nix tun
+              if bar == self._last_bar and status == self._last_status:
+                  return
+      
+              # ab dem zweiten Render: nur Balken + Status darunter
+              print(bar, flush=True)
+              print(status, flush=True)
+      
+              self._last_bar = bar
+              self._last_status = status
+  - rel_path: setup/ui/resources/__init__.py
+    hash: b493f505b7d47cedc52c89b6243da5a35d64311538af97d2f83860b1194f4da2
+    content: |-
+      from __future__ import annotations
+      """
+      Ressourcen für UI-Texte und Icons des Setup-Prozesses.
+      
+      Dieses Unterpaket stellt:
+      - :class:`TextBlock` als Basistyp für Textbausteine,
+      - :class:`TextCatalog` als TOML-basierte Sammlung von Texten und Icons,
+      - :data:`CATALOG` als vorkonfigurierte Standardinstanz
+      bereit.
+      """
+      
+      from .block import TextBlock
+      from .catalog import TextCatalog, CATALOG
+      
+      __all__: tuple[str, ...] = (
+          "TextBlock",
+          "TextCatalog",
+          "CATALOG",
+      )
+  - rel_path: setup/ui/resources/block.py
+    hash: fb25d0cba205b888985843dcec1d19552435e7efa8d26570056af52739f8a338
+    content: |-
+      from __future__ import annotations
+      """
+      Grundlegender Textbaustein für UI-Ressourcen im Setup.
+      
+      Dieses Modul definiert die generische Struktur eines Textblocks,
+      der von Katalogen wie TextCatalog verwendet wird.
+      """
+      
+      from dataclasses import dataclass
+      from typing import Any, Mapping
+      
+      
+      @dataclass(slots=True, frozen=True)
+      class TextBlock:
+          """
+          Textbaustein mit frei definierbaren Feldern.
+      
+          Typische Felder (konventionell):
+          - title
+          - intro
+          - body
+          - hint
+          """
+      
+          key: str
+          fields: Mapping[str, Any]
+      
+          @staticmethod
+          def _normalize(value: Any, default: str) -> str:
+              """
+              Normalisiert einen Feldwert zu einem String.
+      
+              None → default, alles andere → str(value).
+              """
+              result: str = default if value is None else str(value)
+              return result
+      
+          def get(self, field: str, default: str = "") -> str:
+              """
+              Liefert ein Feld oder einen Default-Text.
+      
+              Args:
+                  field: Feldname innerhalb des Blocks.
+                  default: Rückgabewert, falls das Feld nicht existiert.
+      
+              Returns:
+                  Feldinhalt als String oder der Default-Wert.
+              """
+              raw_value: Any = self.fields.get(field, default)
+              result: str = self._normalize(raw_value, default)
+              return result
+      
+          def format(self, field: str = "body", **kwargs: Any) -> str:
+              """
+              Formatiert ein Feld mit den gegebenen Platzhaltern.
+      
+              Nicht vorhandene Felder werden als leerer String behandelt.
+      
+              Args:
+                  field: Feldname, der formatiert werden soll.
+                  **kwargs: Platzhalter für die Formatierung.
+      
+              Returns:
+                  Formatierter Text oder ein leerer String.
+              """
+              template: str = self.get(field, "")
+              result: str = "" if not template else template.format(**kwargs)
+              return result
+  - rel_path: setup/ui/resources/catalog.py
+    hash: fb8426c65e342785e25a9ce61e4a53ca15ecbc4e1d6f368285b7033f29da8544
+    content: |-
+      from __future__ import annotations
+      """
+      Text- und Icon-Katalog für das Setup der UFO-Simulation.
+      
+      Dieses Modul lädt die Ressourcen aus der TOML-Datei `setup_ui.toml`
+      und stellt eine Lookup-API für Texte und Icons bereit.
+      """
+      
+      from dataclasses import dataclass
+      from pathlib import Path
+      from typing import Any, Final, Mapping, Optional
+      
+      import tomllib
+      
+      from tools.setup.ui.resources.block import TextBlock
+      
+      
+      @dataclass(slots=True, frozen=True)
+      class TextCatalog:
+          """
+          Katalog aller Textbausteine und Icons für das Setup.
+      
+          Lädt Inhalte aus der TOML-Ressource `setup_ui.toml` und bietet
+          Zugriff über `text()`, `format()` und `icon()`.
+          """
+      
+          _blocks: Mapping[str, TextBlock]
+          _icons: Mapping[str, str]
+      
+          @classmethod
+          def load(cls, path: Path) -> "TextCatalog":
+              """
+              Erzeugt einen Katalog aus der angegebenen TOML-Datei.
+      
+              Args:
+                  path: Pfad zur TOML-Datei mit den UI-Ressourcen.
+      
+              Returns:
+                  Initialisierter TextCatalog. Bei fehlender Datei ein leerer Katalog.
+              """
+              blocks: dict[str, TextBlock] = {}
+              icons: dict[str, str] = {}
+      
+              if path.exists():
+      
+                  with path.open("rb") as f:
+                      raw: dict[str, Any] = tomllib.load(f)
+      
+                      blocks = {
+                          name: TextBlock(key=name, fields=fields)
+                          for name, fields in raw.get("texts", {}).items()
+                      }
+      
+                      icons = {name: str(value) for name, value in raw.get("icons", {}).items()}
+      
+              catalog: TextCatalog = cls(_blocks=blocks, _icons=icons)
+              return catalog
+      
+      
+          @classmethod
+          def default(cls) -> "TextCatalog":
+              """
+              Lädt den Standard-Katalog aus `setup_ui.toml` neben diesem Modul.
+              """
+              path: Path = Path(__file__).with_name("setup_ui.toml")
+              catalog: TextCatalog = cls.load(path)
+              return catalog
+      
+          def _resolve_field(
+              self,
+              key: str,
+              field: str,
+              default: str,
+          ) -> str:
+              """
+              Interner Helfer zur Feldauflösung mit Fallback.
+      
+              Args:
+                  key: Name des Textblocks.
+                  field: Feldname innerhalb des Blocks.
+                  default: Fallback-Text.
+      
+              Returns:
+                  Aufgelöster Feldwert oder Default.
+              """
+              block: Optional[TextBlock] = self._blocks.get(key)
+              value: str = block.get(field, default) if not block is None else default
+              return value
+      
+      
+          def text(self, key: str, field: str = "body", default: str = "") -> str:
+              """
+              Liefert ein Textfeld aus dem angegebenen Block oder einen Default.
+              """
+              result: str = self._resolve_field(key, field, default)
+              return result
+      
+      
+          def format(self, key: str, field: str = "body", **kwargs: Any) -> str:
+              """
+              Liefert einen formatierten Text aus dem angegebenen Block.
+      
+              Nicht vorhandene Blöcke oder Felder liefern einen leeren String.
+              """
+              template: str = self._resolve_field(key, field, "")
+              result: str = "" if not template else template.format(**kwargs)
+              return result
+      
+      
+          def icon(self, key: str, default: str) -> str:
+              """
+              Liefert ein Icon (Emoji oder Zeichenfolge) für den angegebenen Schlüssel.
+      
+              Falls kein Icon definiert ist, wird der Default-Wert verwendet.
+              """
+              icon_value: Optional[str] = self._icons.get(key)
+              result: str = default if icon_value is None else icon_value
+              return result
+      
+      
+          @classmethod
+          def load_catalog(cls, path: Path | None = None) -> TextCatalog:
+              """
+              Liefert entweder den Standardkatalog oder eine benutzerdefinierte Variante.
+      
+              Semantik:
+              - path is None          → interner Standardkatalog (setup_ui.toml neben diesem Modul)
+              - path ist ein Ordner   → es wird path / "setup_ui.toml" verwendet
+              - path ist eine Datei   → genau diese Datei wird geladen
+              """
+              if path is None:
+                  return cls.default()
+      
+              candidate = path
+      
+              # Wenn ein Verzeichnis übergeben wurde, dort nach setup_ui.toml suchen
+              if candidate.is_dir():
+                  candidate = candidate / "setup_ui.toml"
+      
+              # cls.load(...) ist bereits robust: bei fehlender Datei → leerer Katalog
+              return cls.load(candidate)
+      
+      
+      CATALOG: Final[TextCatalog] = TextCatalog.load_catalog()
+  - rel_path: setup/ui/resources/icons.py
+    hash: bf6bad49200a5ceb0fe546c47529cb3eb5d851eb3a54a28e2dcc438a76cc1ac0
+    content: |-
+      # tools/setup/ui/resources/icons.py
+      from __future__ import annotations
+      """
+      Enum-basierte Icon- und Statusdefinitionen für das Setup-UI.
+      
+      Dieses Modul kapselt:
+      - MessageLevel: logische Stufen für Konsolenmeldungen (info, success, ...)
+      - ProgressStatus: Zustände von Fortschrittsblöcken inkl. Icon-/Label-Metadaten.
+      """
+      
+      from enum import Enum
+      from functools import cached_property
+      from typing import Final
+      
+      from tools.setup.ui.resources.catalog import CATALOG
+      
+      
+      class MessageLevel(Enum):
+          """Logische Stufen für strukturierte Konsolenausgaben."""
+      
+          INFO = ("info", "ℹ️", None)
+          SUCCESS = ("success", "✅", "bold green")
+          WARNING = ("warning", "⚠️", "yellow")
+          ERROR = ("error", "❌", "bold red")
+          CONTINUE = ("continue", "🚀", None)
+          PLAIN = ("plain", "", None)
+      
+          def __init__(self, icon_key: str, fallback_icon: str, style: str | None) -> None:
+              self._icon_key: Final[str] = icon_key
+              self._fallback_icon: Final[str] = fallback_icon
+              self.style: str | None = style
+      
+          @cached_property
+          def icon(self) -> str:
+              """Liefert das Icon aus dem Katalog oder den Fallback."""
+              return CATALOG.icon(self._icon_key, self._fallback_icon)
+      
+      
+      class ProgressStatus(Enum):
+          """
+          Interner Status eines Fortschrittsblocks inkl. Icon- und Label-Metadaten.
+          """
+      
+          # Keys passend zu [icons] in setup_ui.toml: start, run, ok, fail
+          STARTING = ("start", "🔄", "started")
+          RUNNING = ("run", "⏳", "running")
+          FINISHED = ("ok", "✅", "finished")
+          FAILED = ("fail", "❌", "failed")
+      
+          def __init__(self, icon_key: str, fallback_icon: str, label: str) -> None:
+              self._icon_key: Final[str] = icon_key
+              self._fallback_icon: Final[str] = fallback_icon
+              self.label: str = label
+      
+          @cached_property
+          def icon(self) -> str:
+              """Liefert das Icon aus dem Katalog oder den Fallback."""
+              return CATALOG.icon(self._icon_key, self._fallback_icon)
+  - rel_path: setup/ui/resources/setup_ui.toml
+    hash: c33ffa3695c93129e74bccb6b63c8252f2fa6a44369d7a37a5453049f18d25b6
+    content: |-
+      [texts.setup_header]
+      license = """
+      UFO-Simulation Schulung – Lizenzhinweise (Kurzfassung)
+      
+      Dieses Schulungsprojekt basiert auf der im Repository angegebenen Lizenz.
+      Die Nutzung erfolgt im Rahmen von Ausbildung, Studium und interner Schulung.
+      """
+      title   = "──────────────────────────── UFO-Simulation – Setup ────────────────────────────"
+      intro   = "Willkommen zum automatisierten Setup der UFO-Simulation."
+      body    = """
+      Dieses Programm richtet eine isolierte Python-Umgebung ein,
+      installiert alle benötigten Abhängigkeiten und prüft die Installation.
+      
+      In diesem Setup werden nacheinander ausgeführt:
+      
+      1. Prüfung der Python-Version
+      2. Erzeugen bzw. Wiederverwenden der virtuellen Umgebung (.venv)
+      3. Installation der Runtime-Dependencies
+      4. Installation der Dev-Dependencies
+      5. Import-Contract-Prüfung via import-linter
+      6. Ausführen der pytest-Tests zur Validierung der Installation
+      
+      Dies kann einen Moment dauern – bitte warte, bis alle Schritte abgeschlossen sind.
+      """
+      [texts.module_setup]
+      default = "Setup-{typ} {module}: {info}"
+      
+      [texts.tests]
+      skipped_hint = "pytest wurde aufgrund der Skip-Konfiguration nicht ausgeführt."
+      
+      [texts.args]
+      default = "{type} wurde aufgrund des arguments {arg} {action}"
+      
+      [texts.next]
+      title = "Nächste Schritte (Überblick)"
+      body  = """
+      1. Virtuelle Umgebung aktivieren:
+         {activate_cmd}
+      
+      2. Projekt starten ...
+      """
+      
+      [texts.legend]
+      body = """
+      Legende der Symbole:
+      
+      {info}    – Information / Hinweis
+      {success} – Schritt erfolgreich abgeschlossen
+      {warning} – Warnung (Setup kann weiterlaufen, Ergebnis prüfen)
+      {error}   – Fehler (Setup wird abgebrochen)
+      {continue} – Hinweise zu Start und nächsten Schritten
+      """
+      
+      [icons]
+      info        = "ℹ️"
+      success     = "✅"
+      warning     = "⚠️"
+      error       = "❌"
+      continue    = "🚀"
+      start       = "🔄"
+      run         = "⏳"
+      ok          = "✅"
+      fail        = "❌"
+      
+      [texts.step_default]
+      success = "{step}: erfolgreich abgeschlossen."
+      failure = "{step}: Fehler unter {env}: {cause}\n{details}"
+      default = "{step}: {details}"
+      
+      # Neu: generische Progress-Zeile für laufende Arbeiten
+      progress_running   = "Running  /   {details}"
+      progress_failed    = "Failed   /   {details}"
+      progress_finished  = "Finished /   {details}"
+      
+      # Neu: Standard-Details für Installationsfortschritt (kann von anderen Steps wiederverwendet werden)
+      install_details    = "Installiere: {package} ({index}/{total})"
+      install_done       = "Alle Abhängigkeiten installiert."
+      install_failed     = "{package}: {details}"
+      
+      [texts.RunTestsStep]
+      failure = "Tests im Schritt {step} unter {env} fehlgeschlagen: {cause}\n{details}"
+  - rel_path: setup/utils/__init__.py
+    hash: b26ecbfc26fd2e2770eae8f66ac85081650ffd80d32fc777f01fd2a6108b6028
+    content: |-
+      from __future__ import annotations
+      """
+      Gemeinsame Hilfsfunktionen für das Setup-System der UFO-Simulation.
+      
+      Dieses Modul bündelt die häufig verwendeten Utility-Funktionen:
+      
+      Es dient als schmale Fassade auf die eigentlichen Implementierungen
+      in ``context`` und ``pause``.
+      """
+      
+      from .context import run_command, short_output
+      from .module import evaluate, classify, install
+      from .version import ensure_venv, venv_create
+      
+      __all__: list[str] = [
+          "run_command",
+          "short_output",
+          "evaluate",
+          "classify",
+          "install",
+          "ensure_venv",
+          "venv_create",
+      ]
+  - rel_path: setup/utils/context.py
+    hash: 2d3c46d7e4bc776b5b915485ee577c4d489f107eb48012f5a25bc7799d9a8e36
+    content: |-
+      from __future__ import annotations
+      
+      import traceback
+      
+      """
+      Technische Hilfsfunktionen für den Setup-Prozess.
+      
+      Dieses Modul bündelt generische Helfer wie Subprozess-Aufrufe und das
+      Kürzen langer Konsolen-Ausgaben.
+      """
+      
+      from dataclasses import dataclass
+      from collections.abc import Sequence
+      from typing import Final
+      
+      import subprocess
+      
+      
+      @dataclass(slots=True, frozen=True)
+      class CommandResult:
+          """Ergebnis eines Subprozess-Aufrufs."""
+      
+          args: tuple[str, ...]
+          returncode: int
+          stdout: str
+          stderr: str
+      
+          @property
+          def ok(self) -> bool:
+              """True, wenn der Prozess mit Exit-Code 0 beendet wurde."""
+              return self.returncode == 0
+      
+      
+      DEFAULT_MAX_LINES: Final[int] = 10
+      
+      
+      def run_command(
+          args: Sequence[str],
+          *,
+          cwd: str | None = None,
+          timeout: float | None = None,
+      ) -> CommandResult:
+          """
+          Führt einen Subprozess mit den gegebenen Argumenten aus.
+      
+          Args:
+              args: Befehlsargumente, z. B. ("python", "-m", "pytest").
+              cwd: Optionales Working-Directory.
+              timeout: Optionaler Timeout in Sekunden.
+      
+          Returns:
+              Ein CommandResult mit Exit-Code sowie stdout/stderr (immer als String).
+          """
+          completed = subprocess.run(
+              tuple(args),
+              cwd=cwd,
+              timeout=timeout,
+              check=False,
+              text=True,
+              capture_output=True,
+          )
+      
+          return CommandResult(
+              args=tuple(args),
+              returncode=completed.returncode,
+              stdout=completed.stdout or "",
+              stderr=completed.stderr or "",
+          )
+      
+      
+      def short_output(output: str, *, max_lines: int = 40) -> str:
+          """
+          Begrenzt eine Ausgabe auf die ersten `max_lines` Zeilen.
+      
+          Leere oder whitespace-only Eingaben liefern einen leeren String.
+      
+          Args:
+              output: Originale Ausgabe (z. B. pytest-Log).
+              max_lines: Maximale Anzahl der zurückgegebenen Zeilen.
+      
+          Returns:
+              Gekürzte Ausgabe oder ein leerer String bei leerem Input.
+          """
+          stripped: str = output.strip()
+          result: str = ""
+      
+          if stripped:
+              lines: list[str] = stripped.splitlines()
+              line_count: int = len(lines)
+      
+              if line_count <= max_lines:
+                  result = stripped
+              else:
+                  head: str = "\n".join(lines[:max_lines])
+                  remaining: int = line_count - max_lines
+                  result = f"{head}\n... ({remaining} weitere Zeilen ausgeblendet)"
+      
+          return result
+  - rel_path: setup/utils/module.py
+    hash: da59326a127b2b98c4947d103d48e6be66cdd7bcc1be7ec1fe29d22d922a8ba7
+    content: |
+      # tools/setup/utils/module.py
+      from __future__ import annotations
+      """
+      Generische Hilfsfunktionen für Modul-/CLI-Prüfungen im Setup.
+      
+      Enthält:
+      - evaluate  → `python -m <module> [args]` testweise ausführen
+      - classify  → Fehlerursache grob klassifizieren
+      - install   → generische Paketinstallation via `pip` oder externen Befehl
+      """
+      
+      import subprocess
+      from pathlib import Path
+      from typing import Final, Iterable, overload
+      
+      from tools.setup.utils.context import run_command, short_output
+      
+      
+      _PIP_ARGS: Final[tuple[str, ...]] = ("-m", "pip", "install", "--progress-bar", "off")
+      
+      
+      def evaluate(
+          python: str,
+          module: str,
+          *,
+          cwd: Path | None = None,
+          extra_args: tuple[str, ...] = ("--help",),
+      ) -> tuple[bool, str, str | None]:
+          """
+          Führt einen minimalen Testlauf für `python -m <module> [extra_args]` aus.
+      
+          Rückgabe:
+              ok       – True, wenn returncode == 0
+              output   – kombinierte stdout/stderr-Ausgabe
+              exc_info – Fehlermeldung, falls der Interpreter selbst nicht gestartet werden konnte
+          """
+      
+          hold: tuple[bool, str, str | None]
+      
+          try:
+              result = subprocess.run(
+                  (python, "-m", module, *extra_args),
+                  cwd=cwd,
+                  capture_output=True,
+                  text=True,
+                  check=False,
+              )
+              comb = (result.stdout or "") + (result.stderr or "")
+              hold = (result.returncode == 0, comb, None)
+      
+          except (OSError, FileNotFoundError) as exc:
+              # Interpreter (z. B. .venv/bin/python) nicht auffindbar
+              hold = (False, "", str(exc))
+      
+          return hold
+      
+      
+      def classify(
+          exc_info: str | None,
+          output: str,
+          *,
+          module: str,
+      ) -> tuple[str, str]:
+          """
+          Klassifiziert Fehler für einen Modulaufruf in (kind, details).
+      
+          kind    → "interpreter", "module_missing", "module_error"
+          details → Text für Log & Ausgabe
+          """
+          text = (output or "").lower()
+      
+          match exc_info, text:
+              case str() as e, _:
+                  return "interpreter", e
+              case None, s if "no module named" in s and module in s:
+                  return "module_missing", output
+              case _:
+                  return "module_error", output
+      
+      
+      @overload
+      def install(
+          *,
+          python: str,
+          spec: str,
+          cwd: Path | None = None,
+      ) -> tuple[int, str, str]:
+          """
+          Installation via `python -m pip install <spec>`.
+          """
+          ...
+      
+      
+      @overload
+      def install(
+          *,
+          cmd: Iterable[str],
+          cwd: Path | None = None,
+      ) -> tuple[int, str, str]:
+          """
+          Generischer Installationsbefehl (z. B. Installer-Skript).
+          """
+          ...
+      
+      
+      def install(
+          *,
+          python: str | None = None,
+          spec: str | None = None,
+          cmd: Iterable[str] | None = None,
+          cwd: Path | None = None,
+      ) -> tuple[int, str, str]:
+          """
+          Installiert ein Paket oder führt einen generischen Installationsbefehl aus.
+      
+          Varianten:
+              - python+spec → `python -m pip install <spec>`
+              - cmd        → externer Befehl (z. B. Installer-Skript)
+      
+          Rückgabe:
+              returncode
+              raw_output   – stdout+stderr (vollständig)
+              short_output – ggf. gekürzte Version für Konsolen-Anzeige
+          """
+      
+          argv: tuple[str, ...] | None = None
+      
+          match python, spec, cmd:
+              case str() as py, str() as s, None:
+                  argv: tuple[str, ...] = (py, *_PIP_ARGS, s)
+              case None, None, external if external is not None:
+                  argv = tuple(external)
+              case _:
+                  raise ValueError(
+                      "install(): entweder python+spec oder cmd angeben, nicht mehrere oder keine."
+                  )
+      
+          result = run_command(argv, cwd=cwd)
+      
+          raw = (result.stdout or "") + (result.stderr or "")
+          short = short_output(raw)
+          return result.returncode, raw, short
+  - rel_path: setup/utils/version.py
+    hash: 85446e7cd991c8499016d0af4e1c1e18ce37ccafa50dad0cee8750f818c4e4ce
+    content: |-
+      import sys
+      from pathlib import Path
+      from venv import create as venv_create
+      
+      from tools.setup.steps.base import StepContext
+      
+      
+      def check_python_version(ctx: StepContext) -> tuple[bool, str, str]:
+          required = ctx.profile.requires_min_python
+          assert required is not None  # Profil muss eine Version liefern
+      
+          req_major, req_minor = required
+          cur_major, cur_minor = sys.version_info[:2]
+      
+          if (cur_major, cur_minor) < (req_major, req_minor):
+              return (
+                  False,
+                  "python_version_mismatch",
+                  f"current={cur_major}.{cur_minor}, required>={req_major}.{req_minor}",
+              )
+      
+          return True, "", ""
+      
+      def ensure_venv(ctx: StepContext, safety_check: bool = True) -> tuple[bool, str, str]:
+          venv_dir: Path = ctx.config.venv_dir
+          repo_root: Path = ctx.config.repo_root
+      
+          # Sicherheitsgurt: venv darf nur im aktuellen Projekt liegen
+          try:
+              venv_dir.relative_to(repo_root)
+          except ValueError:
+              return (
+                  False,
+                  "venv_outside_repo",
+                  f"venv_dir={venv_dir} liegt nicht unter repo_root={repo_root}",
+              )
+      
+          # Optional: Name prüfen, um versehentliche Fremdpfade zu vermeiden
+          if all((safety_check, venv_dir.name != ".venv")):
+              return (
+                  False,
+                  "venv_unexpected_name",
+                  f"erwartet .venv, gefunden {venv_dir.name}",
+              )
+      
+          try:
+              # Bewusster Reset: vorhandene venv wird überschrieben
+              venv_create(venv_dir, with_pip=True, clear=True)
+          except OSError as exc:
+              return (
+                  False,
+                  "venv_create_failed",
+                  str(exc),
+              )
+      
+          return True, "", ""

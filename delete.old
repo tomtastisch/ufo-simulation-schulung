@@ -1,4 +1,3 @@
-gradio
 # Runtime-Dependencies für die UFO-Simulation
 # HINWEIS: Die primären Dependencies sind jetzt in pyproject.toml definiert.
 # Diese Datei wird für Kompatibilität mit älteren Tools beibehalten.
@@ -25,3 +24,7 @@ py-spy>=0.3.14
 black>=24.4.0
 flake8>=7.0.0
 import-linter>=2.0.0
+
+# ToDo: zu pyproject.toml migrieren
+pydantic
+gradio

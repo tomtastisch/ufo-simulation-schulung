@@ -2,14 +2,13 @@
 """Setuptools-Hilfsskript für Editier-Installationen."""
 
 import sys
-
-from setuptools import setup
+from tools import setup
 
 
 def _run_bootstrap() -> int:
-    """Führt Bootstrap-Setup aus."""
-    from tools.setup.bootstrap import main as bootstrap_main
-    return bootstrap_main()
+    """Führt das neue Setup-Bootstrap-System aus."""
+    from tools.bootstrap import execute
+    return execute()
 
 
 if __name__ == "__main__":

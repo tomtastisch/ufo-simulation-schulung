@@ -1,5 +1,14 @@
+# tools/setup/__init__.py
 from __future__ import annotations
 
-from .bootstrap import main as run_setup
+"""
+Setup-Paket für das Projekt »ufo-simulation-schulung«.
 
-__all__ = ["run_setup"]
+Kapselt:
+- Konfiguration und Projektprofil (``domain``),
+- Setup-Schritte (``steps``),
+- Konsolen- und UI-Hilfen (``ui``),
+- Hilfsfunktionen (``utils``).
+"""
+
+__all__: list[str] = []
