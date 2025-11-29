@@ -4,9 +4,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import override
 
-from tools.setup.steps.base import BaseStep, StepContext
-from tools.setup.ui.progress import ProgressStep
+from tools.setup.steps.base import BaseStep, BaseStepContext
 from tools.setup.ui import CATALOG
+from tools.setup.ui.progress import ProgressStep
 from tools.setup.utils import module
 
 
@@ -25,7 +25,7 @@ class RunTestsStep(BaseStep[tuple[str, ...]]):
     priority = 0
 
     @override
-    def prepare(self, ctx: StepContext) -> tuple[str, ...]:
+    def prepare(self, ctx: BaseStepContext) -> tuple[str, ...]:
         """Sammelt alle Test-NodeIDs, die später als Arbeitseinheiten dienen."""
         ok, output, exc_info = module.evaluate(
             python=str(ctx.config.venv_python),
@@ -59,9 +59,11 @@ class RunTestsStep(BaseStep[tuple[str, ...]]):
             stripped = line.strip()
             if not stripped:
                 continue
+
             # Grober Filter: pytest gibt bei -q pro Test üblicherweise eine NodeID aus.
             if stripped.startswith(("collected ", "<", "=")):
                 continue
+
             tests.append(stripped)
 
         return tuple(tests)
@@ -69,7 +71,7 @@ class RunTestsStep(BaseStep[tuple[str, ...]]):
     @override
     def step(
             self,
-            ctx: StepContext,
+            ctx: BaseStepContext,
             prepared: tuple[str, ...] | None,
             progress: ProgressStep | None,
     ) -> bool:

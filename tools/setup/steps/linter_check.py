@@ -1,13 +1,13 @@
 # tools/setup/steps/linter_check.py
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, override
-from collections.abc import Mapping
 
-from tools.setup.steps.base import BaseStep, StepContext
-from tools.setup.ui.progress import ProgressStep
+from tools.setup.steps.base import BaseStep, BaseStepContext
 from tools.setup.ui import CATALOG
+from tools.setup.ui.progress import ProgressStep
 from tools.setup.utils import module
 
 
@@ -42,7 +42,7 @@ class EvaluateImportsStep(BaseStep[tuple[str, ...]]):
     # -------------------------------------------------------------
     # Hilfsfunktionen
     # -------------------------------------------------------------
-    def _collect_contracts(self, ctx: StepContext) -> tuple[str, ...]:
+    def _collect_contracts(self, ctx: BaseStepContext) -> tuple[str, ...]:
         """
         Versucht, Contract-Namen aus dem bereits geladenen PyProjectProfile
         zu extrahieren und anhand von [tool.setup.linter].contracts zu filtern.
@@ -93,7 +93,7 @@ class EvaluateImportsStep(BaseStep[tuple[str, ...]]):
         return tuple(names)
 
     @override
-    def prepare(self, ctx: StepContext) -> tuple[str, ...]:
+    def prepare(self, ctx: BaseStepContext) -> tuple[str, ...]:
         """
         Prüft importlinter.cli, versucht ggf. Auto-Installation und liefert
         die Contract-Namen als Arbeitseinheiten.
@@ -161,7 +161,7 @@ class EvaluateImportsStep(BaseStep[tuple[str, ...]]):
     @override
     def step(
             self,
-            ctx: StepContext,
+            ctx: BaseStepContext,
             prepared: tuple[str, ...] | None,
             progress: ProgressStep | None,
     ) -> bool:

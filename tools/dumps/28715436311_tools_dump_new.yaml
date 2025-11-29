@@ -1,6 +1,6 @@
-dump_path: /Users/tomwerner/PycharmProjects/ufo-simulation-schulung/tools/dumps/tools_dump.yaml
+dump_path: /Users/tomwerner/PycharmProjects/ufo-simulation-schulung/tools/dumps/28715436311_tools_dump_new.yaml
 root: /Users/tomwerner/PycharmProjects/ufo-simulation-schulung/tools
-hash: f215333575d18ff732c1f1bf80808c146cb6c06ebc1f7f340c83a9980c754543
+hash: 440bb60a8e7bf0f33942caecaa643873337198948faa8ad3527670299b8a907c
 dirs:
   - setup
   - setup/domain
@@ -13,10 +13,11 @@ dirs:
   - setup/utils
 files:
   - rel_path: __init__.py
-    hash: 94fd0f93eaf6ca13dac6ca0064af24923b6c8dd18ca7e5113bdb92f2b233f3be
-    content: |-
+    hash: 1c8d46762ba64ffd8846ffd797375163dfb66ddb97a5345f72eab6becd266541
+    content: |
       # tools/__init__.py
       from __future__ import annotations
+      
       """
       Werkzeugpaket für das Projekt »ufo-simulation-schulung«.
       
@@ -26,8 +27,8 @@ files:
       
       __all__: list[str] = []
   - rel_path: bootstrap.py
-    hash: 101f3489723927e556a9e427dcf10d53c80f40052017edb3aefdfa96ba3fba44
-    content: |-
+    hash: cbd62c4c39793c740713833054044d4c831508bdefdedba3b53ee34f7f2e22e5
+    content: |
       # tools/bootstrap.py
       from __future__ import annotations
       
@@ -42,6 +43,7 @@ files:
       from tools.setup.ui.resources import CATALOG
       from tools.setup.domain import PyProjectProfile
       from tools.setup.steps import BaseStep, STEPS  # nur für Typ-Hints
+      
       
       # ------------------------------------------------------------
       # 1) SETUP HEADER AUFBAUEN
@@ -80,14 +82,8 @@ files:
       
       def _select_steps(profile: PyProjectProfile) -> tuple[type[BaseStep[object]], ...]:
           """
-          Wählt die auszuführenden Steps ausschließlich auf Basis ihrer stid
+          Wählt die auszuführenden Steps ausschließlich auf Basis ihrer ``stid``
           und der Konfiguration aus [tool.setup].
-      
-          Regeln:
-          - Standard: alle bekannten Steps
-          - steps    → Whitelist (nur diese stid-Werte)
-          - exclude  → Blacklist (diese stid-Werte entfernen)
-          - uses-import-linter/uses-pytest setzen implizite Excludes
           """
           from tools.setup.steps import STEPS  # tatsächliche Klassen
       
@@ -102,29 +98,25 @@ files:
                   )
               by_stid[stid] = cls
       
-          all_ids = set(by_stid.keys())
+          # 1) Basis-Menge bestimmen
+          if profile.step_include:
+              # Explizite Whitelist mit Reihenfolge aus pyproject.toml
+              ordered_ids: list[str] = [
+                  stid for stid in profile.step_include if stid in by_stid
+              ]
+          else:
+              # Fallback: alle Steps nach priority sortiert (höchste zuerst)
+              ordered_ids = [
+                  cls.stid
+                  for cls in sorted(by_stid.values(), key=lambda c: c.priority, reverse=True)
+              ]
       
-          # Whitelist aus [tool.setup].steps
-          include_ids = set(profile.step_include) if profile.step_include else set(all_ids)
-      
-          # Blacklist aus [tool.setup].exclude
+          # 2) Excludes anwenden
           exclude_ids = set(profile.step_exclude)
+          final_ids: list[str] = [stid for stid in ordered_ids if stid not in exclude_ids]
       
-          # implizite Excludes auf Basis der Feature-Flags
-          if not profile.uses_import_linter:
-              exclude_ids.add("import_linter")
-          if not profile.uses_pytest:
-              exclude_ids.add("tests")
-      
-          effective_ids = include_ids - exclude_ids
-          classes = [
-              by_stid[stid]
-              for stid in effective_ids
-              if stid in by_stid
-          ]
-      
-          # Priorität bleibt wie gehabt: höchste priority zuerst
-          classes.sort(key=lambda c: c.priority, reverse=True)
+          # 3) Step-Klassen in finaler Reihenfolge
+          classes: list[type[BaseStep[object]]] = [by_stid[stid] for stid in final_ids]
           return tuple(classes)
       
       
@@ -197,10 +189,11 @@ files:
           """Entry-Point für pyproject.toml / setup_new.py."""
           raise SystemExit(execute(sys.argv[1:]))
   - rel_path: setup/__init__.py
-    hash: db2a27dcb1ed5cfb176905de04d71c005b419c2d1b10243709aebe907028341d
-    content: |-
+    hash: 09d3d6be5d1ced3a61e37a7ab409317dc24fc9f5dc7464d688df294b60f7a32a
+    content: |
       # tools/setup/__init__.py
       from __future__ import annotations
+      
       """
       Setup-Paket für das Projekt »ufo-simulation-schulung«.
       
@@ -213,9 +206,10 @@ files:
       
       __all__: list[str] = []
   - rel_path: setup/domain/__init__.py
-    hash: 52ee58491d6ac3db83ad9a849f683aa58c08640c1f950bd3257ae3397119b7ea
-    content: |-
+    hash: 4258eee4cd4d89f87b58b3ff5e47575ac112f9b48828622db3d6c4bfdf8aa712
+    content: |
       from __future__ import annotations
+      
       """
       Domänenspezifische Typen und Profile für das Setup.
       
@@ -234,8 +228,8 @@ files:
           "build_profile",
       ]
   - rel_path: setup/domain/config.py
-    hash: c70b8c42c2249ac86a521e8e9fd36c32566d4a56598370c2e68ce8af68383f41
-    content: |-
+    hash: a92f7fd7d6265f45e8698f7e883f3ecb45d2e2c6a988270d1cdf994263f1e667
+    content: |
       # tools/setup/domain/config.py
       from __future__ import annotations
       
@@ -307,10 +301,11 @@ files:
                   return r".\.venv\Scripts\Activate.ps1"
               return "source .venv/bin/activate"
   - rel_path: setup/domain/profile.py
-    hash: 35687d352a8ba3884b59bf08de2500aab4b3f14e559e1dc7120880ad257e8bc8
-    content: |-
+    hash: 3ce6e3736cb7f23b7118a360f78518a8f607e56fc224a8b8d1e29fa7e0f6c1c5
+    content: |
       # tools/setup/domain/profile.py
       from __future__ import annotations
+      
       """
       Projektprofil auf Basis von pyproject.toml.
       """
@@ -318,8 +313,7 @@ files:
       from dataclasses import dataclass, field
       from enum import StrEnum
       from pathlib import Path
-      from typing import Any, Final, Mapping
-      
+      from typing import Any, Final, Mapping, Literal
       import tomllib
       
       PYPROJECT_FILENAME: Final[str] = "pyproject.toml"
@@ -338,21 +332,41 @@ files:
           EXACT = "==="
       
           @classmethod
-          def detect(cls, entry: str) -> tuple[str, str] | None:
-              """
-              Extrahiert (name, versionsspezifikation) aus einem Eintrag oder None.
+          def detect(cls, text: str) -> tuple[str, str] | None:
+              """Zerlegt eine Requirement-Spezifikation in (name, version_spec).
       
-              Beispiel:
-                  "pytest>=8.0"  -> ("pytest", ">=8.0")
-                  "pytest"       -> None
+              Beispiele:
+              - "importlinter>=2.0" -> ("importlinter", ">=2.0")
+              - ">=3.10"            -> ("", ">=3.10")  (z. B. für requires-python)
+      
+              Liefert None, wenn kein Vergleichsoperator aus RequirementOperator gefunden wird.
               """
-              result: tuple[str, str] | None = None
-              for op in sorted(cls, key=lambda o: len(o.value), reverse=True):
-                  if op in entry:
-                      name, spec = entry.split(op, 1)
-                      result = (name.strip(), f"{op}{spec.strip()}")
-                      break
-              return result
+              spec = text.strip()
+              if not spec:
+                  return None
+      
+              # Längere Operatoren zuerst prüfen (z. B. ">=" vor ">")
+              operators = sorted(
+                  cls.__members__.values(),  # type: dict[str, RequirementOperator].values
+                  key=lambda o: len(o.value),  # hier ist o klar ein RequirementOperator
+                  reverse=True,
+              )
+      
+              candidates: list[tuple[int, str]] = [
+                  (pos, op_str)
+                  for op in operators
+                  if (op_str := op.value)  # op_str: str
+                  if (pos := spec.find(op_str)) != -1
+              ]
+      
+              if not candidates:
+                  return None
+      
+              best_pos, best_op = min(candidates, key=lambda t: t[0])
+      
+              name = spec[:best_pos].strip()
+              version_spec = spec[best_pos:].strip()
+              return name, version_spec
       
       
       @dataclass(slots=True)
@@ -362,8 +376,6 @@ files:
           requires_min_python: tuple[int, int] | None
           runtime_requirements: Mapping[str, str] = field(default_factory=dict)
           dev_requirements: Mapping[str, str] = field(default_factory=dict)
-          uses_import_linter: bool = True
-          uses_pytest: bool = True
       
           # Step-Steuerung aus [tool.setup]
           step_include: tuple[str, ...] = field(default_factory=tuple)
@@ -372,19 +384,15 @@ files:
           verbosity: int = 1
           auto_install: bool = True
       
+          # Linter-spezifische Steuerung aus [tool.setup.linter]
+          # "all" (Default) | "forbidden" | "layers"
+          linter_contracts: Literal["all", "forbidden", "layers"] = "all"
+      
           # Vollständige pyproject-Struktur für generische Zugriffe
           pyproject_data: Mapping[str, Any] = field(default_factory=dict)
       
           def get_path(self, *path: str, default: Any = None) -> Any:
-              """
-              Generischer Zugriff auf verschachtelte pyproject.toml-Werte.
-      
-              Beispiel:
-                  profile.get_path("tool", "importlinter", "contracts", default=[])
-      
-              Gibt default zurück, wenn ein Segment fehlt oder der Pfad nicht
-              auf ein Mapping zeigt.
-              """
+              """Generischer Zugriff auf verschachtelte pyproject.toml-Werte."""
               data: Any = self.pyproject_data
               for key in path:
                   if not isinstance(data, Mapping):
@@ -475,10 +483,14 @@ files:
           Falls keine Datei existiert, wird ein leeres Mapping geliefert,
           so dass das Setup mit Standardprofil weiterlaufen kann.
           """
-          if not path.exists():
+          # Wenn ein Verzeichnis übergeben wurde, pyproject.toml darin suchen,
+          # ansonsten path direkt als Dateipfad interpretieren.
+          pyproject_path = path / PYPROJECT_FILENAME if path.is_dir() else path
+      
+          if not pyproject_path.exists():
               return {}
       
-          with path.open("rb") as handle:
+          with pyproject_path.open("rb") as handle:
               data: Mapping[str, Any] = tomllib.load(handle)
       
           return data
@@ -491,44 +503,27 @@ files:
           """
           if value is None:
               return ()
+      
           if isinstance(value, str):
               value = [value]
       
-          result: list[str] = []
-          for item in value:
-              text = str(item).strip()
-              if text:
-                  result.append(text)
-          return tuple(result)
+          return tuple(
+              str(item).strip()
+              for item in value
+              if str(item).strip()
+          )
       
       
       def build_profile(repo_root: Path) -> PyProjectProfile:
           """
-          Baut ein PyProjectProfile aus der pyproject.toml im repo_root.
+          Lädt die pyproject.toml genau einmal und baut ein Setup-Profil.
       
-          Die Datei wird genau einmal geladen; weitere Auswertungen (z. B.
-          Contracts für import-linter) greifen über `pyproject_data` / `get_path`
-          auf diese Struktur zu.
+          - [project]                  → Dependencies, requires-python
+          - [tool.setup]               → steps, exclude, options, linter
+          - [tool.setup.linter]        → contracts-Modus ("all" | "forbidden" | "layers")
+          - weitere tool-Abschnitte    → über pyproject_data / get_path(...)
           """
-          pyproject_path = repo_root / PYPROJECT_FILENAME
-      
-          if not pyproject_path.exists():
-              # Vollständig definierte Default-Konfiguration
-              return PyProjectProfile(
-                  requires_min_python=None,
-                  runtime_requirements={},
-                  dev_requirements={},
-                  uses_import_linter=True,
-                  uses_pytest=True,
-                  step_include=(),
-                  step_exclude=(),
-                  step_options={},
-                  verbosity=1,
-                  auto_install=True,
-                  pyproject_data={},
-              )
-      
-          data: Mapping[str, Any] = _load_pyproject_data(pyproject_path)
+          data = _load_pyproject_data(repo_root)
       
           project_table: Mapping[str, Any] = data.get("project", {})
           requires_python_str: str | None = project_table.get("requires-python")
@@ -552,39 +547,51 @@ files:
           tool_table: Mapping[str, Any] = data.get("tool", {})
           setup_table: Mapping[str, Any] = tool_table.get("setup", {})
       
-          uses_import_linter: bool = bool(setup_table.get("uses-import-linter", True))
-          uses_pytest: bool = bool(setup_table.get("uses-pytest", True))
-      
+          # [tool.setup].steps / exclude
           step_include: tuple[str, ...] = _normalize_str_list(setup_table.get("steps"))
           step_exclude: tuple[str, ...] = _normalize_str_list(setup_table.get("exclude"))
       
+          # [tool.setup].options.<step-id>
           raw_options: Any = setup_table.get("options", {})
-          step_options: Mapping[str, Mapping[str, Any]]
           if isinstance(raw_options, Mapping):
               tmp: dict[str, Mapping[str, Any]] = {}
               for key, value in raw_options.items():
                   if isinstance(value, Mapping):
                       tmp[str(key)] = dict(value)
-              step_options = tmp
+              step_options: Mapping[str, Mapping[str, Any]] = tmp
           else:
               step_options = {}
       
-          profile: PyProjectProfile = PyProjectProfile(
+          # [tool.setup].auto_install (optional, Default=True)
+          auto_install_raw: Any = setup_table.get("auto_install", True)
+          auto_install: bool = bool(auto_install_raw)
+      
+          # [tool.setup.linter].contracts
+          linter_table: Mapping[str, Any] = setup_table.get("linter", {})
+          contracts_raw: Any = linter_table.get("contracts", "all")
+          contracts_mode = str(contracts_raw).strip().lower()
+      
+          if contracts_mode not in {"all", "forbidden", "layers"}:
+              # Fallback auf "all" bei ungültigen Werten oder leerem String
+              linter_contracts: Literal["all", "forbidden", "layers"] = "all"
+          else:
+              linter_contracts = contracts_mode  # type: ignore[assignment]
+      
+          profile = PyProjectProfile(
               requires_min_python=requires_min_python,
               runtime_requirements=runtime_requirements,
               dev_requirements=dev_requirements,
-              uses_import_linter=uses_import_linter,
-              uses_pytest=uses_pytest,
               step_include=step_include,
               step_exclude=step_exclude,
               step_options=step_options,
-              # neu: vollständige pyproject-Struktur für alle Steps
+              auto_install=auto_install,
+              linter_contracts=linter_contracts,
               pyproject_data=data,
           )
           return profile
   - rel_path: setup/logging.py
-    hash: 1463db9addbd5fffe1b24440e3989d8efa43d962b8d504ea12e74e04c6809b5e
-    content: |-
+    hash: b50bb25900b62e0e66ca3b56683236272e4709b9fd933e2eed86d7193f45d527
+    content: |
       """
       Fehlerprotokollierung für den Setup-Prozess.
       
@@ -635,9 +642,10 @@ files:
               with self.path.open("a", encoding="utf-8") as log_file:
                   log_file.write("\n".join(lines))
   - rel_path: setup/steps/__init__.py
-    hash: bf7406863dd65f07587d2ff2075f55c9acc9d2e14376966dffb4d6d5a53d7390
-    content: |-
+    hash: d367922daa7ac8b9c1ff1093cd43106f16603fd7484c7310a62a83113a538fc7
+    content: |
       from __future__ import annotations
+      
       """
       Fassade für die Setup-Schritte der UFO-Simulation.
       
@@ -661,10 +669,11 @@ files:
       
       __all__ = [cls.__name__ for cls in STEPS]
   - rel_path: setup/steps/base/__init__.py
-    hash: 5b0542ca565368e30cc2b85d9ab08123f876dc147b53d91a860d41f9a498225b
-    content: |-
+    hash: 2705d415da775bbe99b1076451d3b952486410fc60d56780169c91716e80015d
+    content: |
       # tools/setup/steps/base/__init__.py
       from __future__ import annotations
+      
       """
       Basis-API für Setup-Schritte.
       
@@ -679,8 +688,8 @@ files:
           "StepContext",
       ]
   - rel_path: setup/steps/base/meta.py
-    hash: 92e023fe5be9e9e7053905f4399070b7bf49dc9674fa11166fb16e3f6565886f
-    content: |-
+    hash: 0e53489143a0c316af8dafa09a5647860a9ee9622309e7b6dbaf1d4a94e37dc5
+    content: |
       # tools/setup/steps/base/meta.py
       from __future__ import annotations
       
@@ -726,11 +735,11 @@ files:
           _registry: dict[str, type[Any]] = {}
       
           def __init__(
-              cls,
-              name: str,
-              bases: tuple[type, ...],
-              namespace: dict[str, Any],
-              **kwargs: Any,  # type: ignore[override]
+                  cls,
+                  name: str,
+                  bases: tuple[type, ...],
+                  namespace: dict[str, Any],
+                  **kwargs: Any,  # type: ignore[override]
           ) -> None:
               # WICHTIG: keine @dataclass-Dekoration auf der Metaklasse selbst,
               # damit super().__init__ sauber den ABCMeta/type-MRO-Pfad nutzt.
@@ -751,9 +760,9 @@ files:
               # ------------------------------------------------------------
               for existing_stid, existing_cls in list(registry.items()):
                   if (
-                      existing_cls.__name__ == cls.__name__
-                      and existing_cls.__module__ == cls.__module__
-                      and existing_cls is not cls
+                          existing_cls.__name__ == cls.__name__
+                          and existing_cls.__module__ == cls.__module__
+                          and existing_cls is not cls
                   ):
                       registry[existing_stid] = cls
                       return
@@ -781,8 +790,8 @@ files:
               """Optionale Debug-API, falls du die registrierten Steps inspizieren willst."""
               return dict(mcls._registry)
   - rel_path: setup/steps/base/step.py
-    hash: d99a66f7e0040f905bcb467885e4689b3188d98f6ac734d23c141424ea76f44c
-    content: |-
+    hash: 04fd3395784ea944c1cd6ee3de12d53cfb3112d4cb430df17a30347be230b46c
+    content: |
       # tools/setup/steps/base/step.py
       from __future__ import annotations
       
@@ -849,11 +858,11 @@ files:
               return dict(raw or {})
       
           def output(
-              self,
-              ctx: StepContext,
-              *,
-              field: str = "default",
-              **extra: object,
+                  self,
+                  ctx: StepContext,
+                  *,
+                  field: str = "default",
+                  **extra: object,
           ) -> str:
               """
               Liefert einen formatierten Text aus setup_ui.toml mit Fallback.
@@ -891,28 +900,31 @@ files:
       
               return fallback
       
+          from collections.abc import Sized
+          ...
       
           def estimate_total(self, prepared: T | None) -> int | None:
               """
               Liefert eine Schätzung der Anzahl Arbeitseinheiten für den Progress-Balken.
-      
-              Default:
-              - Wenn prepared Sized ist (z.B. list/tuple), verwende len(prepared)
-              - Sonst None → indeterminierter Fortschritt
+              Diese Methode dient der notwendigkeit bei Spezialfällen, wenn diese Semantik
+              nicht passt (z.B. leere Collection soll trotzdem als 1 Einheit gelten).
               """
-              if isinstance(prepared, Sized):
-                  # type: ignore[arg-type] ist hier okay, weil Sized len() garantiert
-                  return len(prepared)  # type: ignore[arg-type]
-              return None
+              if prepared is None:
+                  return None
       
+              if isinstance(prepared, Sized):
+                  return len(prepared)
+      
+              # einzelnes, nicht-sized Objekt → eine logische Einheit
+              return 1
       
           # noinspection PyMethodMayBeStatic
           def _ensure(
-              self,
-              ctx: StepContext,
-              *,
-              spec: str | None = None,
-              cmd: Iterable[str] | None = None,
+                  self,
+                  ctx: StepContext,
+                  *,
+                  spec: str | None = None,
+                  cmd: Iterable[str] | None = None,
           ) -> bool:
               """
               Führe eine Installation über tools.setup.utils.install aus.
@@ -951,10 +963,10 @@ files:
       
           @abstractmethod
           def step(
-              self,
-              ctx: StepContext,
-              prepared: T | None,
-              progress: ProgressStep | None,
+                  self,
+                  ctx: StepContext,
+                  prepared: T | None,
+                  progress: ProgressStep | None,
           ) -> bool:
               """
               Fachlicher Kern des Schritts.
@@ -1035,8 +1047,8 @@ files:
                   time.sleep(1.5)
                   return ok
   - rel_path: setup/steps/create_env.py
-    hash: c05a12e383600a8dd08bdae6dc997bd84d44d45f7ca97100ae6b6e4358702920
-    content: |-
+    hash: 77f9a9c248d454215a90b5375eeab726e6db85a7291123f92c55024b1c1db9e6
+    content: |
       # tools/setup/steps/create_env.py
       from __future__ import annotations
       
@@ -1058,13 +1070,12 @@ files:
           stid = "create_env"
           priority = sys.maxsize - 1000
       
-      
           @override
           def step(
-              self,
-              ctx: StepContext,
-              _prepared: None,
-              progress: ProgressStep | None,
+                  self,
+                  ctx: StepContext,
+                  _prepared: None,
+                  progress: ProgressStep | None,
           ) -> bool:
               # 1) Python-Version prüfen
               ok, cause, details = check_python_version(ctx)
@@ -1106,8 +1117,8 @@ files:
       
               return ok
   - rel_path: setup/steps/install_deps.py
-    hash: 49e71eeaa2ea3eaba9053615169839626578f8be398b162b5690c6803f2d6d56
-    content: |-
+    hash: 41f01bab11b775343b8967d03840ce1f7752a88b06d04e4a6e6df3e12029d772
+    content: |
       from __future__ import annotations
       
       from collections.abc import Sequence
@@ -1118,7 +1129,6 @@ files:
       from tools.setup.ui import CATALOG
       from tools.setup.ui.progress import ProgressStep
       from tools.setup.utils import run_command, short_output
-      
       
       Command = tuple[tuple[str, ...], str]  # (argv, label)
       
@@ -1134,8 +1144,8 @@ files:
           - Dev-Dependencies aus [project.optional-dependencies].dev einzeln installieren
           """
       
-          stid        = "dependencies"
-          priority    = 9999
+          stid = "dependencies"
+          priority = 9999
       
           @override
           def prepare(self, ctx: StepContext) -> Sequence[Command]:
@@ -1245,20 +1255,20 @@ files:
       
               return True
   - rel_path: setup/steps/linter_check.py
-    hash: 9751af8018e000e5afecf487eb82724a14a6148a7c85cc9386872cc98501921e
-    content: |-
+    hash: f752659e6a9b0382edaf14008b8364f19fbf741853a3581800db2ddfeef1c8eb
+    content: |
       # tools/setup/steps/linter_check.py
       from __future__ import annotations
       
       from dataclasses import dataclass
-      from typing import Any, Mapping, override
+      from typing import Any, override
+      from collections.abc import Mapping
       
       from tools.setup.steps.base import BaseStep, StepContext
       from tools.setup.ui.progress import ProgressStep
       from tools.setup.ui import CATALOG
       from tools.setup.utils import module
       
-      from collections.abc import Mapping
       
       @dataclass(slots=True)
       class EvaluateImportsStep(BaseStep[tuple[str, ...]]):
@@ -1270,13 +1280,13 @@ files:
               * prüft, ob importlinter.cli aufrufbar ist (Probe).
               * versucht bei Bedarf Auto-Installation.
               * liest Contracts aus dem bereits geladenen PyProjectProfile und gibt
-                die Contract-Namen als Arbeitseinheiten zurück.
+                die Contract-Namen als Arbeitseinheiten zurück, gefiltert nach
+                [tool.setup.linter].contracts.
           - estimate_total()
               * leitet die Progress-Balkenlänge aus der Anzahl Contracts ab.
           - step()
-              * führt import-linter pro Contract logisch als eigene Einheit aus
-                (technisch kann derselbe CLI-Aufruf mehrfach sein) und aktualisiert
-                den Fortschritt/Status entsprechend.
+              * führt import-linter pro Contract logisch als eigene Einheit aus und
+                aktualisiert den Fortschritt/Status entsprechend.
           """
       
           stid = "import_linter"
@@ -1294,7 +1304,7 @@ files:
           def _collect_contracts(self, ctx: StepContext) -> tuple[str, ...]:
               """
               Versucht, Contract-Namen aus dem bereits geladenen PyProjectProfile
-              zu extrahieren.
+              zu extrahieren und anhand von [tool.setup.linter].contracts zu filtern.
       
               Erwartete (vereinfachte) Struktur in pyproject.toml:
       
@@ -1303,33 +1313,41 @@ files:
       
                   [[tool.importlinter.contracts]]
                   name = "Contract 1"
-                  ...
+                  type = "forbidden" | "layers" | ...
       
               Rückgabe:
-                  Tuple aller gefundenen Contract-Namen.
+                  Tuple aller gefundenen Contract-Namen nach Filterung.
                   Fallback: leeres Tuple, falls nichts gefunden werden kann.
               """
-              data = ctx.profile.pyproject_data
-              if not isinstance(data, Mapping):
+              contracts_raw: Any = ctx.profile.get_path(
+                  "tool",
+                  "importlinter",
+                  "contracts",
+                  default=[],
+              )
+              if not isinstance(contracts_raw, list):
                   return ()
       
-              import_cfg = data.get("tool", {}).get("importlinter")
-              if not isinstance(import_cfg, Mapping):
-                  return ()
-      
-              contracts_raw = import_cfg.get("contracts", [])
+              mode = ctx.profile.linter_contracts  # "all" | "forbidden" | "layers"
               names: list[str] = []
       
-              from collections.abc import Mapping
+              for item in contracts_raw:
+                  if not isinstance(item, Mapping):
+                      continue
       
-              if isinstance(contracts_raw, list):
-                  names.extend(
-                      stripped
-                      for item in contracts_raw
-                      if isinstance(item, Mapping)
-                      if isinstance(name := item.get("name"), str)
-                      if (stripped := name.strip())
-                  )
+                  type_value = str(item.get("type", "")).strip().lower()
+      
+                  if mode == "forbidden" and type_value != "forbidden":
+                      continue
+                  if mode == "layers" and type_value != "layers":
+                      continue
+                  # mode == "all" → kein Filter auf type
+      
+                  name = item.get("name")
+                  if isinstance(name, str):
+                      stripped = name.strip()
+                      if stripped:
+                          names.append(stripped)
       
               return tuple(names)
       
@@ -1366,15 +1384,13 @@ files:
       
               # 2. Optional: Auto-Installation + erneute Probe
               if self.auto_install and not ok:
-                  rc, raw_install, short_install = module.install(
+                  rc, raw_install, _short_install = module.install(
                       python=python,
                       spec="import-linter",
                       cwd=cwd,
                   )
                   ok_install = rc == 0
                   if not ok_install:
-                      # Für install() haben wir kein separates exc_info,
-                      # nur den Output der Installation.
                       fail(
                           "import-linter konnte nicht installiert werden",
                           exc_info=None,
@@ -1396,20 +1412,19 @@ files:
       
           @override
           def estimate_total(self, prepared: tuple[str, ...] | None) -> int | None:
-              """
-              Balkenlänge = Anzahl Contracts, mindestens 1 für sinnvolle Visualisierung.
-              """
               if prepared:
                   return len(prepared)
+      
               return 1
       
           @override
           def step(
-              self,
-              ctx: StepContext,
-              prepared: tuple[str, ...] | None,
-              progress: ProgressStep | None,
+                  self,
+                  ctx: StepContext,
+                  prepared: tuple[str, ...] | None,
+                  progress: ProgressStep | None,
           ) -> bool:
+      
               python = str(ctx.config.venv_python)
               cwd = ctx.config.repo_root
       
@@ -1514,8 +1529,8 @@ files:
       
               return ok_overall
   - rel_path: setup/steps/test_runner.py
-    hash: 8e260a492190a1cf748973be37cfa31f4ffeb3b63a1d55d1cedbefc73ab47265
-    content: |-
+    hash: 4997a23ae91a8120b0013b13b12bc954ab06644d2b2cfdca74315853689ac3df
+    content: |
       # tools/setup/steps/test_runner.py
       from __future__ import annotations
       
@@ -1541,7 +1556,6 @@ files:
       
           stid = "tests"
           priority = 0
-      
       
           @override
           def prepare(self, ctx: StepContext) -> tuple[str, ...]:
@@ -1587,10 +1601,10 @@ files:
       
           @override
           def step(
-              self,
-              ctx: StepContext,
-              prepared: tuple[str, ...] | None,
-              progress: ProgressStep | None,
+                  self,
+                  ctx: StepContext,
+                  prepared: tuple[str, ...] | None,
+                  progress: ProgressStep | None,
           ) -> bool:
               tests = prepared or tuple()
               python = str(ctx.config.venv_python)
@@ -1748,10 +1762,11 @@ files:
       
               return ok_overall
   - rel_path: setup/ui/__init__.py
-    hash: 04842397aa2b02e419b70877d971350ac7274e16bf78813e0e0ab98e73e77b47
-    content: |-
+    hash: 1f0e990a42b38bada39f55fa230ab7ec4893132e45b372fff25fd7439766aa06
+    content: |
       # tools/setup/ui/__init__.py
       from __future__ import annotations
+      
       """
       Öffentliche UI-Schnittstellen für das Setup.
       """
@@ -1782,8 +1797,8 @@ files:
           "ProgressStatus",
       ]
   - rel_path: setup/ui/console.py
-    hash: eec452b6fe7ae3b4e4f4cea770fe1c7d7315e8b8be26fc3b4d5d7f38e83d8c4f
-    content: |-
+    hash: fcc6221481c58b49330e3afb9d92fdf5e8f24c8ac90b197b6ccd743ed039b2aa
+    content: |
       # tools/setup/ui/console.py
       from __future__ import annotations
       
@@ -1825,8 +1840,8 @@ files:
               # Header bewusst ohne Level-Icon, um die Einleitung nicht zu überfrachten
               print(message)
   - rel_path: setup/ui/output/__init__.py
-    hash: cc9605f07945a009481394fcdc91417486fac557df83e663ebb8d6adacf1feb7
-    content: |-
+    hash: 1acc797a9f8afa2cbb5f3f09f2789e5297b7fef7ebac47d56af8b92d9be1da27
+    content: |
       from __future__ import annotations
       
       from .message import Message
@@ -1834,21 +1849,22 @@ files:
       
       __all__ = ["Message", "error"]
   - rel_path: setup/ui/output/error.py
-    hash: 374f3148de8e45e09106eb96fbce838e0356d0026962e76db782c51643956f10
-    content: |-
+    hash: e9759ec28788a5b13412b729d73d4e6975a8c2862af81011142c7dae823403f2
+    content: |
       # tools/setup/ui/error.py
       from __future__ import annotations
       
       from datetime import datetime, timezone
       
+      
       def error(
-          *,
-          step: str,
-          stid: str,
-          exc_type: str,
-          message: str,
-          traceback_text: str,
-          timestamp: datetime | None = None,
+              *,
+              step: str,
+              stid: str,
+              exc_type: str,
+              message: str,
+              traceback_text: str,
+              timestamp: datetime | None = None,
       ) -> str:
           ts = timestamp or datetime.now(timezone.utc)
           iso = ts.isoformat(timespec="seconds")
@@ -1868,9 +1884,10 @@ files:
       
           return "\n".join(lines)
   - rel_path: setup/ui/output/message.py
-    hash: 9f607a2d47be0077ca0a9477abdba30c87ec39d5ab7c72904458b923bb7bdcfb
-    content: |-
+    hash: 40938c752242a38be547f32290ab972d8cd7e9224893ff37087e879cf396991d
+    content: |
       from __future__ import annotations
+      
       """
       Strukturiertes Nachrichtenmodell für die Setup-Konsole.
       
@@ -1900,10 +1917,11 @@ files:
               if not self.content:
                   raise ValueError("Message.content must not be empty")
   - rel_path: setup/ui/progress/__init__.py
-    hash: 3949bff183e0c0d403d47f0225310b1ae8b735b28f4e919b7eb4b8680f9f0b88
-    content: |-
+    hash: 180321fb53b6747e9a9e0f70468eaa091a98384f215a79d9fad5b95eb64e12f9
+    content: |
       # tools/setup/ui/progress/__init__.py
       from __future__ import annotations
+      
       """
       Interne Prozessdarstellungsebene für das Setup.
       
@@ -1917,10 +1935,11 @@ files:
       
       __all__: list[str] = ["ProgressMode", "ProgressStep"]
   - rel_path: setup/ui/progress/mode.py
-    hash: 659b3d5faacfae805b659ff4aa08dbc7654cda6241b195fb33783c81ff159def
-    content: |-
+    hash: 873b4c9b85def346d0cf0ee7cc84aa470fcddb53baa5720c29762cae6c19ea38
+    content: |
       # tools/setup/ui/progress/mode.py
       from __future__ import annotations
+      
       """
       Steuerung des Fortschrittsverhaltens von Setup-Schritten.
       """
@@ -1949,9 +1968,9 @@ files:
           SIMPLE = auto()
       
           def make_context(
-              self,
-              description: str,
-              console: SetupConsole,
+                  self,
+                  description: str,
+                  console: SetupConsole,
           ) -> ContextManager["ProgressStep | None"]:
               """
               Liefert den passenden Kontextmanager:
@@ -1970,19 +1989,20 @@ files:
                   console=console,
               )
   - rel_path: setup/ui/progress/step.py
-    hash: 8c1a45d7891ce2d40aa5ad5352e97e4c70e5109fcacc8ed07b116f46e250e1d6
+    hash: e369c77978e25b45b87937cd7003567dc5f3e4526ae73df800f379188f45f6df
     content: |-
       from __future__ import annotations
       
-      from tools.setup.ui.console import SetupConsole
-      from tools.setup.ui.resources.icons import ProgressStatus
-      
+      import sys
       from dataclasses import dataclass, field
       from threading import Lock
       from types import TracebackType
       from typing import Final
       
-      # einfache ANSI-Farben (funktionieren in PyCharm/Unix-Terminals)
+      from tools.setup.ui.console import SetupConsole
+      from tools.setup.ui.resources.icons import ProgressStatus
+      
+      # einfache ANSI-Farben
       _RESET = "\x1b[0m"
       _GREEN = "\x1b[32m"
       _RED = "\x1b[31m"
@@ -1994,28 +2014,30 @@ files:
       @dataclass(slots=True)
       class ProgressStep:
           """
-          Minimalistisch-moderner Fortschrittsblock.
+          Minimalistisch-moderner Fortschritt:
       
-          Layout:
-              <header>        (description)
-              <bar>           ([██░░…]  42%  /  "Aktueller Schritt …")
-              <status>        (Icon + Text)
-              <Leerzeile>
+              Setup-<stid> <StepName>: <info>      (header, 1×)
+              [██░░…]  42%  ⏳ Running / ...       (eine Zeile, via \\r aktualisiert)
       
-          Der Block wird bei jedem relevanten Update neu gezeichnet.
+          Besonderheit:
+          - Sichtbarer Fortschritt läuft immer in 1%-Schritten von alt → neu,
+            auch wenn intern Sprünge wie 0 → 17 → 32 ankommen.
           """
       
           description: str
           total: int | None
           console: SetupConsole
       
-          _status: ProgressStatus = field(default=ProgressStatus.STARTING, init=False, repr=False,)
+          _status: ProgressStatus = field(default=ProgressStatus.STARTING, init=False, repr=False)
           _completed: int = field(default=0, init=False, repr=False)
-          _printed_lines: int = field(default=0, init=False, repr=False)
           _status_text: str = field(default="", init=False, repr=False)
           _lock: Lock = field(default_factory=Lock, init=False, repr=False)
-          _last_bar: str = field(default="", init=False, repr=False)
-          _last_status: str = field(default="", init=False, repr=False)
+      
+          _header_printed: bool = field(default=False, init=False, repr=False)
+          _last_line: str = field(default="", init=False, repr=False)
+      
+          # sichtbarer Prozentwert (0–100), unabhängig von _completed
+          _display_percent: int = field(default=0, init=False, repr=False)
       
           # ------------------------------------------------------------
           # Eigenschaften, die BaseStep.run erwartet
@@ -2038,17 +2060,16 @@ files:
                   self._status = ProgressStatus.STARTING
                   self._status_text = self._status.label
                   self._completed = 0
+                  self._display_percent = 0
                   self._render_locked()
               return self
       
           def __exit__(
-                  self,
-                  exc_type: type[BaseException] | None,
-                  exc: BaseException | None,
-                  tb: TracebackType | None,
+              self,
+              exc_type: type[BaseException] | None,
+              exc: BaseException | None,
+              tb: TracebackType | None,
           ) -> bool:
-              # Status-Wechsel werden ausschließlich von BaseStep.run gesteuert.
-              # Hier nur: Exception nicht unterdrücken.
               return False
       
           # ------------------------------------------------------------
@@ -2057,8 +2078,6 @@ files:
       
           def set_total(self, total: int | None) -> None:
               """
-              Schaltet auf deterministischen oder indeterministischen Modus um.
-      
               total=None → indeterminiert (Text "Aktueller Schritt …")
               total>0    → deterministischer Prozentbalken
               """
@@ -2066,20 +2085,18 @@ files:
                   self.total = total
                   if total is None:
                       self._completed = 0
+                      self._display_percent = 0
                   else:
                       self._completed = min(self._completed, total)
-                      # sinnvoller Default: bei gesetztem total in RUNNING wechseln
                       if self._status is ProgressStatus.STARTING:
                           self._status = ProgressStatus.RUNNING
                           if not self._status_text:
                               self._status_text = self._status.label
-      
                   self._render_locked()
-      
       
           def advance(self, steps: int = 1) -> None:
               """
-              Erhöht den Fortschritt um `steps` Einheiten und rendert sofort neu.
+              Erhöht den logischen Fortschritt um `steps` und rendert neu.
               """
               with self._lock:
                   if self.total and self.total > 0:
@@ -2088,10 +2105,9 @@ files:
                           self._status = ProgressStatus.RUNNING
                   self._render_locked()
       
-      
           def set_status(self, text: str) -> None:
               """
-              Aktualisiert den Status-Text (z.B. Unterarbeit "Datei 3/14: ...").
+              Aktualisiert den Status-Text (z. B. "Installiere: Paket X (3/12)").
               """
               with self._lock:
                   self._status_text = text
@@ -2104,8 +2120,7 @@ files:
                       self._completed = self.total
                   if not self._status_text:
                       self._status_text = self._status.label
-                  self._render_locked()
-                  print()  # Block abschließen
+                  self._render_locked(final=True)
       
           def mark_failed(self) -> None:
               with self._lock:
@@ -2114,33 +2129,38 @@ files:
                       self._completed = self.total
                   if not self._status_text:
                       self._status_text = self._status.label
-                  self._render_locked()
-                  print()  # Block abschließen
+                  self._render_locked(final=True)
       
-      
-          # noinspection NonStaticMethodUsed
           def emit_info(self, *, step: str, message: str) -> None:
-              print(f"info: {step}: {message}", flush=True)
-      
+              """
+              Zusatz-Infos, z. B. Debug-Hinweise während des Steps.
+              """
+              with self._lock:
+                  # laufende Progresszeile sauber beenden
+                  if self._last_line:
+                      sys.stdout.write("\n")
+                      sys.stdout.flush()
+                      self._last_line = ""
+                  print(f"info: {step}: {message}", flush=True)
       
           # ------------------------------------------------------------
-          # Rendering
+          # Rendering-Helfer
           # ------------------------------------------------------------
       
           def _build_header(self) -> str:
-              # description wird von BaseStep.run geliefert, z. B.:
-              # "Setup-{stid} {StepName}: <info>"
               return self.description
       
-          def _build_bar(self) -> str:
-              if self.total is None or self.total <= 0:
+          def _build_bar_from_percent(self, percent: int | None) -> str:
+              """
+              Baut den Balken aus einem Prozentwert (0–100) oder indeterminiert.
+              """
+              if percent is None:
                   return "Aktueller Schritt …"
       
-              ratio = self._completed / self.total if self.total else 0.0
-              filled = int(_BAR_WIDTH * ratio)
+              percent = max(0, min(100, percent))
+              filled = int(_BAR_WIDTH * (percent / 100))
               empty = _BAR_WIDTH - filled
-              bar = f"[{'█' * filled}{'░' * empty}] {ratio * 100:3.0f}%"
-              return bar
+              return f"[{'█' * filled}{'░' * empty}] {percent:3d}%"
       
           def _build_status(self) -> str:
               text = self._status_text or self._status.label
@@ -2150,49 +2170,75 @@ files:
                   return f"{_GREEN}{base}{_RESET}"
               if self._status is ProgressStatus.FAILED:
                   return f"{_RED}{base}{_RESET}"
-      
-              # STARTING/RUNNING: leicht abgetönt, aber nicht grell
               return f"{_DIM}{base}{_RESET}"
       
-          def _render_locked(self) -> None:
-              """
-              Zeichnet den Fortschritt als kompakten Block:
-      
-                  <header>
-                  <bar>
-                  <status>
-      
-              Bei Updates wird der gesamte Block mit ANSI-Cursorsteuerung
-              neu gezeichnet, ohne zusätzliche Zeilen zu produzieren.
-              """
-              header = self._build_header()
-              bar = self._build_bar()
+          def _build_line_for_percent(self, percent: int | None) -> str:
+              bar = self._build_bar_from_percent(percent)
               status = self._build_status()
+              return f"{bar}  {status}"
       
-              # beim ersten Mal: Header + Bar + Status
-              if not self._printed_lines:
-                  print(header, flush=True)
-                  print(bar, flush=True)
-                  print(status, flush=True)
-                  self._printed_lines = 3
-                  self._last_bar = bar
-                  self._last_status = status
+          # ------------------------------------------------------------
+          # Zentrales Rendering
+          # ------------------------------------------------------------
+      
+          def _render_locked(self, *, final: bool = False) -> None:
+              """
+              Header einmal ausgeben, Fortschritt in 1%-Schritten von alt → neu animieren.
+              """
+              # Header genau einmal
+              if not self._header_printed:
+                  print(self._build_header(), flush=True)
+                  self._header_printed = True
+      
+              # indeterminierter Modus: kein % → nur eine Zeile
+              if self.total is None or self.total <= 0:
+                  line = self._build_line_for_percent(None)
+                  if line != self._last_line:
+                      sys.stdout.write("\r" + line)
+                      sys.stdout.flush()
+                      self._last_line = line
+                  if final:
+                      sys.stdout.write("\n")
+                      sys.stdout.flush()
+                      self._last_line = ""
                   return
       
-              # wenn sich nichts geändert hat → nix tun
-              if bar == self._last_bar and status == self._last_status:
+              # Ziel-Prozent aus logischem Stand
+              target_ratio = self._completed / self.total if self.total else 0.0
+              target_percent = max(0, min(100, int(target_ratio * 100)))
+      
+              # Rückwärtsbewegung clampen
+              if target_percent < self._display_percent:
+                  self._display_percent = target_percent
+      
+              # „Animation“: von aktuellem Display-Wert bis Ziel hochzählen
+              start = self._display_percent
+              end = target_percent
+      
+              if start == end and not final:
+                  # nichts zu tun
                   return
       
-              # ab dem zweiten Render: nur Balken + Status darunter
-              print(bar, flush=True)
-              print(status, flush=True)
+              for p in range(start + 1, end + 1) if end > start else [start]:
+                  self._display_percent = p
+                  line = self._build_line_for_percent(p)
+                  # Minimaler Spam-Schutz
+                  if line == self._last_line:
+                      continue
+                  sys.stdout.write("\r" + line)
+                  sys.stdout.flush()
+                  self._last_line = line
       
-              self._last_bar = bar
-              self._last_status = status
+              # finaler Abschluss → Zeilenumbruch setzen
+              if final:
+                  sys.stdout.write("\n")
+                  sys.stdout.flush()
+                  # self._last_line = ""
   - rel_path: setup/ui/resources/__init__.py
-    hash: b493f505b7d47cedc52c89b6243da5a35d64311538af97d2f83860b1194f4da2
-    content: |-
+    hash: b88acb9a817a39e4d08ea6d7b4358e3a18b942d5dfb4f2e2d46e04b18d2b4eef
+    content: |
       from __future__ import annotations
+      
       """
       Ressourcen für UI-Texte und Icons des Setup-Prozesses.
       
@@ -2212,9 +2258,10 @@ files:
           "CATALOG",
       )
   - rel_path: setup/ui/resources/block.py
-    hash: fb25d0cba205b888985843dcec1d19552435e7efa8d26570056af52739f8a338
-    content: |-
+    hash: 3d4b3633b498a32f6e740d48c3c9f0885ffc67a5a94f16200f1689913f918319
+    content: |
       from __future__ import annotations
+      
       """
       Grundlegender Textbaustein für UI-Ressourcen im Setup.
       
@@ -2283,9 +2330,10 @@ files:
               result: str = "" if not template else template.format(**kwargs)
               return result
   - rel_path: setup/ui/resources/catalog.py
-    hash: fb8426c65e342785e25a9ce61e4a53ca15ecbc4e1d6f368285b7033f29da8544
-    content: |-
+    hash: deda6e93a838d8db6e47bd691ba3987e9fa48d19cc834af93b802eb953276f7a
+    content: |
       from __future__ import annotations
+      
       """
       Text- und Icon-Katalog für das Setup der UFO-Simulation.
       
@@ -2329,7 +2377,6 @@ files:
               icons: dict[str, str] = {}
       
               if path.exists():
-      
                   with path.open("rb") as f:
                       raw: dict[str, Any] = tomllib.load(f)
       
@@ -2343,7 +2390,6 @@ files:
               catalog: TextCatalog = cls(_blocks=blocks, _icons=icons)
               return catalog
       
-      
           @classmethod
           def default(cls) -> "TextCatalog":
               """
@@ -2354,10 +2400,10 @@ files:
               return catalog
       
           def _resolve_field(
-              self,
-              key: str,
-              field: str,
-              default: str,
+                  self,
+                  key: str,
+                  field: str,
+                  default: str,
           ) -> str:
               """
               Interner Helfer zur Feldauflösung mit Fallback.
@@ -2374,14 +2420,12 @@ files:
               value: str = block.get(field, default) if not block is None else default
               return value
       
-      
           def text(self, key: str, field: str = "body", default: str = "") -> str:
               """
               Liefert ein Textfeld aus dem angegebenen Block oder einen Default.
               """
               result: str = self._resolve_field(key, field, default)
               return result
-      
       
           def format(self, key: str, field: str = "body", **kwargs: Any) -> str:
               """
@@ -2393,7 +2437,6 @@ files:
               result: str = "" if not template else template.format(**kwargs)
               return result
       
-      
           def icon(self, key: str, default: str) -> str:
               """
               Liefert ein Icon (Emoji oder Zeichenfolge) für den angegebenen Schlüssel.
@@ -2403,7 +2446,6 @@ files:
               icon_value: Optional[str] = self._icons.get(key)
               result: str = default if icon_value is None else icon_value
               return result
-      
       
           @classmethod
           def load_catalog(cls, path: Path | None = None) -> TextCatalog:
@@ -2430,10 +2472,11 @@ files:
       
       CATALOG: Final[TextCatalog] = TextCatalog.load_catalog()
   - rel_path: setup/ui/resources/icons.py
-    hash: bf6bad49200a5ceb0fe546c47529cb3eb5d851eb3a54a28e2dcc438a76cc1ac0
-    content: |-
+    hash: cb34792dfb6b7cd0fdd2e367d56bfe5432b74b6becbabfe4544314777a157790
+    content: |
       # tools/setup/ui/resources/icons.py
       from __future__ import annotations
+      
       """
       Enum-basierte Icon- und Statusdefinitionen für das Setup-UI.
       
@@ -2491,7 +2534,7 @@ files:
               """Liefert das Icon aus dem Katalog oder den Fallback."""
               return CATALOG.icon(self._icon_key, self._fallback_icon)
   - rel_path: setup/ui/resources/setup_ui.toml
-    hash: c33ffa3695c93129e74bccb6b63c8252f2fa6a44369d7a37a5453049f18d25b6
+    hash: 4c24d79615f7d5f7f1c2d889e1c8b8c9e60c5c0dccb77a843bbfa7b57b87c313
     content: |-
       [texts.setup_header]
       license = """
@@ -2500,9 +2543,9 @@ files:
       Dieses Schulungsprojekt basiert auf der im Repository angegebenen Lizenz.
       Die Nutzung erfolgt im Rahmen von Ausbildung, Studium und interner Schulung.
       """
-      title   = "──────────────────────────── UFO-Simulation – Setup ────────────────────────────"
-      intro   = "Willkommen zum automatisierten Setup der UFO-Simulation."
-      body    = """
+      title = "──────────────────────────── UFO-Simulation – Setup ────────────────────────────"
+      intro = "Willkommen zum automatisierten Setup der UFO-Simulation."
+      body = """
       Dieses Programm richtet eine isolierte Python-Umgebung ein,
       installiert alle benötigten Abhängigkeiten und prüft die Installation.
       
@@ -2528,7 +2571,7 @@ files:
       
       [texts.next]
       title = "Nächste Schritte (Überblick)"
-      body  = """
+      body = """
       1. Virtuelle Umgebung aktivieren:
          {activate_cmd}
       
@@ -2547,15 +2590,15 @@ files:
       """
       
       [icons]
-      info        = "ℹ️"
-      success     = "✅"
-      warning     = "⚠️"
-      error       = "❌"
-      continue    = "🚀"
-      start       = "🔄"
-      run         = "⏳"
-      ok          = "✅"
-      fail        = "❌"
+      info = "ℹ️"
+      success = "✅"
+      warning = "⚠️"
+      error = "❌"
+      continue = "🚀"
+      start = "🔄"
+      run = "⏳"
+      ok = "✅"
+      fail = "❌"
       
       [texts.step_default]
       success = "{step}: erfolgreich abgeschlossen."
@@ -2563,21 +2606,22 @@ files:
       default = "{step}: {details}"
       
       # Neu: generische Progress-Zeile für laufende Arbeiten
-      progress_running   = "Running  /   {details}"
-      progress_failed    = "Failed   /   {details}"
-      progress_finished  = "Finished /   {details}"
+      progress_running = "Running  /   {details}"
+      progress_failed = "Failed   /   {details}"
+      progress_finished = "Finished /   {details}"
       
       # Neu: Standard-Details für Installationsfortschritt (kann von anderen Steps wiederverwendet werden)
-      install_details    = "Installiere: {package} ({index}/{total})"
-      install_done       = "Alle Abhängigkeiten installiert."
-      install_failed     = "{package}: {details}"
+      install_details = "Installiere: {package} ({index}/{total})"
+      install_done = "Alle Abhängigkeiten installiert."
+      install_failed = "{package}: {details}"
       
       [texts.RunTestsStep]
       failure = "Tests im Schritt {step} unter {env} fehlgeschlagen: {cause}\n{details}"
   - rel_path: setup/utils/__init__.py
-    hash: b26ecbfc26fd2e2770eae8f66ac85081650ffd80d32fc777f01fd2a6108b6028
-    content: |-
+    hash: 8ec15af2d6c45840f0ad5eba29f797ff03691cd3983a725c2e4be409caff8058
+    content: |
       from __future__ import annotations
+      
       """
       Gemeinsame Hilfsfunktionen für das Setup-System der UFO-Simulation.
       
@@ -2601,8 +2645,8 @@ files:
           "venv_create",
       ]
   - rel_path: setup/utils/context.py
-    hash: 2d3c46d7e4bc776b5b915485ee577c4d489f107eb48012f5a25bc7799d9a8e36
-    content: |-
+    hash: e14dad4aff92f1a781aa1deac84d067db3f10c43faf2af61dd215c60f40fed50
+    content: |
       from __future__ import annotations
       
       import traceback
@@ -2640,10 +2684,10 @@ files:
       
       
       def run_command(
-          args: Sequence[str],
-          *,
-          cwd: str | None = None,
-          timeout: float | None = None,
+              args: Sequence[str],
+              *,
+              cwd: str | None = None,
+              timeout: float | None = None,
       ) -> CommandResult:
           """
           Führt einen Subprozess mit den gegebenen Argumenten aus.
@@ -2702,10 +2746,11 @@ files:
       
           return result
   - rel_path: setup/utils/module.py
-    hash: da59326a127b2b98c4947d103d48e6be66cdd7bcc1be7ec1fe29d22d922a8ba7
+    hash: 3473ba12636fd577eb9d782297d23bfc15ac652b27605f4390686ef2d1ae7777
     content: |
       # tools/setup/utils/module.py
       from __future__ import annotations
+      
       """
       Generische Hilfsfunktionen für Modul-/CLI-Prüfungen im Setup.
       
@@ -2721,16 +2766,15 @@ files:
       
       from tools.setup.utils.context import run_command, short_output
       
-      
       _PIP_ARGS: Final[tuple[str, ...]] = ("-m", "pip", "install", "--progress-bar", "off")
       
       
       def evaluate(
-          python: str,
-          module: str,
-          *,
-          cwd: Path | None = None,
-          extra_args: tuple[str, ...] = ("--help",),
+              python: str,
+              module: str,
+              *,
+              cwd: Path | None = None,
+              extra_args: tuple[str, ...] = ("--help",),
       ) -> tuple[bool, str, str | None]:
           """
           Führt einen minimalen Testlauf für `python -m <module> [extra_args]` aus.
@@ -2762,10 +2806,10 @@ files:
       
       
       def classify(
-          exc_info: str | None,
-          output: str,
-          *,
-          module: str,
+              exc_info: str | None,
+              output: str,
+              *,
+              module: str,
       ) -> tuple[str, str]:
           """
           Klassifiziert Fehler für einen Modulaufruf in (kind, details).
@@ -2786,10 +2830,10 @@ files:
       
       @overload
       def install(
-          *,
-          python: str,
-          spec: str,
-          cwd: Path | None = None,
+              *,
+              python: str,
+              spec: str,
+              cwd: Path | None = None,
       ) -> tuple[int, str, str]:
           """
           Installation via `python -m pip install <spec>`.
@@ -2799,9 +2843,9 @@ files:
       
       @overload
       def install(
-          *,
-          cmd: Iterable[str],
-          cwd: Path | None = None,
+              *,
+              cmd: Iterable[str],
+              cwd: Path | None = None,
       ) -> tuple[int, str, str]:
           """
           Generischer Installationsbefehl (z. B. Installer-Skript).
@@ -2810,11 +2854,11 @@ files:
       
       
       def install(
-          *,
-          python: str | None = None,
-          spec: str | None = None,
-          cmd: Iterable[str] | None = None,
-          cwd: Path | None = None,
+              *,
+              python: str | None = None,
+              spec: str | None = None,
+              cmd: Iterable[str] | None = None,
+              cwd: Path | None = None,
       ) -> tuple[int, str, str]:
           """
           Installiert ein Paket oder führt einen generischen Installationsbefehl aus.
@@ -2847,8 +2891,8 @@ files:
           short = short_output(raw)
           return result.returncode, raw, short
   - rel_path: setup/utils/version.py
-    hash: 85446e7cd991c8499016d0af4e1c1e18ce37ccafa50dad0cee8750f818c4e4ce
-    content: |-
+    hash: 07bfc2db7ea4158b296d257ab2b7157bf9486deb24563546ca39bde84d5f81d3
+    content: |
       import sys
       from pathlib import Path
       from venv import create as venv_create
@@ -2871,6 +2915,7 @@ files:
               )
       
           return True, "", ""
+      
       
       def ensure_venv(ctx: StepContext, safety_check: bool = True) -> tuple[bool, str, str]:
           venv_dir: Path = ctx.config.venv_dir

@@ -24,12 +24,11 @@ class ProgressStep:
     Minimalistisch-moderner Fortschritt:
 
         Setup-<stid> <StepName>: <info>      (header, 1×)
-        [██░░…]  42%  ⏳ Running / ...       (eine Zeile, wird mit \\r überschrieben)
+        [██░░…]  42%  ⏳ Running / ...       (eine Zeile, via \\r aktualisiert)
 
-    Ziel:
-    - In echten Terminals: sichtbarer, sich füllender Balken.
-    - In IDE-Konsolen/Logs: maximal eine Fortschrittszeile pro Step,
-      keine "Ziegelmauer" aus Balken-Zeilen.
+    Besonderheit:
+    - Sichtbarer Fortschritt läuft immer in 1%-Schritten von alt → neu,
+      auch wenn intern Sprünge wie 0 → 17 → 32 ankommen.
     """
 
     description: str
@@ -43,6 +42,9 @@ class ProgressStep:
 
     _header_printed: bool = field(default=False, init=False, repr=False)
     _last_line: str = field(default="", init=False, repr=False)
+
+    # sichtbarer Prozentwert (0–100), unabhängig von _completed
+    _display_percent: int = field(default=0, init=False, repr=False)
 
     # ------------------------------------------------------------
     # Eigenschaften, die BaseStep.run erwartet
@@ -65,6 +67,7 @@ class ProgressStep:
             self._status = ProgressStatus.STARTING
             self._status_text = self._status.label
             self._completed = 0
+            self._display_percent = 0
             self._render_locked()
         return self
 
@@ -74,7 +77,6 @@ class ProgressStep:
             exc: BaseException | None,
             tb: TracebackType | None,
     ) -> bool:
-        # Status-Wechsel werden von BaseStep.run gesteuert.
         return False
 
     # ------------------------------------------------------------
@@ -83,8 +85,6 @@ class ProgressStep:
 
     def set_total(self, total: int | None) -> None:
         """
-        Schaltet auf deterministischen oder indeterministischen Modus um.
-
         total=None → indeterminiert (Text "Aktueller Schritt …")
         total>0    → deterministischer Prozentbalken
         """
@@ -92,6 +92,7 @@ class ProgressStep:
             self.total = total
             if total is None:
                 self._completed = 0
+                self._display_percent = 0
             else:
                 self._completed = min(self._completed, total)
                 if self._status is ProgressStatus.STARTING:
@@ -102,7 +103,7 @@ class ProgressStep:
 
     def advance(self, steps: int = 1) -> None:
         """
-        Erhöht den Fortschritt um `steps` Einheiten und rendert sofort neu.
+        Erhöht den logischen Fortschritt um `steps` und rendert neu.
         """
         with self._lock:
             if self.total and self.total > 0:
@@ -126,10 +127,7 @@ class ProgressStep:
                 self._completed = self.total
             if not self._status_text:
                 self._status_text = self._status.label
-            self._render_locked()
-            # Fortschrittszeile abschließen → nächste Ausgabe kommt in neuer Zeile.
-            sys.stdout.write("\n")
-            sys.stdout.flush()
+            self._render_locked(final=True)
 
     def mark_failed(self) -> None:
         with self._lock:
@@ -138,18 +136,14 @@ class ProgressStep:
                 self._completed = self.total
             if not self._status_text:
                 self._status_text = self._status.label
-            self._render_locked()
-            sys.stdout.write("\n")
-            sys.stdout.flush()
+            self._render_locked(final=True)
 
     def emit_info(self, *, step: str, message: str) -> None:
         """
         Zusatz-Infos, z. B. Debug-Hinweise während des Steps.
-
-        Falls eine laufende Progresszeile aktiv ist, wird vor der Info
-        ein Zeilenumbruch erzwungen, damit sich Text und Balken nicht überlagern.
         """
         with self._lock:
+            # laufende Progresszeile sauber beenden
             if self._last_line:
                 sys.stdout.write("\n")
                 sys.stdout.flush()
@@ -157,22 +151,23 @@ class ProgressStep:
             print(f"info: {step}: {message}", flush=True)
 
     # ------------------------------------------------------------
-    # Rendering
+    # Rendering-Helfer
     # ------------------------------------------------------------
 
     def _build_header(self) -> str:
-        # description wird von BaseStep.run geliefert, z. B.:
-        # "Setup-{stid} {StepName}: <info>"
         return self.description
 
-    def _build_bar(self) -> str:
-        if self.total is None or self.total <= 0:
+    def _build_bar_from_percent(self, percent: int | None) -> str:
+        """
+        Baut den Balken aus einem Prozentwert (0–100) oder indeterminiert.
+        """
+        if percent is None:
             return "Aktueller Schritt …"
 
-        ratio = self._completed / self.total if self.total else 0.0
-        filled = int(_BAR_WIDTH * ratio)
+        percent = max(0, min(100, percent))
+        filled = int(_BAR_WIDTH * (percent / 100))
         empty = _BAR_WIDTH - filled
-        return f"[{'█' * filled}{'░' * empty}] {ratio * 100:3.0f}%"
+        return f"[{'█' * filled}{'░' * empty}] {percent:3d}%"
 
     def _build_status(self) -> str:
         text = self._status_text or self._status.label
@@ -182,45 +177,67 @@ class ProgressStep:
             return f"{_GREEN}{base}{_RESET}"
         if self._status is ProgressStatus.FAILED:
             return f"{_RED}{base}{_RESET}"
-
-        # STARTING/RUNNING: leicht abgetönt
         return f"{_DIM}{base}{_RESET}"
 
-    def _build_line(self) -> str:
-        """
-        Baut die einzeilige Fortschrittsdarstellung:
-
-            [██░░…]  42%  ⏳ Running / Installiere: Paket X (3/12)
-        """
-        bar = self._build_bar()
+    def _build_line_for_percent(self, percent: int | None) -> str:
+        bar = self._build_bar_from_percent(percent)
         status = self._build_status()
         return f"{bar}  {status}"
 
-    def _render_locked(self) -> None:
-        """
-        Gibt ggf. Header aus und aktualisiert die einzeilige Fortschrittszeile.
+    # ------------------------------------------------------------
+    # Zentrales Rendering
+    # ------------------------------------------------------------
 
-        Strategie:
-        - Header einmal mit print() ausgeben.
-        - Fortschritt immer auf derselben Zeile halten (\\r), ohne neue Zeilen
-          zu produzieren, solange der Step läuft.
+    def _render_locked(self, *, final: bool = False) -> None:
         """
+        Header einmal ausgeben, Fortschritt in 1%-Schritten von alt → neu animieren.
+        """
+        # Header genau einmal
         if not self._header_printed:
-            # Header klassisch als eigene Zeile ausgeben
             print(self._build_header(), flush=True)
             self._header_printed = True
 
-        line = self._build_line()
-
-        # Wenn sich nichts geändert hat → nicht spammen
-        if line == self._last_line:
+        # indeterminierter Modus: kein % → nur eine Zeile
+        if self.total is None or self.total <= 0:
+            line = self._build_line_for_percent(None)
+            if line != self._last_line:
+                sys.stdout.write("\r" + line)
+                sys.stdout.flush()
+                self._last_line = line
+            if final:
+                sys.stdout.write("\n")
+                sys.stdout.flush()
+                self._last_line = ""
             return
 
-        # Fortschrittszeile "in place" aktualisieren:
-        # - mit \\r an den Zeilenanfang springen,
-        # - Zeile überschreiben,
-        # - kein \\n anhängen (das passiert erst in mark_finished/mark_failed).
-        sys.stdout.write("\r" + line)
-        sys.stdout.flush()
+        # Ziel-Prozent aus logischem Stand
+        target_ratio = self._completed / self.total if self.total else 0.0
+        target_percent = max(0, min(100, int(target_ratio * 100)))
 
-        self._last_line = line
+        # Rückwärtsbewegung clampen
+        if target_percent < self._display_percent:
+            self._display_percent = target_percent
+
+        # „Animation“: von aktuellem Display-Wert bis Ziel hochzählen
+        start = self._display_percent
+        end = target_percent
+
+        if start == end and not final:
+            # nichts zu tun
+            return
+
+        for p in range(start + 1, end + 1) if end > start else [start]:
+            self._display_percent = p
+            line = self._build_line_for_percent(p)
+            # Minimaler Spam-Schutz
+            if line == self._last_line:
+                continue
+            sys.stdout.write("\r" + line)
+            sys.stdout.flush()
+            self._last_line = line
+
+        # finaler Abschluss → Zeilenumbruch setzen
+        if final:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+            # self._last_line = ""

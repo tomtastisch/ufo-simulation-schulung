@@ -2,31 +2,29 @@
 from __future__ import annotations
 
 import re
-from abc import ABCMeta
+from abc import ABCMeta, ABC
 from dataclasses import dataclass
-from typing import Any, TYPE_CHECKING
+from typing import Any, ClassVar, NoReturn
 
 from tools.setup.domain import BootstrapConfig, PyProjectProfile
 from tools.setup.logging import ErrorLog
 from tools.setup.ui import SetupConsole
 
-if TYPE_CHECKING:
-    # Nur für Typprüfer; zur Laufzeit kein Import → kein Zirkel.
-    from tools.setup.steps.base import BaseStep
-
 _STID_PATTERN = re.compile(r"^[a-z0-9_]+$")
 
 
 @dataclass(slots=True)
-class StepContext:
-    """
-    Gemeinsamer Ausführungskontext für Setup-Schritte.
-    """
-
+class BaseStepContext:
     config: BootstrapConfig
     profile: PyProjectProfile
     console: SetupConsole
     log: ErrorLog
+
+
+class BaseStepCore(ABC):
+    """Minimale gemeinsame Basis für alle Steps, nur für Typen/Registry."""
+    stid: ClassVar[str]
+    prio: ClassVar[int]
 
 
 class BaseStepMeta(ABCMeta):
@@ -39,8 +37,24 @@ class BaseStepMeta(ABCMeta):
     - stid ist über alle Steps eindeutig
     """
 
-    # Für Debug/Inspektion reicht ein „breiter“ Typ:
     _registry: dict[str, type[Any]] = {}
+
+    @staticmethod
+    def throw(
+            name: str,
+            stid: object,
+            reason: str | None = None,
+            obj: str | None = None,
+            exc: type[Exception] = ValueError,
+    ) -> NoReturn:
+        msg = "Step {name} mit stid {id} ist ungültig{reason}{obj}.".format(
+            name=name,
+            id=stid,
+            reason=f", weil diese {reason}" if reason else "",
+            obj=f" [{obj}]" if obj else "",
+        )
+        raise exc(msg)
+
 
     def __init__(
             cls,
@@ -49,8 +63,6 @@ class BaseStepMeta(ABCMeta):
             namespace: dict[str, Any],
             **kwargs: Any,  # type: ignore[override]
     ) -> None:
-        # WICHTIG: keine @dataclass-Dekoration auf der Metaklasse selbst,
-        # damit super().__init__ sauber den ABCMeta/type-MRO-Pfad nutzt.
         super().__init__(name, bases, namespace, **kwargs)
 
         # Basis-Klasse selbst nicht validieren
@@ -59,13 +71,7 @@ class BaseStepMeta(ABCMeta):
 
         registry = BaseStepMeta._registry
 
-        # ------------------------------------------------------------
-        # Sonderfall: dataclass(slots=True) erzeugt Klasse intern neu.
-        # Beim zweiten Aufruf kommt eine Klasse mit gleichem Namen und
-        # Modul, aber die Attribute (z.B. stid) sind bereits Deskriptoren.
-        # -> In diesem Fall NICHT neu validieren, sondern die bereits
-        #    registrierte Klasse durch die neue ersetzen.
-        # ------------------------------------------------------------
+        # dataclass(slots=True)-Sonderfall: Klasse wird neu erzeugt
         for existing_stid, existing_cls in list(registry.items()):
             if (
                     existing_cls.__name__ == cls.__name__
@@ -75,23 +81,36 @@ class BaseStepMeta(ABCMeta):
                 registry[existing_stid] = cls
                 return
 
-        # Normalfall: erste Definition dieser Step-Klasse
         stid = getattr(cls, "stid", None)
 
-        if not isinstance(stid, str) or not _STID_PATTERN.fullmatch(stid):
-            raise ValueError(
-                f"Step {name} hat eine ungültige stid {stid!r} – "
-                "erlaubt sind nur Kleinbuchstaben, Ziffern und Unterstrich."
+        if not isinstance(stid, str) or not stid:
+            BaseStepMeta.throw(
+                name=name,
+                stid=stid,
+                reason="leer ist",
+                obj="BaseStep.stid",
+                exc=TypeError,
+            )
+
+        if not _STID_PATTERN.fullmatch(stid):
+            BaseStepMeta.throw(
+                name=name,
+                stid=stid,
+                reason=f"nicht dem Pattern {_STID_PATTERN.pattern} entspricht",
+                obj="BaseStep.stid",
+                exc=ValueError,
             )
 
         if stid in registry and registry[stid] is not cls:
-            other = registry[stid].__name__
-            raise ValueError(
-                f"Step {name} verwendet stid {stid!r}, "
-                f"die bereits von {other} genutzt wird."
+            BaseStepMeta.throw(
+                name=name,
+                stid=stid,
+                reason=f"bereits genutzt wird",
+                obj=registry[stid].__name__,
+                exc=ValueError,
             )
 
-        registry[stid] = cls  # type: ignore[assignment]
+        registry[stid] = cls
 
     @classmethod
     def registry(mcls) -> dict[str, type[Any]]:
