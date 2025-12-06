@@ -9,6 +9,7 @@ Always-Default-First: load defaults completely, then layer user configs
 """
 
 import difflib
+import logging
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -90,8 +91,13 @@ class ConfigResolver:
                 "steps": [],
             }
         else:
-            with default_toml_path.open("rb") as f:
-                default_config = tomllib.load(f)
+            try:
+                with default_toml_path.open("rb") as f:
+                    default_config = tomllib.load(f)
+            except tomllib.TOMLDecodeError as e:
+                raise ValueError(
+                    f"Ungültige TOML-Syntax in {default_toml_path}: {e}"
+                ) from e
 
         return cls(_default_config=default_config)
 
@@ -113,8 +119,16 @@ class ConfigResolver:
             # Keine pyproject.toml vorhanden → leerer Layer
             return
 
-        with pyproject_path.open("rb") as f:
-            data: Mapping[str, Any] = tomllib.load(f)
+        try:
+            with pyproject_path.open("rb") as f:
+                data: Mapping[str, Any] = tomllib.load(f)
+        except tomllib.TOMLDecodeError as e:
+            # Ungültige pyproject.toml → leerer Layer mit Warnung
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Ungültige TOML-Syntax in {pyproject_path}, ignoriert: {e}"
+            )
+            return
 
         tool_table: Mapping[str, Any] = data.get("tool", {})
         setup_table: Mapping[str, Any] = tool_table.get("setup", {})

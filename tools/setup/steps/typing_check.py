@@ -9,6 +9,7 @@ to reinforce type annotation awareness (didactic focus).
 """
 
 import ast
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, override
@@ -184,7 +185,6 @@ class TypingCheckStep(BaseStep[TaskFilePaths]):
             # Syntaxfehler überspringen - nicht Aufgabe des Typisierungs-Checks
             # (Syntaxfehler werden vom Python-Interpreter und pylint/flake8 gemeldet)
             # Logging für Debugging-Zwecke
-            import logging
             logger = logging.getLogger(__name__)
             logger.debug(
                 f"Syntaxfehler in {path} ignoriert (Zeile {e.lineno}): {e.msg}"

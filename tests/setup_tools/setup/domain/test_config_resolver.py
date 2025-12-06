@@ -12,10 +12,6 @@ Testet:
 - Szenarien 2.1, 2.2, 2.3 aus der Spezifikation
 """
 
-import tempfile
-from pathlib import Path
-
-
 from tools.setup.domain.resolver import ConfigResolver
 
 
@@ -32,10 +28,10 @@ def test_load_from_nonexistent_defaults(tmp_path):
     assert defaults["verbosity"] == 1
 
 
-def test_load_from_valid_defaults():
+def test_load_from_valid_defaults(tmp_path):
     """Test: Laden einer gültigen setup_config.toml."""
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-        f.write("""
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("""
 [config.defaults]
 auto_install = false
 verbosity = 2
@@ -46,24 +42,19 @@ name = "Test Step"
 prio = 100
 enabled = true
 """)
-        config_path = Path(f.name)
 
-    try:
-        resolver = ConfigResolver.from_defaults(config_path)
+    resolver = ConfigResolver.from_defaults(config_path)
 
-        # Defaults prüfen
-        defaults = resolver._default_config["config"]["defaults"]
-        assert defaults["auto_install"] is False
-        assert defaults["verbosity"] == 2
+    # Defaults prüfen
+    defaults = resolver._default_config["config"]["defaults"]
+    assert defaults["auto_install"] is False
+    assert defaults["verbosity"] == 2
 
-        # Steps prüfen
-        steps = resolver._default_config["steps"]
-        assert len(steps) == 1
-        assert steps[0]["id"] == "test_step"
-        assert steps[0]["prio"] == 100
-
-    finally:
-        config_path.unlink()
+    # Steps prüfen
+    steps = resolver._default_config["steps"]
+    assert len(steps) == 1
+    assert steps[0]["id"] == "test_step"
+    assert steps[0]["prio"] == 100
 
 
 def test_add_pyproject_from_nonexistent_path(tmp_path):
@@ -75,10 +66,10 @@ def test_add_pyproject_from_nonexistent_path(tmp_path):
     assert resolver._pyproject_config == {}
 
 
-def test_add_pyproject_from_valid_file():
+def test_add_pyproject_from_valid_file(tmp_path):
     """Test: Laden von [tool.setup] aus pyproject.toml."""
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-        f.write("""
+    pyproject_path = tmp_path / "pyproject.toml"
+    pyproject_path.write_text("""
 [project]
 name = "test"
 
@@ -87,20 +78,15 @@ steps = ["create_env", "tests"]
 exclude = ["linter"]
 verbosity = 3
 """)
-        pyproject_path = Path(f.name)
 
-    try:
-        resolver = ConfigResolver.from_defaults(Path("/tmp/nonexistent.toml"))
-        resolver.add_pyproject(pyproject_path)
+    resolver = ConfigResolver.from_defaults(tmp_path / "nonexistent.toml")
+    resolver.add_pyproject(pyproject_path)
 
-        # pyproject_config sollte [tool.setup] enthalten
-        assert "steps" in resolver._pyproject_config
-        assert resolver._pyproject_config["steps"] == ["create_env", "tests"]
-        assert resolver._pyproject_config["exclude"] == ["linter"]
-        assert resolver._pyproject_config["verbosity"] == 3
-
-    finally:
-        pyproject_path.unlink()
+    # pyproject_config sollte [tool.setup] enthalten
+    assert "steps" in resolver._pyproject_config
+    assert resolver._pyproject_config["steps"] == ["create_env", "tests"]
+    assert resolver._pyproject_config["exclude"] == ["linter"]
+    assert resolver._pyproject_config["verbosity"] == 3
 
 
 def test_add_commands(tmp_path):
@@ -133,27 +119,22 @@ def test_resolve_scenario_2_2_no_commands_empty_pyproject(tmp_path):
     Test Szenario 2.2: Keine commands, pyproject.toml ohne relevante Konfigurationen.
     Ergebnis: defaultconfig.
     """
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-        f.write("""
+    pyproject_path = tmp_path / "pyproject.toml"
+    pyproject_path.write_text("""
 [project]
 name = "test"
 
 # Kein [tool.setup]
 """)
-        pyproject_path = Path(f.name)
 
-    try:
-        resolver = ConfigResolver.from_defaults(tmp_path / "nonexistent.toml")
-        resolver.add_pyproject(pyproject_path)
-        resolution = resolver.resolve()
+    resolver = ConfigResolver.from_defaults(tmp_path / "nonexistent.toml")
+    resolver.add_pyproject(pyproject_path)
+    resolution = resolver.resolve()
 
-        # Sollte nur Defaults enthalten (pyproject hat nichts zu [tool.setup])
-        assert resolution.config["auto_install"] is True
-        assert resolution.config["verbosity"] == 1
-        assert len(resolution.warnings) == 0
-
-    finally:
-        pyproject_path.unlink()
+    # Sollte nur Defaults enthalten (pyproject hat nichts zu [tool.setup])
+    assert resolution.config["auto_install"] is True
+    assert resolution.config["verbosity"] == 1
+    assert len(resolution.warnings) == 0
 
 
 def test_resolve_scenario_2_3_invalid_keys_with_suggestions(tmp_path):
@@ -161,8 +142,8 @@ def test_resolve_scenario_2_3_invalid_keys_with_suggestions(tmp_path):
     Test Szenario 2.3: pyproject.toml mit falschen/unzuordenbaren Konfigurationen.
     Ergebnis: defaultconfig für diese Teile, plus Hinweise.
     """
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-        f.write("""
+    pyproject_path = tmp_path / "pyproject.toml"
+    pyproject_path.write_text("""
 [project]
 name = "test"
 
@@ -171,68 +152,56 @@ stpes = ["create_env"]  # Typo: sollte "steps" sein
 verbosity = 2  # gültig
 unknown_key = "value"  # unbekannt
 """)
-        pyproject_path = Path(f.name)
 
-    try:
-        resolver = ConfigResolver.from_defaults(tmp_path / "nonexistent.toml")
-        resolver.add_pyproject(pyproject_path)
-        resolution = resolver.resolve()
+    resolver = ConfigResolver.from_defaults(tmp_path / "nonexistent.toml")
+    resolver.add_pyproject(pyproject_path)
+    resolution = resolver.resolve()
 
-        # Gültiger Key wurde übernommen
-        assert resolution.config["verbosity"] == 2
+    # Gültiger Key wurde übernommen
+    assert resolution.config["verbosity"] == 2
 
-        # Ungültige Keys wurden ignoriert, Warnings vorhanden
-        assert len(resolution.warnings) > 0
+    # Ungültige Keys wurden ignoriert, Warnings vorhanden
+    assert len(resolution.warnings) > 0
 
-        # "stpes" sollte Vorschlag "steps" bekommen
-        warnings_text = " ".join(resolution.warnings)
-        assert "stpes" in warnings_text
-        assert "steps" in warnings_text or "Meinten Sie" in warnings_text
-
-    finally:
-        pyproject_path.unlink()
+    # "stpes" sollte Vorschlag "steps" bekommen
+    warnings_text = " ".join(resolution.warnings)
+    assert "stpes" in warnings_text
+    assert "steps" in warnings_text or "Meinten Sie" in warnings_text
 
 
-def test_resolve_priority_order():
+def test_resolve_priority_order(tmp_path):
     """
     Test: Prioritätsreihenfolge commands > pyproject > defaults.
     """
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-        f.write("""
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("""
 [config.defaults]
 auto_install = true
 verbosity = 1
 """)
-        config_path = Path(f.name)
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-        f.write("""
+    pyproject_path = tmp_path / "pyproject.toml"
+    pyproject_path.write_text("""
 [tool.setup]
 verbosity = 3
 """)
-        pyproject_path = Path(f.name)
 
-    try:
-        resolver = ConfigResolver.from_defaults(config_path)
-        resolver.add_pyproject(pyproject_path)
-        resolver.add_commands({"verbosity": 5})
+    resolver = ConfigResolver.from_defaults(config_path)
+    resolver.add_pyproject(pyproject_path)
+    resolver.add_commands({"verbosity": 5})
 
-        resolution = resolver.resolve()
+    resolution = resolver.resolve()
 
-        # Commands haben höchste Priorität
-        assert resolution.config["verbosity"] == 5
-        # auto_install kommt aus defaults (nicht überschrieben)
-        assert resolution.config["auto_install"] is True
-
-    finally:
-        config_path.unlink()
-        pyproject_path.unlink()
+    # Commands haben höchste Priorität
+    assert resolution.config["verbosity"] == 5
+    # auto_install kommt aus defaults (nicht überschrieben)
+    assert resolution.config["auto_install"] is True
 
 
-def test_get_steps_metadata():
+def test_get_steps_metadata(tmp_path):
     """Test: Step-Metadaten aus Standardkonfiguration extrahieren."""
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-        f.write("""
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("""
 [config.defaults]
 auto_install = true
 
@@ -246,20 +215,15 @@ id = "step2"
 name = "Step Two"
 prio = 50
 """)
-        config_path = Path(f.name)
 
-    try:
-        resolver = ConfigResolver.from_defaults(config_path)
-        steps = resolver.get_steps_metadata()
+    resolver = ConfigResolver.from_defaults(config_path)
+    steps = resolver.get_steps_metadata()
 
-        assert len(steps) == 2
-        assert steps[0]["id"] == "step1"
-        assert steps[0]["prio"] == 100
-        assert steps[1]["id"] == "step2"
-        assert steps[1]["prio"] == 50
-
-    finally:
-        config_path.unlink()
+    assert len(steps) == 2
+    assert steps[0]["id"] == "step1"
+    assert steps[0]["prio"] == 100
+    assert steps[1]["id"] == "step2"
+    assert steps[1]["prio"] == 50
 
 
 def test_suggest_keys_exact_match(tmp_path):
