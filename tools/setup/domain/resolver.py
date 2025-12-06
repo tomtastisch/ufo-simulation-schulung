@@ -15,21 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Final
 
-
-@dataclass(slots=True, frozen=True)
-class ConfigResolution:
-    """
-    Ergebnis der Konfigurationsauflösung mit Validierungsinformationen.
-
-    Attributes:
-        config: Vollständig aufgelöste Konfiguration
-        warnings: Liste von Warnungen (z.B. unbekannte Schlüssel)
-        suggestions: Dict mit Schlüssel -> Liste von Vorschlägen
-    """
-
-    config: Mapping[str, Any]
-    warnings: tuple[str, ...] = ()
-    suggestions: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+from .config_resolution import ConfigResolution
 
 
 @dataclass(slots=True)

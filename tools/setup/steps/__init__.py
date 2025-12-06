@@ -13,7 +13,7 @@ from .create_env import CreateEnvStep
 from .install_deps import InstallDepsStep
 from .linter_check import EvaluateImportsStep
 from .test_runner import RunTestsStep
-from .typing_check import TypingCheckStep
+from .typing_check import TypingCheckStep  # Now a package
 
 STEPS: tuple[type[BaseStep[object]], ...] = (
     CreateEnvStep,
