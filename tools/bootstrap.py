@@ -120,44 +120,52 @@ def generate_help_text() -> str:
     Returns:
         Formatierter Help-Text
     """
-    # Step-Metadaten aus setup_config.toml laden
     config_path = Path(__file__).parent / "setup" / "ui" / "resources" / "setup_config.toml"
-    resolver = ConfigResolver.from_defaults(config_path)
-    steps_meta = resolver.get_steps_metadata()
+    try:
+        resolver = ConfigResolver.from_defaults(config_path)
+        steps_meta = resolver.get_steps_metadata()
 
-    # Steps nach Priorität sortieren
-    sorted_steps = sorted(
-        steps_meta,
-        key=lambda s: s.get("prio", 0),
-        reverse=True,
-    )
+        # Steps nach Priorität sortieren
+        sorted_steps = sorted(
+            steps_meta,
+            key=lambda s: s.get("prio", 0),
+            reverse=True,
+        )
 
-    # Steps-Liste formatieren
-    steps_lines = []
-    for step in sorted_steps:
-        step_id = step.get("id", "unknown")
-        desc = step.get("description", "Keine Beschreibung")
-        enabled = "✓" if step.get("enabled", True) else "✗"
-        steps_lines.append(f"  [{enabled}] {step_id:20s} - {desc}")
+        # Steps-Liste formatieren
+        steps_lines = []
+        for step in sorted_steps:
+            step_id = step.get("id", "unknown")
+            desc = step.get("description", "Keine Beschreibung")
+            enabled = "✓" if step.get("enabled", True) else "✗"
+            steps_lines.append(f"  [{enabled}] {step_id:20s} - {desc}")
 
-    steps_list = "\n".join(steps_lines)
+        steps_list = "\n".join(steps_lines)
 
-    # Template aus Katalog holen
-    template = CATALOG.text(
-        "help",
-        field="usage",
-        default="""
+        # Template aus Katalog holen
+        template = CATALOG.text(
+            "help",
+            field="usage",
+            default="""
 Verwendung:
   python setup_v2.py [OPTIONEN]
 
 Verfügbare Steps:
 {steps_list}
 """,
-    )
+        )
 
-    return template.format(steps_list=steps_list)
-
-
+        return template.format(steps_list=steps_list)
+    except Exception as ex:
+        # Fallback: Minimaler Help-Text bei Fehlern (z.B. ValueError durch ungültige TOML)
+        fallback_steps = "  [!] Step-Informationen konnten nicht geladen werden (Konfigurationsfehler)."
+        fallback_template = (
+            "Verwendung:\n"
+            "  python setup_v2.py [OPTIONEN]\n\n"
+            "Verfügbare Steps:\n"
+            f"{fallback_steps}\n"
+        )
+        return fallback_template
 def show_help() -> None:
     """Zeigt Help-Text und beendet das Programm."""
     title = CATALOG.text("help", field="title", default="UFO-Simulation Setup – Hilfe")
