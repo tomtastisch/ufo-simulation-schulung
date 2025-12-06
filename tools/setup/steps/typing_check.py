@@ -24,7 +24,7 @@ from tools.setup.ui import CATALOG
 from tools.setup.ui.progress import ProgressStep
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class TypeAnnotation:
     """
     Einzelner Befund zu einer fehlenden Typannotation.
@@ -177,8 +177,15 @@ class TypingCheckStep(BaseStep[tuple[Path, ...]]):
 
             return checker.findings
 
-        except SyntaxError:
-            # Bei Syntaxfehlern: leer zurückgeben (nicht unsere Aufgabe zu fixen)
+        except SyntaxError as e:
+            # Syntaxfehler überspringen - nicht Aufgabe des Typisierungs-Checks
+            # (Syntaxfehler werden vom Python-Interpreter und pylint/flake8 gemeldet)
+            # Logging für Debugging-Zwecke
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.debug(
+                f"Syntaxfehler in {path} ignoriert (Zeile {e.lineno}): {e.msg}"
+            )
             return []
 
     @override

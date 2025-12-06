@@ -20,9 +20,9 @@ import pytest
 from tools.setup.domain.resolver import ConfigResolver, ConfigResolution
 
 
-def test_load_from_nonexistent_defaults():
+def test_load_from_nonexistent_defaults(tmp_path):
     """Test: Wenn setup_config.toml nicht existiert, wird Fallback-Config verwendet."""
-    nonexistent_path = Path("/tmp/does_not_exist_12345.toml")
+    nonexistent_path = tmp_path / "does_not_exist_12345.toml"
     resolver = ConfigResolver.from_defaults(nonexistent_path)
 
     assert resolver._default_config is not None
@@ -67,10 +67,10 @@ enabled = true
         config_path.unlink()
 
 
-def test_add_pyproject_from_nonexistent_path():
+def test_add_pyproject_from_nonexistent_path(tmp_path):
     """Test: Wenn pyproject.toml nicht existiert, wird nichts hinzugefügt."""
-    resolver = ConfigResolver.from_defaults(Path("/tmp/nonexistent.toml"))
-    resolver.add_pyproject(Path("/tmp/also_nonexistent/pyproject.toml"))
+    resolver = ConfigResolver.from_defaults(tmp_path / "nonexistent.toml")
+    resolver.add_pyproject(tmp_path / "also_nonexistent" / "pyproject.toml")
 
     # Kein Fehler, pyproject_config bleibt leer
     assert resolver._pyproject_config == {}
@@ -104,9 +104,9 @@ verbosity = 3
         pyproject_path.unlink()
 
 
-def test_add_commands():
+def test_add_commands(tmp_path):
     """Test: CLI-Commands hinzufügen."""
-    resolver = ConfigResolver.from_defaults(Path("/tmp/nonexistent.toml"))
+    resolver = ConfigResolver.from_defaults(tmp_path / "nonexistent.toml")
     commands = {"verbosity": 5, "steps": ["only_this"]}
     resolver.add_commands(commands)
 
@@ -114,12 +114,12 @@ def test_add_commands():
     assert resolver._command_config["steps"] == ["only_this"]
 
 
-def test_resolve_scenario_2_1_no_commands_no_pyproject():
+def test_resolve_scenario_2_1_no_commands_no_pyproject(tmp_path):
     """
     Test Szenario 2.1: Keine commands, keine pyproject.toml.
     Ergebnis: defaultconfig.
     """
-    resolver = ConfigResolver.from_defaults(Path("/tmp/nonexistent.toml"))
+    resolver = ConfigResolver.from_defaults(tmp_path / "nonexistent.toml")
     # Keine pyproject, keine commands
     resolution = resolver.resolve()
 
@@ -129,7 +129,7 @@ def test_resolve_scenario_2_1_no_commands_no_pyproject():
     assert len(resolution.warnings) == 0
 
 
-def test_resolve_scenario_2_2_no_commands_empty_pyproject():
+def test_resolve_scenario_2_2_no_commands_empty_pyproject(tmp_path):
     """
     Test Szenario 2.2: Keine commands, pyproject.toml ohne relevante Konfigurationen.
     Ergebnis: defaultconfig.
@@ -144,7 +144,7 @@ name = "test"
         pyproject_path = Path(f.name)
 
     try:
-        resolver = ConfigResolver.from_defaults(Path("/tmp/nonexistent.toml"))
+        resolver = ConfigResolver.from_defaults(tmp_path / "nonexistent.toml")
         resolver.add_pyproject(pyproject_path)
         resolution = resolver.resolve()
 
@@ -157,7 +157,7 @@ name = "test"
         pyproject_path.unlink()
 
 
-def test_resolve_scenario_2_3_invalid_keys_with_suggestions():
+def test_resolve_scenario_2_3_invalid_keys_with_suggestions(tmp_path):
     """
     Test Szenario 2.3: pyproject.toml mit falschen/unzuordenbaren Konfigurationen.
     Ergebnis: defaultconfig für diese Teile, plus Hinweise.
@@ -175,7 +175,7 @@ unknown_key = "value"  # unbekannt
         pyproject_path = Path(f.name)
 
     try:
-        resolver = ConfigResolver.from_defaults(Path("/tmp/nonexistent.toml"))
+        resolver = ConfigResolver.from_defaults(tmp_path / "nonexistent.toml")
         resolver.add_pyproject(pyproject_path)
         resolution = resolver.resolve()
 
@@ -263,9 +263,9 @@ prio = 50
         config_path.unlink()
 
 
-def test_suggest_keys_exact_match():
+def test_suggest_keys_exact_match(tmp_path):
     """Test: difflib-Vorschläge bei ähnlichen Keys."""
-    resolver = ConfigResolver.from_defaults(Path("/tmp/nonexistent.toml"))
+    resolver = ConfigResolver.from_defaults(tmp_path / "nonexistent.toml")
 
     suggestions = resolver._suggest_keys(
         "stpes",
@@ -275,9 +275,9 @@ def test_suggest_keys_exact_match():
     assert "steps" in suggestions
 
 
-def test_suggest_keys_no_match():
+def test_suggest_keys_no_match(tmp_path):
     """Test: Keine Vorschläge wenn Key zu unterschiedlich."""
-    resolver = ConfigResolver.from_defaults(Path("/tmp/nonexistent.toml"))
+    resolver = ConfigResolver.from_defaults(tmp_path / "nonexistent.toml")
 
     suggestions = resolver._suggest_keys(
         "xyz123",
