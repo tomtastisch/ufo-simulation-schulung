@@ -167,14 +167,13 @@ Verfügbare Steps:
         )
         return fallback_template
 def show_help() -> None:
-    """Zeigt Help-Text und beendet das Programm."""
+    """Zeigt Help-Text."""
     title = CATALOG.text("help", field="title", default="UFO-Simulation Setup – Hilfe")
     help_text = generate_help_text()
 
     print(title)
     print("=" * len(title))
     print(help_text)
-    sys.exit(0)
 
 
 def _select_steps(profile: PyProjectProfile) -> tuple[type[BaseStep[object]], ...]:
@@ -254,8 +253,7 @@ def execute(argv: list[str] | None = None) -> int:
     # 2. --help Handler
     if args.help:
         show_help()
-        # show_help() beendet das Programm, diese Zeile wird nie erreicht
-        return 0  # pragma: no cover
+        return 0
 
     # 3. Config und Profile erstellen
     config = BootstrapConfig()

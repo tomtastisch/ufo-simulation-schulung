@@ -28,7 +28,7 @@ class ConfigResolution:
     """
 
     config: Mapping[str, Any]
-    warnings: tuple[str, ...] = field(default_factory=tuple)
+    warnings: tuple[str, ...] = ()
     suggestions: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
 

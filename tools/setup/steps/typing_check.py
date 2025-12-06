@@ -38,14 +38,12 @@ class TypeAnnotation:
         line: Zeilennummer
         name: Name des Elements (Parameter, Funktion, Variable)
         type: Art des Elements ("parameter", "return", "variable")
-        has_annotation: Ob eine Annotation vorhanden ist
     """
 
     file: str
     line: int
     name: str
     type: str  # "parameter", "return", "variable"
-    has_annotation: bool
 
 
 class AnnotationChecker(ast.NodeVisitor):
@@ -53,21 +51,31 @@ class AnnotationChecker(ast.NodeVisitor):
     AST-Visitor zur Prüfung von Typannotationen.
 
     Prüft:
-    - Funktionsparameter
-    - Return-Typannotationen
-    - Variablen (nur im strict mode)
+    - Funktionsparameter (wenn check_params=True)
+    - Return-Typannotationen (wenn check_returns=True)
+    - Variablen (nur im strict mode oder wenn check_variables=True)
     """
 
-    def __init__(self, mode: str, check_variables: bool) -> None:
+    def __init__(
+        self,
+        mode: str,
+        check_variables: bool,
+        check_params: bool = True,
+        check_returns: bool = True,
+    ) -> None:
         """
         Initialisiert den Checker.
 
         Args:
             mode: "strict" oder "relaxed"
             check_variables: Ob Variablen geprüft werden sollen
+            check_params: Ob Funktionsparameter geprüft werden sollen
+            check_returns: Ob Return-Annotationen geprüft werden sollen
         """
         self.mode: str = mode
         self.check_variables: bool = check_variables
+        self.check_params: bool = check_params
+        self.check_returns: bool = check_returns
         self.findings: list[TypeAnnotation] = []
         self._current_file: str = ""
 
@@ -80,35 +88,34 @@ class AnnotationChecker(ast.NodeVisitor):
         Prüft eine Funktionsdefinition.
 
         Checks:
-        - Parameter-Annotationen (alle außer self/cls)
-        - Return-Annotation (außer bei __init__)
+        - Parameter-Annotationen (wenn check_params=True, alle außer self/cls)
+        - Return-Annotation (wenn check_returns=True, außer bei __init__)
         """
-        # Parameter prüfen
-        for arg in node.args.args:
-            # self und cls überspringen
-            if arg.arg in ("self", "cls"):
-                continue
+        # Parameter prüfen (nur wenn aktiviert)
+        if self.check_params:
+            for arg in node.args.args:
+                # self und cls überspringen
+                if arg.arg in ("self", "cls"):
+                    continue
 
-            if arg.annotation is None:
-                self.findings.append(
-                    TypeAnnotation(
-                        file=self._current_file,
-                        line=arg.lineno,
-                        name=arg.arg,
-                        type="parameter",
-                        has_annotation=False,
+                if arg.annotation is None:
+                    self.findings.append(
+                        TypeAnnotation(
+                            file=self._current_file,
+                            line=arg.lineno,
+                            name=arg.arg,
+                            type="parameter",
+                        )
                     )
-                )
 
-        # Return-Annotation prüfen (außer __init__)
-        if node.returns is None and node.name != "__init__":
+        # Return-Annotation prüfen (nur wenn aktiviert, außer __init__)
+        if self.check_returns and node.returns is None and node.name != "__init__":
             self.findings.append(
                 TypeAnnotation(
                     file=self._current_file,
                     line=node.lineno,
                     name=node.name,
                     type="return",
-                    has_annotation=False,
                 )
             )
 
@@ -133,7 +140,6 @@ class AnnotationChecker(ast.NodeVisitor):
                             line=node.lineno,
                             name=target.id,
                             type="variable",
-                            has_annotation=False,
                         )
                     )
         self.generic_visit(node)
@@ -159,6 +165,8 @@ class TypingCheckStep(BaseStep[TaskFilePaths]):
         path: Path,
         mode: str,
         check_variables: bool,
+        check_params: bool = True,
+        check_returns: bool = True,
     ) -> list[TypeAnnotation]:
         """
         Prüft eine einzelne Python-Datei mit AST.
@@ -167,6 +175,8 @@ class TypingCheckStep(BaseStep[TaskFilePaths]):
             path: Pfad zur Python-Datei
             mode: "strict" oder "relaxed"
             check_variables: Ob Variablen geprüft werden sollen
+            check_params: Ob Funktionsparameter geprüft werden sollen
+            check_returns: Ob Return-Annotationen geprüft werden sollen
 
         Returns:
             Liste von Findings (fehlende Annotationen)
@@ -175,7 +185,12 @@ class TypingCheckStep(BaseStep[TaskFilePaths]):
             source = path.read_text(encoding="utf-8")
             tree = ast.parse(source, filename=str(path))
 
-            checker = AnnotationChecker(mode=mode, check_variables=check_variables)
+            checker = AnnotationChecker(
+                mode=mode,
+                check_variables=check_variables,
+                check_params=check_params,
+                check_returns=check_returns,
+            )
             checker.set_file(str(path.relative_to(Path.cwd())))
             checker.visit(tree)
 
@@ -247,6 +262,8 @@ class TypingCheckStep(BaseStep[TaskFilePaths]):
         options = self.options(ctx)
         mode: str = str(options.get("mode", "relaxed"))
         check_variables: bool = bool(options.get("check_variables", False))
+        check_params: bool = bool(options.get("check_params", True))
+        check_returns: bool = bool(options.get("check_returns", True))
 
         # Alle Dateien prüfen
         all_findings: list[TypeAnnotation] = []
@@ -255,6 +272,8 @@ class TypingCheckStep(BaseStep[TaskFilePaths]):
                 path=file_path,
                 mode=mode,
                 check_variables=check_variables,
+                check_params=check_params,
+                check_returns=check_returns,
             )
             all_findings.extend(findings)
 
