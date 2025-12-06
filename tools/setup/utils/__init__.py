@@ -12,6 +12,7 @@ in ``context`` und ``pause``.
 from .context import run_command, short_output
 from .module import evaluate, classify, install
 from .version import ensure_venv, venv_create
+from .runner import run_single
 
 __all__: list[str] = [
     "run_command",
@@ -21,4 +22,5 @@ __all__: list[str] = [
     "install",
     "ensure_venv",
     "venv_create",
+    "run_single"
 ]

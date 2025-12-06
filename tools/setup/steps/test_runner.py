@@ -1,37 +1,79 @@
-# tools/setup/steps/test_runner.py
 from __future__ import annotations
 
+import logging
+import re
 from dataclasses import dataclass
-from typing import override
+from typing import ClassVar, override
 
-from tools.setup.steps.base import BaseStep, StepContext
-from tools.setup.ui.progress import ProgressStep
+from tools.setup.steps.base import (
+    BaseStep,
+    BaseStepContext,
+    StepResult,
+    PrepareResult,
+    handle_prepare,
+)
 from tools.setup.ui import CATALOG
-from tools.setup.utils import module
+from tools.setup.ui.progress import ProgressStep
+from tools.setup.utils import module, run_single
+
+logger = logging.getLogger(__name__)
+
+# Beispielzeilen aus pytest --collect-only:
+# <Dir ufo-simulation-schulung>
+#   <Dir tests>
+#     <Dir core>
+#       <Dir simulation>
+#         <Dir observer>
+#           <Module test_heading_delta.py>
+#             <Class TestNormalizeHeadingDelta>
+#               <Function test_no_wrap_around_positive_small>
+_COLLECT_LINE_RE = re.compile(
+    r"^(?P<indent>\s*)<(?P<kind>Dir|Module|Class|Function) (?P<name>[^>]+)>"
+)
 
 
 @dataclass(slots=True)
-class RunTestsStep(BaseStep[tuple[str, ...]]):
+class RunTestsStep(BaseStep[tuple[tuple[str, str], ...]]):
     """
     Setup-Schritt zum Ausführen der Test-Suite via pytest.
 
-    Design:
-    - prepare() sammelt alle Test-NodeIDs via "pytest --collect-only -q".
-    - estimate_total() leitet die Balkenlänge aus der Anzahl Tests ab.
-    - step() führt jeden Test einzeln aus und aktualisiert Progress/Status.
+    prepared-Payload:
+        tuple[(testfile_relpath, qualified_name), ...]
+
+    Beispiel eines Eintrags:
+        ("tests/core/simulation/observer/test_heading_delta.py",
+         "TestNormalizeHeadingDelta::test_no_wrap_around_positive_small")
     """
 
-    stid = "tests"
-    priority = 0
+    stid: ClassVar[str] = "tests"
+    prio: ClassVar[int] = 0
 
     @override
-    def prepare(self, ctx: StepContext) -> tuple[str, ...]:
-        """Sammelt alle Test-NodeIDs, die später als Arbeitseinheiten dienen."""
+    def estimate_total(
+            self,
+            prepared: tuple[tuple[str, str], ...] | None,
+    ) -> int | None:
+        if prepared:
+            return len(prepared)
+        # Fallback: Gesamtlauf
+        return 1
+
+    @override
+    @handle_prepare
+    def prepare(self, ctx: BaseStepContext) -> PrepareResult[tuple[tuple[str, str], ...]]:
+        """
+        Führt `pytest --collect-only` aus und baut daraus ein 2D-Array:
+
+            [(testfile_relpath, qualified_name), ...]
+
+        qualified_name ist z. B. "Class::SubClass::test_func"
+        oder bei freien Funktionen einfach "test_func".
+        """
         ok, output, exc_info = module.evaluate(
             python=str(ctx.config.venv_python),
             module="pytest",
             cwd=ctx.config.repo_root,
-            extra_args=("--collect-only", "-q"),
+            extra_args=("--collect-only",),
         )
 
         if not ok:
@@ -40,191 +82,173 @@ class RunTestsStep(BaseStep[tuple[str, ...]]):
                 output=output,
                 module="pytest",
             )
-            msg = self.output(
-                ctx,
-                field="failure",
+            text = details or output or "pytest --collect-only fehlgeschlagen"
+            return PrepareResult(
+                ok=False,
                 cause=kind,
-                details=details or output or "pytest --collect-only fehlgeschlagen",
+                details=text,
+                error_hint=text,
+                payload=None,
             )
-            ctx.log.write_error(
-                section=self.name,
-                message=msg,
-                details=details or output or "",
-            )
-            # Harte Exception → BaseStep.run() behandelt das wie einen Step-Fehler
-            raise RuntimeError(f"pytest Collect-Phase fehlgeschlagen: {kind}: {details}")
 
-        tests: list[str] = []
-        for line in (output or "").splitlines():
-            stripped = line.strip()
-            if not stripped:
-                continue
-            # Grober Filter: pytest gibt bei -q pro Test üblicherweise eine NodeID aus.
-            if stripped.startswith(("collected ", "<", "=")):
-                continue
-            tests.append(stripped)
+        text = output or ""
 
-        return tuple(tests)
+        # Stack über die Baumstruktur; jedes Element:
+        # (kind, name, level)
+        stack: list[tuple[str, str, int]] = []
+        pairs: list[tuple[str, str]] = []
+
+        for line in text.splitlines():
+            m = _COLLECT_LINE_RE.match(line)
+            if not m:
+                continue
+
+            indent = m.group("indent") or ""
+            level = len(indent) // 2
+            kind = m.group("kind")
+            name = m.group("name")
+
+            # Stack auf aktuelle Ebene kürzen
+            while stack and stack[-1][2] >= level:
+                stack.pop()
+
+            if kind == "Function":
+                # Wir haben eine Funktion; Module + Klassen aus dem Stack auslesen
+                if not any(k == "Module" for k, _, _ in stack):
+                    continue
+
+                # Index des letzten Modules im Stack
+                module_index = max(
+                    i for i, (k, _, _) in enumerate(stack) if k == "Module"
+                )
+
+                # Verzeichnisse vor dem Module-Eintrag
+                dir_parts = [
+                    n
+                    for k, n, _ in stack[:module_index]
+                    if k == "Dir"
+                ]
+                module_name = stack[module_index][1]
+
+                # Relativer Pfad ab "tests" aufbauen
+                if "tests" in dir_parts:
+                    idx = dir_parts.index("tests")
+                    dir_parts = dir_parts[idx:]
+                module_path = "/".join(dir_parts + [module_name])
+
+                # Klassen zwischen Module und Function einsammeln
+                class_names = [
+                    n
+                    for k, n, _ in stack[module_index + 1:]
+                    if k == "Class"
+                ]
+                if class_names:
+                    qualified = "::".join((*class_names, name))
+                else:
+                    qualified = name
+
+                pairs.append((module_path, qualified))
+                continue
+
+            # Für Dir / Module / Class: Node in den Stack pushen
+            stack.append((kind, name, level))
+
+        return PrepareResult(
+            ok=True,
+            payload=tuple(pairs),
+        )
 
     @override
-    def step(
+    def _step_impl(
             self,
-            ctx: StepContext,
-            prepared: tuple[str, ...] | None,
+            ctx: BaseStepContext,
+            prepared: tuple[tuple[str, str], ...] | None,
             progress: ProgressStep | None,
-    ) -> bool:
-        tests = prepared or tuple()
+    ) -> StepResult:
         python = str(ctx.config.venv_python)
         cwd = ctx.config.repo_root
 
-        # Fall: keine Tests gefunden → einmaliger pytest-Run als Fallback.
-        if not tests:
-            ok, output, exc_info = module.evaluate(
-                python=python,
-                module="pytest",
-                cwd=cwd,
-                extra_args=(),
-            )
-
-            cause = ""
-            details = ""
-
-            match exc_info, ok:
-                case str() as err, _:
-                    cause = "tests_running_error"
-                    details = err
-                case None, False:
-                    cause = "tests_failed"
-                    details = output or "keine Ausgabe"
-
-            msg = self.output(
-                ctx,
-                field="success" if ok else "failure",
-                cause=cause,
-                details=details,
-            )
-
-            if progress is not None:
-                # Status über CATALOG (Running/Finished/Failed) aktualisieren
-                field = "progress_finished" if ok else "progress_failed"
-                default = (
-                    "Finished /   Alle Tests erfolgreich."
-                    if ok
-                    else "Failed   /   Tests fehlgeschlagen – Details siehe Log."
-                )
-                progress.set_status(
-                    CATALOG.format(
-                        "step_default",
-                        field=field,
-                        default=default,
-                        details=details or output or "",
-                    )
-                )
-
-            if not ok:
-                ctx.log.write_error(
-                    section=self.name,
-                    message=msg,
-                    details=details or output or "",
-                )
-
-            return ok
-
+        tests: tuple[tuple[str, str], ...] = prepared or tuple()
         total = len(tests)
-        ok_overall = True
-        cause = ""
-        details = ""
-        last_output = ""
 
-        for index, nodeid in enumerate(tests, start=1):
-            # Fortschritts-Text: konkreter Testname
-            if progress is not None:
-                test_details = CATALOG.format(
-                    "RunTestsStep",
-                    field="test_details",
-                    default="Test {index}/{total}: {test}",
-                    index=index,
-                    total=total,
-                    test=nodeid,
-                )
-                running = CATALOG.format(
-                    "step_default",
-                    field="progress_running",
-                    default="Running  /   {details}",
-                    details=test_details,
-                )
-                progress.set_status(running)
+        tests_done_label = CATALOG.format(
+            "RunTestsStep",
+            field="tests_done",
+            default="Alle Tests erfolgreich.",
+        )
+        tests_failed_label = CATALOG.format(
+            "RunTestsStep",
+            field="tests_failed",
+            default="Tests fehlgeschlagen – Details siehe Log.",
+        )
 
-            ok, output, exc_info = module.evaluate(
+        def run_with_progress(
+                *,
+                nodeid: str | None,
+                status: str | None,
+        ) -> tuple[bool, str | None, str]:
+            # ====================================================
+            # Deinition interner Methoden
+            # ====================================================
+            if progress is not None and status:
+                progress.set_status(status)
+
+            ok, cause, details = run_single(
                 python=python,
-                module="pytest",
                 cwd=cwd,
-                extra_args=(nodeid,),
+                nodeid=nodeid,
+                logger=logger,
             )
-            last_output = output or ""
-
-            test_cause = ""
-            test_details = ""
-
-            match exc_info, ok:
-                case str() as err, _:
-                    test_cause = "tests_running_error"
-                    test_details = err
-                case None, False:
-                    test_cause = "tests_failed"
-                    test_details = output or "keine Ausgabe"
 
             if progress is not None:
                 progress.advance(1)
 
+            return ok, cause, details or ""
+
+        def make_result(ok: bool, cause: str | None, details: str) -> StepResult:
+            if ok:
+                return StepResult.success(
+                    label=tests_done_label,
+                    details=details,
+                )
+            return StepResult.failure(
+                cause=cause or "tests_failed",
+                details=details,
+                label=tests_failed_label,
+            )
+
+        # ====================================================
+        # Methodenstart
+        # ====================================================
+
+        # Fall 1: Kein einzelnes Test-Listing → Gesamtlauf
+        if not tests:
+            ok, cause, details = run_with_progress(
+                nodeid=None,
+                status="Running  /   pytest-Gesamtlauf",
+            )
+            return make_result(ok, cause, details)
+
+        # Fall 2: Einzelläufe mit Fortschritt
+        last_ok = True
+        last_cause: str | None = None
+        last_details = ""
+
+        for index, (file_relpath, qualified_name) in enumerate(tests, start=1):
+            nodeid = f"{file_relpath}::{qualified_name}"
+            func_name = qualified_name.split("::")[-1]
+            status = f"Running  /   Test {index}/{total}: {func_name}"
+
+            ok, cause, details = run_with_progress(
+                nodeid=nodeid,
+                status=status,
+            )
+
+            last_ok = ok
+            last_cause = cause
+            last_details = details
+
             if not ok:
-                ok_overall = False
-                cause = test_cause
-                details = test_details
                 break
 
-        msg = self.output(
-            ctx,
-            field="success" if ok_overall else "failure",
-            cause=cause,
-            details=details or last_output or "",
-        )
-
-        # Finaler Status unter dem Balken
-        if progress is not None:
-            field = "tests_done" if ok_overall else "tests_failed"
-            default_details = (
-                "Alle Tests erfolgreich."
-                if ok_overall
-                else "Tests fehlgeschlagen – Details siehe Log."
-            )
-            details_text = CATALOG.format(
-                "RunTestsStep",
-                field=field,
-                default=default_details,
-            )
-
-            status_field = "progress_finished" if ok_overall else "progress_failed"
-            status_default = (
-                "Finished /   {details}"
-                if ok_overall
-                else "Failed   /   {details}"
-            )
-
-            progress.set_status(
-                CATALOG.format(
-                    "step_default",
-                    field=status_field,
-                    default=status_default,
-                    details=details_text,
-                )
-            )
-
-        if not ok_overall:
-            ctx.log.write_error(
-                section=self.name,
-                message=msg,
-                details=details or last_output or "",
-            )
-
-        return ok_overall
+        return make_result(last_ok, last_cause, last_details)

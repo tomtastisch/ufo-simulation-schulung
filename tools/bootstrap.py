@@ -6,12 +6,12 @@ from dataclasses import dataclass, fields
 from typing import Iterable
 
 from tools.setup.domain import BootstrapConfig, build_profile
+from tools.setup.domain import PyProjectProfile
 from tools.setup.logging import ErrorLog
-from tools.setup.steps.base import StepContext
+from tools.setup.steps import BaseStep  # nur für Typ-Hints
+from tools.setup.steps.base import BaseStepContext
 from tools.setup.ui import SetupConsole
 from tools.setup.ui.resources import CATALOG
-from tools.setup.domain import PyProjectProfile
-from tools.setup.steps import BaseStep, STEPS  # nur für Typ-Hints
 
 
 # ------------------------------------------------------------
@@ -56,44 +56,38 @@ def _select_steps(profile: PyProjectProfile) -> tuple[type[BaseStep[object]], ..
     """
     from tools.setup.steps import STEPS  # tatsächliche Klassen
 
-    # Mapping stid → Step-Klasse mit Schutz gegen Duplikate
     by_stid: dict[str, type[BaseStep[object]]] = {}
     for cls in STEPS:
         stid = cls.stid
         if stid in by_stid and by_stid[stid] is not cls:
             other = by_stid[stid].__name__
             raise ValueError(
-                f"Doppelte stid {stid!r} bei {cls.__name__} und {other}."
+                f"Doppelte stid {stid!r} bei {cls.__name__} und {other}.",
             )
         by_stid[stid] = cls
 
-    # 1) Basis-Menge bestimmen
     if profile.step_include:
-        # Explizite Whitelist mit Reihenfolge aus pyproject.toml
-        ordered_ids: list[str] = [
-            stid for stid in profile.step_include if stid in by_stid
-        ]
+        ordered_ids = [stid for stid in profile.step_include if stid in by_stid]
+
     else:
-        # Fallback: alle Steps nach priority sortiert (höchste zuerst)
         ordered_ids = [
             cls.stid
-            for cls in sorted(by_stid.values(), key=lambda c: c.priority, reverse=True)
+            for cls in sorted(by_stid.values(), key=lambda c: c.prio, reverse=True)
         ]
 
-    # 2) Excludes anwenden
     exclude_ids = set(profile.step_exclude)
-    final_ids: list[str] = [stid for stid in ordered_ids if stid not in exclude_ids]
-
-    # 3) Step-Klassen in finaler Reihenfolge
-    classes: list[type[BaseStep[object]]] = [by_stid[stid] for stid in final_ids]
-    return tuple(classes)
+    return tuple(
+        by_stid[stid]
+        for stid in ordered_ids
+        if stid not in exclude_ids
+    )
 
 
 # ------------------------------------------------------------
 # 3) Step-Orchestrierung
 # ------------------------------------------------------------
 
-def leaf(ctx: StepContext) -> bool:
+def leaf(ctx: BaseStepContext) -> bool:
     """
     Führt alle konfigurierten Setup-Schritte aus und bricht nach dem
     ersten fehlgeschlagenen Step ab.
@@ -123,7 +117,7 @@ def execute(argv: list[str] | None = None) -> int:
     log = _build_log(config)
 
     console = SetupConsole()
-    ctx = StepContext(
+    ctx = BaseStepContext(
         config=config,
         profile=profile,
         log=log,
@@ -155,5 +149,5 @@ def execute(argv: list[str] | None = None) -> int:
 
 
 def console_script() -> None:
-    """Entry-Point für pyproject.toml / setup_new.py."""
+    """Entry-Point für pyproject.toml / setup_v2.py."""
     raise SystemExit(execute(sys.argv[1:]))

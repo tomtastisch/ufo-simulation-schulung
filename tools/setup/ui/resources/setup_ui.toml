@@ -68,8 +68,8 @@ failure = "{step}: Fehler unter {env}: {cause}\n{details}"
 default = "{step}: {details}"
 
 # Neu: generische Progress-Zeile für laufende Arbeiten
-progress_running = "Running  /   {details}"
-progress_failed = "Failed   /   {details}"
+progress_running = "Running   /   {details}"
+progress_failed = "Failed     /   {details}"
 progress_finished = "Finished /   {details}"
 
 # Neu: Standard-Details für Installationsfortschritt (kann von anderen Steps wiederverwendet werden)

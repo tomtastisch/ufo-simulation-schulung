@@ -2,10 +2,10 @@ import sys
 from pathlib import Path
 from venv import create as venv_create
 
-from tools.setup.steps.base import StepContext
+from tools.setup.steps.base import BaseStepContext
 
 
-def check_python_version(ctx: StepContext) -> tuple[bool, str, str]:
+def check_python_version(ctx: BaseStepContext) -> tuple[bool, str, str]:
     required = ctx.profile.requires_min_python
     assert required is not None  # Profil muss eine Version liefern
 
@@ -22,7 +22,7 @@ def check_python_version(ctx: StepContext) -> tuple[bool, str, str]:
     return True, "", ""
 
 
-def ensure_venv(ctx: StepContext, safety_check: bool = True) -> tuple[bool, str, str]:
+def ensure_venv(ctx: BaseStepContext, safety_check: bool = True) -> tuple[bool, str, str]:
     venv_dir: Path = ctx.config.venv_dir
     repo_root: Path = ctx.config.repo_root
 

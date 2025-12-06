@@ -2,6 +2,7 @@
 """Setuptools-Hilfsskript für Editier-Installationen."""
 
 import sys
+
 from tools import setup
 
 

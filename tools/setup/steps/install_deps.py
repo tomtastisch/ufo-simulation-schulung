@@ -1,10 +1,18 @@
+# tools/setup/steps/install_deps.py
 from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Final, override
+from itertools import chain
+from typing import ClassVar, override
 
-from tools.setup.steps.base import BaseStep, StepContext
+from tools.setup.steps.base import (
+    BaseStep,
+    BaseStepContext,
+    StepResult,
+    PrepareResult,
+    handle_prepare,
+)
 from tools.setup.ui import CATALOG
 from tools.setup.ui.progress import ProgressStep
 from tools.setup.utils import run_command, short_output
@@ -23,42 +31,53 @@ class InstallDepsStep(BaseStep[Sequence[Command]]):
     - Dev-Dependencies aus [project.optional-dependencies].dev einzeln installieren
     """
 
-    stid = "dependencies"
-    priority = 9999
+    stid: ClassVar[str] = "dependencies"
+    prio: ClassVar[int] = 9999
 
     @override
-    def prepare(self, ctx: StepContext) -> Sequence[Command]:
+    def estimate_total(self, prepared: Sequence[Command] | None) -> int | None:
+        if prepared:
+            return len(prepared)
+        return 1
+
+
+    @override
+    @handle_prepare
+    def prepare(self, ctx: BaseStepContext) -> PrepareResult[tuple[str, ...]]:
+        """
+        Erzeugt die Liste von Installations-Kommandos aus dem bereits geladenen
+        PyProjectProfile (runtime_requirements + dev_requirements).
+        """
         python = str(ctx.config.venv_python)
+        base = (python, "-m", "pip", "install")
 
-        runtime = ctx.profile.runtime_requirements
-        dev = ctx.profile.dev_requirements
+        commands: list[Command] = [((*base, "-e", "."), "Projekt (editable)")]
 
-        def build_spec(name: str, spec: str) -> str:
-            return f"{name}{spec}" if spec else name
+        for name, spec in chain(
+                ctx.profile.runtime_requirements.items(),
+                ctx.profile.dev_requirements.items(),
+        ):
+            label = f"{name}{spec}"
+            commands.append(((*base, label), label))
 
-        commands: list[Command] = [((python, "-m", "pip", "install", "-e", "."), "Projekt (editable)",)]
+        return PrepareResult(
+            ok=True,
+            payload=tuple(commands),
+        )
 
-        for name, spec in runtime.items():
-            pkg_spec = build_spec(name, spec)
-            commands.append(((python, "-m", "pip", "install", pkg_spec), pkg_spec))
-
-        for name, spec in dev.items():
-            pkg_spec = build_spec(name, spec)
-            commands.append(((python, "-m", "pip", "install", pkg_spec), pkg_spec))
-
-        return tuple(commands)
 
     @override
-    def step(
+    def _step_impl(
             self,
-            ctx: StepContext,
+            ctx: BaseStepContext,
             prepared: Sequence[Command] | None,
             progress: ProgressStep | None,
-    ) -> bool:
+    ) -> StepResult:
         assert prepared is not None, "InstallDepsStep.prepare() muss Commands liefern."
 
         cwd = str(ctx.config.repo_root)
         total = len(prepared) or 1
+        empty_output = "keine Ausgabe"
 
         def fmt(field: str, default: str, **kwargs: object) -> str:
             return CATALOG.format(
@@ -68,12 +87,28 @@ class InstallDepsStep(BaseStep[Sequence[Command]]):
                 **kwargs,
             )
 
-        def set_status(field: str, default: str, **kwargs: object) -> None:
-            if progress:
-                progress.set_status(fmt(field=field, default=default, **kwargs))
+        def status(field: str, default: str, **kwargs: object) -> None:
+            if progress is not None:
+                progress.set_status(fmt(field, default, **kwargs))
+
+        if total:
+            status(
+                "progress_running",
+                "Running  /   {details}",
+                details=f"Installiere Abhängigkeiten ({total} Pakete)",
+            )
+
+        ok = True
+        cause: str | None = None
+        last_label = ""
+        last_details = ""
+        error_hint: str | None = None
 
         for index, (argv, label) in enumerate(prepared, start=1):
-            set_status(
+            last_label = label
+
+            # Laufender Status: welches Paket wird gerade installiert?
+            status(
                 "progress_running",
                 "Running  /   {details}",
                 details=fmt(
@@ -87,49 +122,50 @@ class InstallDepsStep(BaseStep[Sequence[Command]]):
 
             result = run_command(argv, cwd=cwd)
             raw = (result.stdout or "") + (result.stderr or "")
+            last_details = raw or empty_output
 
-            if result.returncode != 0:
-                details_text = short_output(raw) or raw or "keine Ausgabe"
+            if result.returncode == 0:
+                if progress is not None:
+                    progress.advance(1)
+                continue
 
-                set_status(
-                    "progress_failed",
-                    "Failed   /   {details}",
-                    details=fmt(
-                        "install_failed",
-                        "{package}: {details}",
-                        package=label,
-                        details=details_text,
-                    ),
-                )
-                if progress:
-                    progress.mark_failed()
+            # Fehlerfall
+            ok = False
+            cause = "pip_install_failed"
+            short = short_output(raw) or last_details
 
-                msg = self.output(
-                    ctx,
-                    field="failure",
-                    cause="pip_install_failed",
-                    details=details_text,
-                )
-                ctx.log.write_error(
-                    section=self.name,
-                    message=msg,
-                    details=raw or "keine Ausgabe",
-                )
-                return False
+            # Hier darf es ruhig sofort einen roten Status geben;
+            status(
+                "progress_failed",
+                "Failed   /   {details}",
+                details=fmt(
+                    "install_failed",
+                    "{package}: {details}",
+                    package=label,
+                    details=short,
+                ),
+            )
 
-            if progress:
-                progress.advance(1)
+            error_hint = f"{label}: {short}"
+            break
 
-        set_status(
-            "progress_finished",
-            "Finished /   {details}",
-            details=fmt(
-                "install_done",
-                "Alle Abhängigkeiten installiert.",
-            ),
+        # Auf Summen-Label mappen:
+        # - Erfolg  → „Alle Abhängigkeiten installiert.“
+        # - Fehler  → Name des zuletzt fehlgeschlagenen Pakets
+        label = (
+            CATALOG.format(
+                "step_default",
+                field="install_done",
+                default="Alle Abhängigkeiten installiert.",
+            )
+            if ok
+            else last_label
         )
 
-        if progress:
-            progress.mark_finished()
-
-        return True
+        return StepResult(
+            ok=ok,
+            cause=cause or "",
+            details=last_details or empty_output,
+            label=label,
+            error_hint=error_hint or "",
+        )

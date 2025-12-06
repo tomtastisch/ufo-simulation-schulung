@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from typing import override
+from typing import ClassVar, override
 
-from tools.setup.steps.base import BaseStep, StepContext
+from tools.setup.steps.base import BaseStep, BaseStepContext, StepResult
 from tools.setup.ui.progress import ProgressStep
-from tools.setup.utils.version import check_python_version, ensure_venv
+from tools.setup.utils import run_command
 
 
 @dataclass(slots=True)
@@ -16,52 +16,34 @@ class CreateEnvStep(BaseStep[None]):
     Setup-Schritt zum Erzeugen der Projekt-Virtualenv.
     """
 
-    stid = "create_env"
-    priority = sys.maxsize - 1000
+    # Registrierung über BaseStepCore
+    stid: ClassVar[str] = "create_env"
+    prio: ClassVar[int] = sys.maxsize - 1000
+
 
     @override
-    def step(
+    def _step_impl(
             self,
-            ctx: StepContext,
-            _prepared: None,
+            ctx: BaseStepContext,
+            prepared: None,
             progress: ProgressStep | None,
-    ) -> bool:
-        # 1) Python-Version prüfen
-        ok, cause, details = check_python_version(ctx)
-        if not ok:
-            msg = self.output(
-                ctx,
-                field="failure",
-                cause=cause,
-                details=details,
-            )
-            if progress is not None:
-                progress.set_status(msg)
-            ctx.log.write_error(
-                section=self.name,
-                message=msg,
-                details=details,
-            )
-            return False
+    ) -> StepResult:
+        # Host-Python verwenden, um die venv zu erstellen
+        argv = (sys.executable, "-m", "venv", str(ctx.config.venv_dir))
+        result = run_command(argv, cwd=str(ctx.config.repo_root))
 
-        # 2) venv erzeugen
-        ok, cause, details = ensure_venv(ctx, True)
-        field = "success" if ok else "failure"
-        msg = self.output(
-            ctx,
-            field=field,
-            cause=cause,
-            details=details,
+        if result.returncode == 0:
+            return StepResult(
+                ok=True,
+                label="Virtuelle Umgebung erstellt/gefunden.",
+                details=result.stdout or "",
+            )
+
+        details = (result.stdout or "") + (result.stderr or "")
+        return StepResult(
+            ok=False,
+            cause="create_env_failed",
+            details=details or "keine Ausgabe",
+            label="create_env",
+            error_hint="Erzeugen der virtuellen Umgebung ist fehlgeschlagen.",
         )
-
-        if progress is not None:
-            progress.set_status(msg)
-
-        if not ok:
-            ctx.log.write_error(
-                section=self.name,
-                message=msg,
-                details=details,
-            )
-
-        return ok

@@ -26,7 +26,7 @@ herunter.
 Öffne ein Terminal im Projekt-Ordner und führe aus:
 
 ```bash
-python setup_new.py
+python setup_v2.py
 ```
 
 Das Setup führt automatisch folgende Schritte durch:
@@ -244,7 +244,7 @@ rm -rf .venv  # macOS/Linux
 rmdir /s .venv  # Windows
 
 # Setup neu ausführen
-python setup_new.py
+python setup_v2.py
 ```
 
 ### Installierte Pakete anzeigen
@@ -270,7 +270,7 @@ python --version
 Falls du das Setup schneller durchführen möchtest (ohne Tests):
 
 ```bash
-python setup_new.py --skip-tests
+python setup_v2.py --skip-tests
 ```
 
 **Hinweis:** Nur nutzen wenn du weißt was du tust!
