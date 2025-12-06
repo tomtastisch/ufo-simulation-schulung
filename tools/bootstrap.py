@@ -257,12 +257,14 @@ def execute(argv: list[str] | None = None) -> int:
     console = SetupConsole()
 
     # 4. ConfigResolver nutzen für drei-stufiges Fallback
-    # (optional - momentan noch nicht voll integriert in profile)
-    # Für zukünftige Erweiterung: CLI-Args in profile einfließen lassen
+    # NOTE: ConfigResolver currently used only for help generation.
+    # Full integration with PyProjectProfile pending in future iteration.
+    # Rationale: Requires refactoring build_profile() to use ConfigResolver
+    # for dynamic CLI arg merging, which is beyond the scope of this PR.
     if args.steps:
         # Override step_include mit CLI-Argumenten
         step_list = [s.strip() for s in args.steps.split(",") if s.strip()]
-        # TODO: Profile dynamisch anpassen (momentan nur aus pyproject.toml)
+        # Future work: Integrate ConfigResolver to dynamically modify profile.step_include
         console.warning(
             f"--steps Option erkannt ({', '.join(step_list)}), "
             "aber noch nicht vollständig implementiert. "
@@ -272,6 +274,7 @@ def execute(argv: list[str] | None = None) -> int:
     if args.skip:
         # Override step_exclude mit CLI-Argumenten
         skip_list = [s.strip() for s in args.skip.split(",") if s.strip()]
+        # Future work: Integrate ConfigResolver to dynamically modify profile.step_exclude
         console.warning(
             f"--skip Option erkannt ({', '.join(skip_list)}), "
             "aber noch nicht vollständig implementiert. "

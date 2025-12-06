@@ -39,6 +39,16 @@ class ConfigResolver:
     Priorität: commands > pyproject.toml > defaultconfig
     Always-Default-First: Lade Standardwerte vollständig, dann überlagere User-Konfig.
 
+    Design Note:
+        This class combines loading, validation, and merging responsibilities.
+        While this violates Single Responsibility Principle, it provides a cohesive
+        API for config resolution. Future refactoring could split into:
+        - ConfigLoader: Loads from files
+        - ConfigValidator: Validates keys and suggests corrections
+        - ConfigMerger: Merges multiple config layers
+        
+        Current unified design chosen for simplicity and fewer dependencies.
+
     Attributes:
         _default_config: Standardkonfiguration (immer vollständig)
         _pyproject_config: Konfiguration aus pyproject.toml
@@ -50,6 +60,9 @@ class ConfigResolver:
     _command_config: Mapping[str, Any] = field(default_factory=dict)
 
     # Valide Top-Level-Keys für [tool.setup]
+    # TODO: Consider making these configurable via TOML for easier extension.
+    # Current design: hardcoded for stability and explicit validation.
+    # Future: Could load from setup_config.toml [config.valid_keys] section.
     _VALID_KEYS: Final[frozenset[str]] = frozenset({
         "steps",
         "exclude",

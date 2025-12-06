@@ -23,6 +23,9 @@ from tools.setup.steps.base import (
 from tools.setup.ui import CATALOG
 from tools.setup.ui.progress import ProgressStep
 
+# Type alias for improved readability
+TaskFilePaths = tuple[Path, ...]
+
 
 @dataclass(slots=True)
 class TypeAnnotation:
@@ -136,7 +139,7 @@ class AnnotationChecker(ast.NodeVisitor):
 
 
 @dataclass(slots=True)
-class TypingCheckStep(BaseStep[tuple[Path, ...]]):
+class TypingCheckStep(BaseStep[TaskFilePaths]):
     """
     Prüft Typannotationen in src/task/*.
 
@@ -190,7 +193,7 @@ class TypingCheckStep(BaseStep[tuple[Path, ...]]):
 
     @override
     @handle_prepare
-    def prepare(self, ctx: BaseStepContext) -> PrepareResult[tuple[Path, ...]]:
+    def prepare(self, ctx: BaseStepContext) -> PrepareResult[TaskFilePaths]:
         """
         Findet alle Python-Dateien in src/task/*.
 
@@ -217,7 +220,7 @@ class TypingCheckStep(BaseStep[tuple[Path, ...]]):
     def _step_impl(
         self,
         ctx: BaseStepContext,
-        prepared: tuple[Path, ...] | None,
+        prepared: TaskFilePaths | None,
         progress: ProgressStep | None,
     ) -> StepResult:
         """
