@@ -16,7 +16,7 @@ import tempfile
 from pathlib import Path
 
 
-from tools.setup.domain.resolver import ConfigResolver, ConfigResolution
+from tools.setup.domain.resolver import ConfigResolver
 
 
 def test_load_from_nonexistent_defaults(tmp_path):
