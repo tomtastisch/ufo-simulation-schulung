@@ -15,7 +15,6 @@ Testet:
 import tempfile
 from pathlib import Path
 
-import pytest
 
 from tools.setup.domain.resolver import ConfigResolver, ConfigResolution
 
