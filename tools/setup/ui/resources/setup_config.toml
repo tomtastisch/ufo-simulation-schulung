@@ -1,0 +1,67 @@
+# ============================================================================
+# SETUP DEFAULT CONFIGURATION
+# Zentrale Konfiguration für das UFO-Simulation Setup-System
+# ============================================================================
+
+[config.defaults]
+# Globale Setup-Standardwerte - werden immer zuerst geladen
+auto_install = true
+verbosity = 1
+
+# ============================================================================
+# STEP DEFINITIONS
+# ============================================================================
+# Jeder Step hat:
+# - id: eindeutige Kennung (entspricht step.stid)
+# - name: menschenlesbarer Name
+# - description: was der Step macht
+# - category: logische Gruppierung
+# - prio: Standardpriorität (höher = wird früher ausgeführt)
+# - enabled: ob Step standardmäßig aktiviert ist
+
+[[steps]]
+id = "create_env"
+name = "Virtuelle Umgebung erstellen"
+description = "Erzeugt oder prüft die Python Virtual Environment (.venv)"
+category = "foundation"
+prio = 10000
+enabled = true
+
+[[steps]]
+id = "dependencies"
+name = "Abhängigkeiten installieren"
+description = "Installiert Runtime- und Dev-Dependencies aus pyproject.toml"
+category = "foundation"
+prio = 9999
+enabled = true
+
+[[steps]]
+id = "typing_check"
+name = "Typannotationen prüfen"
+description = "Prüft Typannotationen in src/task/* (didaktischer Check)"
+category = "quality"
+prio = 100
+enabled = true
+
+# Step-spezifische Optionen für typing_check
+[steps.typing_check.options]
+mode = "relaxed"  # "strict" | "relaxed"
+check_params = true
+check_returns = true
+check_variables = false  # lokale Variablen - nur im strict mode
+
+[[steps]]
+id = "import_linter"
+name = "Import-Contracts prüfen"
+description = "Validiert Architektur-Regeln via import-linter"
+category = "quality"
+prio = 40
+enabled = true
+
+[[steps]]
+id = "tests"
+name = "Tests ausführen"
+description = "Führt die pytest-Test-Suite aus"
+category = "validation"
+prio = 0
+enabled = true

@@ -32,12 +32,30 @@ skipped_hint = "pytest wurde aufgrund der Skip-Konfiguration nicht ausgeführt."
 default = "{type} wurde aufgrund des arguments {arg} {action}"
 
 [texts.next]
-title = "Nächste Schritte (Überblick)"
+title = "Nächste Schritte"
 body = """
-1. Virtuelle Umgebung aktivieren:
+✅ Setup erfolgreich abgeschlossen!
+
+Nächste Schritte:
+
+1. 📂 Virtuelle Umgebung aktivieren:
    {activate_cmd}
 
-2. Projekt starten ...
+2. 🧪 Tests ausführen:
+   pytest
+
+3. 🎓 Aufgaben bearbeiten:
+   - Aufgabe 1: Winkelberechnung (src/task/angle/angle.py)
+   - Aufgabe 2: UFO-Autopilot (src/task/autopilot/autopilot.py)
+
+4. 🚀 Simulation starten:
+   python -m core.simulation
+
+5. 📚 Dokumentation lesen:
+   - README.md
+   - docs/description/tasks/
+
+Bei Fragen: siehe README.md oder Repository Issues
 """
 
 [texts.legend]
@@ -79,3 +97,41 @@ install_failed = "{package}: {details}"
 
 [texts.RunTestsStep]
 failure = "Tests im Schritt {step} unter {env} fehlgeschlagen: {cause}\n{details}"
+
+[texts.help]
+title = "UFO-Simulation Setup – Hilfe"
+usage = """
+Verwendung:
+  python setup_v2.py [OPTIONEN] [BEFEHLE]
+
+Beispiele:
+  python setup_v2.py              # Standard-Setup (alle Steps)
+  python setup_v2.py --help       # Diese Hilfe anzeigen
+  python setup_v2.py --steps create_env,dependencies  # Nur bestimmte Steps
+  python setup_v2.py --skip tests # Alle Steps außer Tests
+  python setup_v2.py --verbose    # Ausführliche Ausgabe
+
+Konfiguration:
+  Setup-Verhalten wird über [tool.setup] in pyproject.toml gesteuert.
+  Siehe Dokumentation für Details.
+
+Verfügbare Steps:
+{steps_list}
+"""
+
+[texts.typing_check]
+header = "Typannotationen prüfen"
+success = "Alle Dateien in src/task/* haben vollständige Typannotationen"
+failure = "Typannotationen-Check fehlgeschlagen: {cause}"
+warning = "Fehlende Annotationen in {file}"
+missing_param = "  Zeile {line}: Parameter '{name}' ohne Typannotation"
+missing_return = "  Zeile {line}: Funktion '{name}' ohne Return-Typannotation"
+missing_variable = "  Zeile {line}: Variable '{name}' ohne Typannotation"
+hint = """
+💡 Tipp: Typannotationen helfen beim Lernen und vermeiden Fehler!
+
+Beispiel:
+  def calculate(x: float, y: float) -> float:
+      return x + y
+"""
+no_files = "Verzeichnis src/task/ nicht gefunden (übersprungen)"
