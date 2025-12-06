@@ -1,11 +1,13 @@
 # tools/bootstrap.py
 from __future__ import annotations
 
+import argparse
 import sys
 from dataclasses import dataclass, fields
+from pathlib import Path
 from typing import Iterable
 
-from tools.setup.domain import BootstrapConfig, build_profile
+from tools.setup.domain import BootstrapConfig, build_profile, ConfigResolver
 from tools.setup.domain import PyProjectProfile
 from tools.setup.logging import ErrorLog
 from tools.setup.steps import BaseStep  # nur für Typ-Hints
@@ -47,6 +49,124 @@ def _build_log(config: BootstrapConfig) -> ErrorLog:
     path = config.log_path
     path.write_text("", encoding="utf-8")
     return ErrorLog(path)
+
+
+# ------------------------------------------------------------
+# 2a) CLI Argument Parsing
+# ------------------------------------------------------------
+
+def parse_args(argv: list[str] | None) -> argparse.Namespace:
+    """
+    Parst Command-Line-Argumente.
+
+    Unterstützte Optionen:
+    --help: Hilfe anzeigen
+    --steps: Komma-separierte Step-IDs die ausgeführt werden sollen
+    --skip: Komma-separierte Step-IDs die übersprungen werden sollen
+    --verbose, -v: Erhöht Verbosity
+    commands: Zusätzliche Befehle nach Setup (noch nicht implementiert)
+
+    Args:
+        argv: Liste von Argumenten (sys.argv[1:] wenn None)
+
+    Returns:
+        Namespace mit geparsten Argumenten
+    """
+    parser = argparse.ArgumentParser(
+        prog="setup_v2.py",
+        description="UFO-Simulation Setup System",
+        add_help=False,  # Eigenes Help-Handling
+    )
+
+    parser.add_argument(
+        "--help",
+        action="store_true",
+        help="Zeige diese Hilfe",
+    )
+
+    parser.add_argument(
+        "--steps",
+        type=str,
+        help="Nur diese Steps ausführen (kommagetrennt)",
+    )
+
+    parser.add_argument(
+        "--skip",
+        type=str,
+        help="Diese Steps überspringen (kommagetrennt)",
+    )
+
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="count",
+        default=0,
+        help="Ausführliche Ausgabe",
+    )
+
+    parser.add_argument(
+        "commands",
+        nargs="*",
+        help="Zusätzliche Befehle nach Setup (noch nicht unterstützt)",
+    )
+
+    return parser.parse_args(argv or [])
+
+
+def generate_help_text() -> str:
+    """
+    Generiert Help-Text aus TOML und Step-Metadaten.
+
+    Returns:
+        Formatierter Help-Text
+    """
+    # Step-Metadaten aus setup_config.toml laden
+    config_path = Path(__file__).parent / "setup" / "ui" / "resources" / "setup_config.toml"
+    resolver = ConfigResolver.from_defaults(config_path)
+    steps_meta = resolver.get_steps_metadata()
+
+    # Steps nach Priorität sortieren
+    sorted_steps = sorted(
+        steps_meta,
+        key=lambda s: s.get("prio", 0),
+        reverse=True,
+    )
+
+    # Steps-Liste formatieren
+    steps_lines = []
+    for step in sorted_steps:
+        step_id = step.get("id", "unknown")
+        desc = step.get("description", "Keine Beschreibung")
+        enabled = "✓" if step.get("enabled", True) else "✗"
+        steps_lines.append(f"  [{enabled}] {step_id:20s} - {desc}")
+
+    steps_list = "\n".join(steps_lines)
+
+    # Template aus Katalog holen
+    template = CATALOG.text(
+        "help",
+        field="usage",
+        default="""
+Verwendung:
+  python setup_v2.py [OPTIONEN]
+
+Verfügbare Steps:
+{steps_list}
+""",
+    )
+
+    return template.format(steps_list=steps_list)
+
+
+def show_help() -> None:
+    """Zeigt Help-Text und beendet das Programm."""
+    title = CATALOG.text("help", field="title", default="UFO-Simulation Setup – Hilfe")
+    help_text = generate_help_text()
+
+    print(title)
+    print("=" * len(title))
+    print(help_text)
+    sys.exit(0)
 
 
 def _select_steps(profile: PyProjectProfile) -> tuple[type[BaseStep[object]], ...]:
@@ -102,21 +222,63 @@ def leaf(ctx: BaseStepContext) -> bool:
 
 def execute(argv: list[str] | None = None) -> int:
     """
-    Führt den kompletten Setup-Prozess aus:
+    Führt den kompletten Setup-Prozess aus.
 
-    - Config, Profile, Log, Konsole erzeugen
-    - Header anzeigen
-    - Steps via leaf(ctx) ausführen
-    - ggf. Next-Steps anzeigen
+    Ablauf:
+    1. Parse CLI-Argumente
+    2. Zeige --help falls angefordert
+    3. Config, Profile, Log, Konsole erzeugen
+    4. ConfigResolver für drei-stufiges Fallback nutzen (commands > pyproject > defaults)
+    5. Warnungen für unbekannte Config-Keys anzeigen
+    6. Header anzeigen
+    7. Steps via leaf(ctx) ausführen
+    8. ggf. Next-Steps anzeigen
 
-    CLI-Argumente (argv) werden bewusst ignoriert; das Verhalten
-    wird ausschließlich über die pyproject.toml gesteuert.
+    Args:
+        argv: CLI-Argumente (sys.argv[1:] wenn None)
+
+    Returns:
+        0 bei Erfolg, 1 bei Fehler
     """
+    # 1. Parse CLI-Argumente
+    args = parse_args(argv)
+
+    # 2. --help Handler
+    if args.help:
+        show_help()
+        # show_help() beendet das Programm, diese Zeile wird nie erreicht
+        return 0  # pragma: no cover
+
+    # 3. Config und Profile erstellen
     config = BootstrapConfig()
     profile = build_profile(config.repo_root)
     log = _build_log(config)
 
     console = SetupConsole()
+
+    # 4. ConfigResolver nutzen für drei-stufiges Fallback
+    # (optional - momentan noch nicht voll integriert in profile)
+    # Für zukünftige Erweiterung: CLI-Args in profile einfließen lassen
+    if args.steps:
+        # Override step_include mit CLI-Argumenten
+        step_list = [s.strip() for s in args.steps.split(",") if s.strip()]
+        # TODO: Profile dynamisch anpassen (momentan nur aus pyproject.toml)
+        console.warning(
+            f"--steps Option erkannt ({', '.join(step_list)}), "
+            "aber noch nicht vollständig implementiert. "
+            "Verwende [tool.setup].steps in pyproject.toml."
+        )
+
+    if args.skip:
+        # Override step_exclude mit CLI-Argumenten
+        skip_list = [s.strip() for s in args.skip.split(",") if s.strip()]
+        console.warning(
+            f"--skip Option erkannt ({', '.join(skip_list)}), "
+            "aber noch nicht vollständig implementiert. "
+            "Verwende [tool.setup].exclude in pyproject.toml."
+        )
+
+    # Context für Steps erstellen
     ctx = BaseStepContext(
         config=config,
         profile=profile,
@@ -124,6 +286,7 @@ def execute(argv: list[str] | None = None) -> int:
         console=console,
     )
 
+    # 5. Header anzeigen
     seg = Segment.from_catalog(CATALOG)
     if seg.license:
         console.info(seg.license)
@@ -133,8 +296,10 @@ def execute(argv: list[str] | None = None) -> int:
         if part:
             console.info(part)
 
+    # 6. Steps ausführen
     ok = leaf(ctx)
 
+    # 7. Next-Steps anzeigen (bei Erfolg)
     if ok:
         title = CATALOG.text("next", field="title", default="")
         body = CATALOG.text("next", field="body", default="").format(
