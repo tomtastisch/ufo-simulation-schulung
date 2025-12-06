@@ -1,16 +1,11 @@
-[build-system]
-requires = ["setuptools>=66.1.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "ufo-simulation-schulung"
 version = "1.0.0"
 description = "UFO/Drohnen-Simulation mit Autopilot-Schulungsvorlage für Anfänger"
 readme = "README.md"
 license = { text = "MIT" }
-authors = [
-    { name = "tomtastisch", email = "tomtastisch@icloud.com" }
-]
+authors = [{ name = "tomtastisch", email = "tomtastisch@icloud.com" }]
+
 keywords = ["simulation", "education", "ufo", "autopilot", "python"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -19,11 +14,14 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
 ]
+
 requires-python = ">=3.11"
 dependencies = [
     "PyQt5>=5.15.11",
     "PyQt5-sip>=12.17.1",
     "numpy>=2.3.5",
+    # "rich>=13.0.0",  # ENTFERNT, da Rich nicht mehr verwendet werden soll
+    "pyyaml>=6.0.3"
 ]
 
 [project.optional-dependencies]
@@ -34,6 +32,7 @@ dev = [
     "py-spy>=0.3.14",
     "black>=24.4.0",
     "flake8>=7.0.0",
+    "import-linter>=2.0.0",
 ]
 
 [project.urls]
@@ -51,6 +50,25 @@ core = [
     "simulation/ressources/*.png",
 ]
 
+[tool.setup]
+# Explizite Reihenfolge aller Steps
+steps = ["create_env", "dependencies", "import_linter", "tests"]
+
+# Optional: bestimmte Steps deaktivieren
+exclude = ["import_linter"]  # Beispiel: Import-Linter vorübergehend abschalten
+
+# Optional: globale Setup-Flags
+auto_install = true
+
+# Optionaler generischer Erweiterungspunkt:
+[tool.setup.options.tests]
+marker = "not slow"
+max_workers = 4
+
+# Spezifische Linter-Konfiguration:
+[tool.setup.linter]
+# "all" | "forbidden" | "layers"
+contracts = "layers"
 
 [tool.pytest.ini_options]
 # Pytest-Konfiguration für die UFO-Simulation
@@ -76,3 +94,109 @@ markers = [
     "integration: Integration-Tests",
     "threading: Tests mit Threading/Locks",
 ]
+
+# ---------------------------------------------------------------------------
+# LAYERED ARCHITECTURE
+# ---------------------------------------------------------------------------
+
+[[tool.importlinter.contracts]]
+id = "layers-core-simulation"
+name = "core.simulation layered architecture"
+type = "layers"
+layers = [
+    # High-Level → Low-Level (höchste Schicht zuerst)
+    "(core.simulation.view)", # Optional: Implementierung geplant in Phase 7 (T14)
+    "(core.simulation.controller)", # Optional: Implementierung geplant in Phase 6 (T13)
+    "core.simulation.command",
+    "core.simulation.observer",
+    "core.simulation.physics",
+    "core.simulation.state",
+    "core.simulation.utils",
+    "core.simulation.infrastructure.config",
+]
+
+# ---------------------------------------------------------------------------
+# LOW-LEVEL: config + utils ohne Simulationstypen (T2, T5, T6)
+# ---------------------------------------------------------------------------
+
+[[tool.importlinter.contracts]]
+id = "lowlevel-ohne-simulationstypen"
+name = "config und utils sind unabhängig von Simulationstypen"
+type = "forbidden"
+source_modules = [
+    "core.simulation.infrastructure.config",
+    "core.simulation.utils.threads",
+    "core.simulation.utils.maths",
+]
+forbidden_modules = [
+    "core.simulation.state",
+    "core.simulation.physics",
+    "core.simulation.command",
+    "core.simulation.observer",
+    "core.simulation.controller",
+    "core.simulation.view",
+]
+
+# ---------------------------------------------------------------------------
+# PHYSICSENGINE: kennt keine High-Level-Komponenten (T7)
+# ---------------------------------------------------------------------------
+
+[[tool.importlinter.contracts]]
+id = "physics-ohne-highlevel"
+name = "PhysicsEngine kennt keine High-Level-Komponenten"
+type = "forbidden"
+source_modules = [
+    "core.simulation.physics.engine",
+]
+forbidden_modules = [
+    "core.simulation.state.manager",
+    "core.simulation.observer",
+    "core.simulation.command",
+    "core.simulation.controller",
+    "core.simulation.view",
+]
+
+# ---------------------------------------------------------------------------
+# STATEMANAGER: ohne High-Level-Abhängigkeiten (T8)
+# ---------------------------------------------------------------------------
+
+[[tool.importlinter.contracts]]
+id = "statemanager-ohne-highlevel"
+name = "StateManager ohne High-Level-Abhängigkeiten"
+type = "forbidden"
+source_modules = [
+    "core.simulation.state.manager",
+]
+forbidden_modules = [
+    "core.simulation.infrastructure.config",
+    "core.simulation.physics",
+    "core.simulation.observer",
+    "core.simulation.command",
+    "core.simulation.controller",
+    "core.simulation.view",
+]
+
+# ---------------------------------------------------------------------------
+# OBSERVER: kein Engine/Executor/View (T9)
+# ---------------------------------------------------------------------------
+
+[[tool.importlinter.contracts]]
+id = "observer-ohne-engine-executor-view"
+name = "Observer ohne Engine/Executor/View-Abhängigkeit"
+type = "forbidden"
+source_modules = [
+    "core.simulation.observer.observer",
+]
+forbidden_modules = [
+    "core.simulation.state.manager",
+    "core.simulation.physics",
+    "core.simulation.command",
+    "core.simulation.controller",
+    "core.simulation.view",
+]
+
+# ---------------------------------------------------------------------------
+# HINWEIS: Zukünftige Contracts
+# ---------------------------------------------------------------------------
+# Weitere geplante Contracts (T11, T12, T14) sind in .importlinter-future.toml
+# dokumentiert und werden bei Bedarf hierher verschoben.

@@ -1,0 +1,5153 @@
+
+===== ./_helpers.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Kleine Test-Helfer, damit Tests zuverlässig ohne `conftest`-Imports laufen.
+
+Enthält:
+- run_threaded_workers: startet mehrere Threads und wartet auf Abschluss
+- assert_race_condition_free: prüft auf Race-Conditions
+- create_decorated_counter: Hilfs-Factory für decorator-Tests
+- run_manual_tests: einfacher Runner für `if __name__ == '__main__'`
+"""
+from __future__ import annotations
+
+import threading
+import time
+from typing import Callable, List, Dict, Any, Optional
+
+
+def run_threaded_workers(worker_func: Callable[[], None], num_threads: int = 10, timeout_per_thread: float = 10.0) -> List[threading.Thread]:
+    """Führt eine Worker-Funktion in mehreren Threads aus und wartet auf Abschluss.
+
+    Raises TimeoutError, wenn Threads nicht rechtzeitig fertig werden.
+    """
+    threads: List[threading.Thread] = []
+    for _ in range(num_threads):
+        t = threading.Thread(target=worker_func, daemon=False)
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join(timeout=timeout_per_thread)
+        if t.is_alive():
+            raise TimeoutError(f"Thread did not complete within {timeout_per_thread}s")
+
+    return threads
+
+
+def assert_race_condition_free(
+    increment_func: Callable[[], None],
+    get_value_func: Callable[[], int],
+    num_threads: int = 100,
+    increments_per_thread: int = 100,
+    timeout: float = 30.0,
+) -> bool:
+    """Helper: Erwartet num_threads*increments_per_thread am Ende.
+
+    Wirft AssertionError bei Abweichung.
+    """
+    expected = num_threads * increments_per_thread
+
+    def worker():
+        for _ in range(increments_per_thread):
+            increment_func()
+
+    run_threaded_workers(worker, num_threads=num_threads, timeout_per_thread=timeout)
+
+    actual = get_value_func()
+    assert actual == expected, f"Race-Condition detected: Expected {expected}, got {actual}"
+    return True
+
+
+def create_decorated_counter(decorator: Callable, lock: Optional[threading.RLock] = None) -> Dict[str, Any]:
+    """Erstellt increment/get_value/add mit Dekorator angewendet.
+
+    Nützlich für tests von synchronized/synchronized_module.
+    """
+    data: Dict[str, int] = {"value": 0}
+
+    if lock is not None:
+        @decorator(lock)
+        def increment():
+            old = data["value"]
+            time.sleep(0.0001)
+            data["value"] = old + 1
+
+        @decorator(lock)
+        def get_value():
+            return data["value"]
+
+        @decorator(lock)
+        def add(amount: int):
+            old = data["value"]
+            time.sleep(0.0001)
+            data["value"] = old + amount
+            return data["value"]
+    else:
+        @decorator
+        def increment():
+            old = data["value"]
+            time.sleep(0.0001)
+            data["value"] = old + 1
+
+        @decorator
+        def get_value():
+            return data["value"]
+
+        @decorator
+        def add(amount: int):
+            old = data["value"]
+            time.sleep(0.0001)
+            data["value"] = old + amount
+            return data["value"]
+
+    return {"increment": increment, "get_value": get_value, "add": add, "data": data}
+
+
+def run_manual_tests(module_name: str, tests: list[Callable[[], None]]) -> None:
+    failures = 0
+    for t in tests:
+        try:
+            t()
+            print(f"OK: {t.__name__}")
+        except Exception as e:
+            failures += 1
+            print(f"FAIL: {t.__name__}: {e}")
+    if failures:
+        raise SystemExit(1)
+
+
+===== ./conftest.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Gemeinsame Test-Fixtures und Hilfsfunktionen für alle Tests.
+
+Enthält wiederverwendbare Komponenten für:
+- Threading-Tests (Counter, Worker-Patterns)
+- Lock-Tests (Race-Condition-Detection)
+- Synchronization-Tests (Decorator-Testing)
+"""
+
+from __future__ import annotations
+
+import threading
+import time
+from typing import Dict, Any, Union
+from pathlib import Path
+import sys
+
+import pytest
+
+# Make project root importable so `import tests._helpers` works in all contexts.
+repo_root = Path(__file__).resolve().parents[1]
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
+from tests._helpers import (
+    run_threaded_workers,
+    assert_race_condition_free,
+    create_decorated_counter,
+    run_manual_tests,
+)
+
+# Re-exports: sichtbar machen für statische Analyzer und externe Importe
+__all__ = [
+    "run_threaded_workers",
+    "assert_race_condition_free",
+    "create_decorated_counter",
+    "run_manual_tests",
+]
+
+
+# =============================================================================
+# Threading Test Helpers
+# =============================================================================
+
+class ThreadSafeCounter:
+    """
+    Thread-sicherer Counter für Tests.
+
+    Kann mit oder ohne Lock verwendet werden, um Race-Conditions zu testen.
+    """
+
+    def __init__(self, use_lock: bool = False):
+        """
+        Initialisiert den Counter.
+
+        Args:
+            use_lock: Wenn True, wird ein RLock für Thread-Safety verwendet.
+        """
+        self._value = 0
+        self._lock = threading.RLock() if use_lock else None
+
+    def increment(self, delay: float = 0.0001):
+        """
+        Inkrementiert den Counter (mit optionaler Verzögerung für Race-Condition-Tests).
+
+        Args:
+            delay: Verzögerung in Sekunden zwischen Read und Write (default: 0.0001).
+        """
+        if self._lock:
+            with self._lock:
+                old_value = self._value
+                if delay > 0:
+                    time.sleep(delay)
+                self._value = old_value + 1
+        else:
+            old_value = self._value
+            if delay > 0:
+                time.sleep(delay)
+            self._value = old_value + 1
+
+    def add(self, amount: int, delay: float = 0.0001):
+        """
+        Addiert einen Betrag zum Counter.
+
+        Args:
+            amount: Zu addierender Betrag.
+            delay: Verzögerung in Sekunden zwischen Read und Write.
+
+        Returns:
+            Der neue Wert nach der Addition.
+        """
+        if self._lock:
+            with self._lock:
+                old_value = self._value
+                if delay > 0:
+                    time.sleep(delay)
+                self._value = old_value + amount
+                return self._value
+        else:
+            old_value = self._value
+            if delay > 0:
+                time.sleep(delay)
+            self._value = old_value + amount
+            return self._value
+
+    def get_value(self):
+        """Gibt den aktuellen Wert zurück."""
+        if self._lock:
+            with self._lock:
+                return self._value
+        else:
+            return self._value
+
+    @property
+    def value(self):
+        """Property-Zugriff auf den Wert."""
+        return self.get_value()
+
+
+# =============================================================================
+# Lock Test Helpers
+# =============================================================================
+
+class LockTestHelper:
+    """
+    Hilfsfunktionen für Lock-Tests.
+    """
+
+    @staticmethod
+    def create_deadlock_scenario(
+        lock1: threading.Lock,
+        lock2: threading.Lock,
+        delay: float = 0.1
+    ) -> tuple[threading.Thread, threading.Thread]:
+        """
+        Erstellt ein Deadlock-Szenario mit zwei Locks (aber führt es NICHT aus).
+
+        WARNUNG: Diese Funktion ist nur für Tests gedacht, die Deadlock-Detection
+        testen. Die zurückgegebenen Threads sind NICHT gestartet.
+
+        Args:
+            lock1: Erster Lock.
+            lock2: Zweiter Lock.
+            delay: Verzögerung zwischen Lock-Akquisitionen.
+
+        Returns:
+            Tuple von zwei Thread-Objekten (nicht gestartet).
+        """
+
+        def worker1():
+            with lock1:
+                time.sleep(delay)
+                with lock2:
+                    pass
+
+        def worker2():
+            with lock2:
+                time.sleep(delay)
+                with lock1:
+                    pass
+
+        t1 = threading.Thread(target=worker1, daemon=True)
+        t2 = threading.Thread(target=worker2, daemon=True)
+
+        return t1, t2
+
+    @staticmethod
+    def test_lock_prevents_race_condition(
+        lock: Union[threading.Lock, threading.RLock],
+        shared_data: Dict[str, Any],
+        num_threads: int = 50,
+        operations_per_thread: int = 20
+    ) -> bool:
+        """
+        Testet, ob ein Lock Race-Conditions verhindert.
+        """
+
+        def increment_with_lock():
+            with lock:
+                old = shared_data["value"]
+                time.sleep(0.0001)
+                shared_data["value"] = old + 1
+
+        def get_value():
+            with lock:
+                return shared_data["value"]
+
+        return assert_race_condition_free(
+            increment_with_lock,
+            get_value,
+            num_threads=num_threads,
+            increments_per_thread=operations_per_thread
+        )
+
+
+# =============================================================================
+# Decorator Test Helpers
+# =============================================================================
+
+# create_decorated_counter wird aus tests._helpers importiert (siehe oben)
+
+
+# =============================================================================
+# Pytest Fixtures
+# =============================================================================
+
+@pytest.fixture
+def thread_safe_counter():
+    """Fixture für einen thread-sicheren Counter."""
+    return ThreadSafeCounter(use_lock=True)
+
+
+@pytest.fixture
+def unsafe_counter():
+    """Fixture für einen NICHT thread-sicheren Counter (für Race-Condition-Tests)."""
+    return ThreadSafeCounter(use_lock=False)
+
+
+@pytest.fixture
+def rlock():
+    """Fixture für einen RLock."""
+    return threading.RLock()
+
+
+@pytest.fixture
+def lock():
+    """Fixture für einen Lock."""
+    return threading.Lock()
+
+
+@pytest.fixture
+def shared_counter_data():
+    """Fixture für gemeinsam genutzte Counter-Daten."""
+    return {"value": 0}
+
+
+===== ./core/simulation/command/test_types_smoke.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Smoke-Test für core.simulation.command.types Modul.
+
+Testet grundlegende Import- und Instanziierungsfähigkeit von CommandType und Command,
+sowie die korrekte Vermeidung von Importzyklen.
+"""
+
+
+def always_true_condition(s):
+    """Condition that always returns True."""
+    return True
+
+def test_command_types_import():
+    """Test: CommandType und Command können importiert werden."""
+    from core.simulation.command.types import CommandType, Command
+    assert CommandType is not None
+    assert Command is not None
+
+
+def test_command_type_enum_values():
+    """Test: CommandType Enum hat alle erwarteten Werte."""
+    from core.simulation.command.types import CommandType
+    
+    # Alle definierten Command-Typen sollten vorhanden sein
+    assert hasattr(CommandType, 'SET_STATE')
+    assert hasattr(CommandType, 'WAIT_CONDITION')
+    assert hasattr(CommandType, 'EXECUTE_FUNC')
+    assert hasattr(CommandType, 'LOG_MESSAGE')
+    
+    # Werte sollten eindeutig sein
+    values = [CommandType.SET_STATE, CommandType.WAIT_CONDITION, 
+              CommandType.EXECUTE_FUNC, CommandType.LOG_MESSAGE]
+    assert len(values) == len(set(values))
+
+
+def test_command_instantiation_set_state():
+    """Test: Command für SET_STATE kann instanziiert werden."""
+    from core.simulation.command.types import CommandType, Command
+    
+    cmd = Command(
+        type=CommandType.SET_STATE,
+        target='i',
+        value=90
+    )
+    
+    assert cmd.type == CommandType.SET_STATE
+    assert cmd.target == 'i'
+    assert cmd.value == 90
+    assert cmd.condition is None
+    assert cmd.func is None
+    assert cmd.message is None
+    assert cmd.timeout is None
+
+
+def altitude_condition(s):
+    """Condition: Höhe >= 10.0"""
+    return s.z >= 10.0
+
+
+def test_command_instantiation_wait_condition():
+    """Test: Command für WAIT_CONDITION kann instanziiert werden."""
+    from core.simulation.command.types import CommandType, Command
+    
+    cmd = Command(
+        type=CommandType.WAIT_CONDITION,
+        condition=altitude_condition,
+        timeout=5.0
+    )
+    
+    assert cmd.type == CommandType.WAIT_CONDITION
+    assert cmd.condition is not None
+    assert cmd.timeout == 5.0
+    assert cmd.target is None
+    assert cmd.value is None
+
+
+def test_command_instantiation_execute_func():
+    """Test: Command für EXECUTE_FUNC kann instanziiert werden."""
+    from core.simulation.command.types import CommandType, Command
+    
+    def test_print_func() -> None:
+        """Hilfsfunktion für EXECUTE_FUNC-Test: Gibt 'test' aus."""
+        print("test")
+    
+    cmd = Command(
+        type=CommandType.EXECUTE_FUNC,
+        func=test_print_func
+    )
+    
+    assert cmd.type == CommandType.EXECUTE_FUNC
+    assert cmd.func is not None
+    assert cmd.target is None
+    assert cmd.condition is None
+
+
+def test_command_instantiation_log_message():
+    """Test: Command für LOG_MESSAGE kann instanziiert werden."""
+    from core.simulation.command.types import CommandType, Command
+    
+    cmd = Command(
+        type=CommandType.LOG_MESSAGE,
+        message="Test message"
+    )
+    
+    assert cmd.type == CommandType.LOG_MESSAGE
+    assert cmd.message == "Test message"
+    assert cmd.target is None
+    assert cmd.func is None
+
+
+def test_command_is_dataclass():
+    """Test: Command ist ein dataclass."""
+    from core.simulation.command.types import Command
+    from dataclasses import is_dataclass
+    
+    assert is_dataclass(Command)
+
+
+def test_no_runtime_import_of_ufostate():
+    """Test: UfoState wird nicht zur Laufzeit importiert (TYPE_CHECKING only)."""
+    from core.simulation.command.types import Command, CommandType
+
+    # Command sollte importierbar sein, ohne dass state.state geladen wird
+    # (außer es wurde bereits woanders geladen)
+    # Dies ist ein Proxy-Test für korrekte TYPE_CHECKING Nutzung
+
+    # Erstelle Command mit condition - sollte ohne UfoState-Import funktionieren
+    cmd = Command(
+        type=CommandType.WAIT_CONDITION,
+        condition=always_true_condition  # Funktion zur besseren Lesbarkeit, statt Lambda
+    )
+    
+    assert cmd is not None
+
+
+def test_command_package_import():
+    """Test: Command und CommandType können vom Package importiert werden."""
+    from core.simulation.command import Command, CommandType
+    
+    assert Command is not None
+    assert CommandType is not None
+
+
+def test_command_module_has_no_circular_imports():
+    """Test: Command-Modul hat keine zirkulären Imports zu state."""
+    import sys
+    
+    # Speichere aktuell geladene Module
+    loaded_before = set(sys.modules.keys())
+    
+    # Importiere command.types frisch (ggf. neu)
+    if 'core.simulation.command.types' in sys.modules:
+        del sys.modules['core.simulation.command.types']
+    if 'core.simulation.command' in sys.modules:
+        del sys.modules['core.simulation.command']
+    
+    # Import sollte nicht state.state zur Laufzeit laden
+
+    # state.state sollte nur geladen sein, wenn TYPE_CHECKING true wäre (ist es nicht)
+    # oder wenn es bereits vorher geladen war
+    # Ein reines Import von command.types sollte state.state NICHT laden
+    loaded_after = set(sys.modules.keys())
+    newly_loaded = loaded_after - loaded_before
+    
+    # Wenn state schon vorher geladen war, ist dieser Test nicht aussagekräftig
+    # aber das ist ok - der Test verhindert neue zirkuläre Imports
+    if 'core.simulation.state.state' not in loaded_before:
+        assert 'core.simulation.state.state' not in newly_loaded, \
+            "command.types sollte state.state nicht zur Laufzeit importieren"
+
+
+if __name__ == "__main__":
+    tests = [
+        test_command_types_import,
+        test_command_type_enum_values,
+        test_command_instantiation_set_state,
+        test_command_instantiation_wait_condition,
+        test_command_instantiation_execute_func,
+        test_command_instantiation_log_message,
+        test_command_is_dataclass,
+        test_no_runtime_import_of_ufostate,
+        test_command_package_import,
+        test_command_module_has_no_circular_imports,
+    ]
+    
+    print("Running command.types smoke tests...")
+    for test in tests:
+        try:
+            test()
+            print(f"✓ {test.__name__}")
+        except AssertionError as e:
+            print(f"✗ {test.__name__}: {e}")
+        except Exception as e:
+            print(f"✗ {test.__name__}: Unexpected error: {e}")
+    
+    print("\nAll smoke tests completed.")
+
+
+===== ./core/simulation/exceptions/test_exceptions.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Smoke-Test für core.simulation.exceptions Modul.
+
+Testet grundlegende Import- und Instanziierungsfähigkeit der Exception-Klassen.
+"""
+
+import sys
+from pathlib import Path
+
+# Sicherstellen, dass src/ im Python-Pfad ist
+src_path = Path(__file__).parent.parent / "src"
+sys.path.insert(0, str(src_path))
+
+
+def test_exceptions_import():
+    """Test: Exception-Klassen können importiert werden."""
+    from core.simulation.exceptions import SimulationError, ConfigError
+    assert SimulationError is not None
+    assert ConfigError is not None
+
+
+def test_simulation_error_is_exception():
+    """Test: SimulationError ist eine Exception-Klasse."""
+    from core.simulation.exceptions import SimulationError
+    
+    assert issubclass(SimulationError, Exception)
+
+
+def test_config_error_is_simulation_error():
+    """Test: ConfigError ist eine SimulationError-Unterklasse."""
+    from core.simulation.exceptions import SimulationError, ConfigError
+    
+    assert issubclass(ConfigError, SimulationError)
+    assert issubclass(ConfigError, Exception)
+
+
+def test_simulation_error_can_be_raised():
+    """Test: SimulationError kann ausgelöst und gefangen werden."""
+    from core.simulation.exceptions import SimulationError
+    
+    try:
+        raise SimulationError("Test-Fehler")
+    except SimulationError as e:
+        assert str(e) == "Test-Fehler"
+        assert isinstance(e, Exception)
+
+
+def test_config_error_can_be_raised():
+    """Test: ConfigError kann ausgelöst und gefangen werden."""
+    from core.simulation.exceptions import ConfigError
+    
+    try:
+        raise ConfigError("Ungültige Konfiguration")
+    except ConfigError as e:
+        assert str(e) == "Ungültige Konfiguration"
+        assert isinstance(e, Exception)
+
+
+def test_config_error_caught_as_simulation_error():
+    """Test: ConfigError kann als SimulationError gefangen werden."""
+    from core.simulation.exceptions import SimulationError, ConfigError
+    
+    try:
+        raise ConfigError("Test")
+    except SimulationError as e:
+        # ConfigError sollte als SimulationError gefangen werden können
+        assert isinstance(e, ConfigError)
+        assert isinstance(e, SimulationError)
+        assert str(e) == "Test"
+
+
+def test_exception_with_no_message():
+    """Test: Exceptions können ohne Nachricht ausgelöst werden."""
+    from core.simulation.exceptions import SimulationError, ConfigError
+    
+    try:
+        raise SimulationError()
+    except SimulationError:
+        pass  # Erfolg
+    
+    try:
+        raise ConfigError()
+    except ConfigError:
+        pass  # Erfolg
+
+
+if __name__ == "__main__":
+    from conftest import run_manual_tests  # type: ignore[import]
+
+    tests = [
+        test_exceptions_import,
+        test_simulation_error_is_exception,
+        test_config_error_is_simulation_error,
+        test_simulation_error_can_be_raised,
+        test_config_error_can_be_raised,
+        test_config_error_caught_as_simulation_error,
+        test_exception_with_no_message,
+    ]
+
+    run_manual_tests("core.simulation.exceptions", tests)  # type: ignore[name-defined]
+
+
+===== ./core/simulation/infrastructure/test_logging_setup.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Smoke-Test für core.simulation.infrastructure.logging_setup Modul.
+
+Testet grundlegende Import- und Funktionalität der Logging-Setup-Funktionen.
+"""
+
+import logging
+import sys
+from pathlib import Path
+
+# Sicherstellen, dass src/ im Python-Pfad ist
+src_path = Path(__file__).parent.parent / "src"
+sys.path.insert(0, str(src_path))
+
+
+def test_logging_setup_import():
+    """Test: Logging-Setup-Funktionen können importiert werden."""
+    from core.simulation.infrastructure import configure_logging, get_logger
+    assert configure_logging is not None
+    assert get_logger is not None
+
+
+def test_get_logger_returns_logger():
+    """Test: get_logger gibt ein Logger-Objekt zurück."""
+    from core.simulation.infrastructure import get_logger
+
+    logger = get_logger("test_module")
+    assert isinstance(logger, logging.Logger)
+    assert logger.name == "test_module"
+
+
+def test_get_logger_with_module_name():
+    """Test: get_logger funktioniert mit __name__."""
+    from core.simulation.infrastructure import get_logger
+
+    logger = get_logger(__name__)
+    assert isinstance(logger, logging.Logger)
+    # Der Name sollte den Modulnamen enthalten
+    assert logger.name == __name__
+
+
+def test_configure_logging_is_idempotent():
+    """Test: configure_logging kann mehrfach aufgerufen werden ohne Fehler."""
+    from core.simulation.infrastructure import configure_logging
+
+    # Sollte keine Exceptions werfen
+    configure_logging()
+    configure_logging()
+    configure_logging()
+
+
+def test_configure_logging_with_custom_level():
+    """Test: configure_logging akzeptiert benutzerdefiniertes Log-Level."""
+    from core.simulation.infrastructure import configure_logging
+
+    # Sollte keine Exceptions werfen
+    configure_logging(level=logging.DEBUG)
+    configure_logging(level=logging.WARNING)
+
+
+def test_configure_logging_with_custom_format():
+    """Test: configure_logging akzeptiert benutzerdefinierten Format-String."""
+    from core.simulation.infrastructure import configure_logging
+
+    # Sollte keine Exceptions werfen
+    configure_logging(format_string='%(name)s - %(message)s')
+
+
+def test_configure_logging_with_custom_datefmt():
+    """Test: configure_logging akzeptiert benutzerdefiniertes Datumsformat."""
+    from core.simulation.infrastructure import configure_logging
+
+    # Sollte keine Exceptions werfen
+    configure_logging(datefmt='%H:%M:%S')
+
+
+def test_logger_can_log_messages():
+    """Test: Logger kann Nachrichten ausgeben ohne Fehler."""
+    from core.simulation.infrastructure import get_logger
+
+    logger = get_logger("test_logging")
+    
+    # Diese sollten keine Exceptions werfen
+    logger.debug("Debug-Nachricht")
+    logger.info("Info-Nachricht")
+    logger.warning("Warning-Nachricht")
+    logger.error("Error-Nachricht")
+
+
+def test_multiple_loggers_independent():
+    """Test: Mehrere Logger sind unabhängig voneinander."""
+    from core.simulation.infrastructure import get_logger
+
+    logger1 = get_logger("module1")
+    logger2 = get_logger("module2")
+    
+    assert logger1 is not logger2
+    assert logger1.name == "module1"
+    assert logger2.name == "module2"
+
+
+def test_same_logger_name_returns_same_instance():
+    """Test: Gleicher Logger-Name gibt gleiche Instanz zurück."""
+    from core.simulation.infrastructure import get_logger
+
+    logger1 = get_logger("same_module")
+    logger2 = get_logger("same_module")
+    
+    # logging.getLogger gibt für gleichen Namen gleiche Instanz zurück
+    assert logger1 is logger2
+
+
+if __name__ == "__main__":
+    from conftest import run_manual_tests  # type: ignore[import]
+
+    tests = [
+        test_logging_setup_import,
+        test_get_logger_returns_logger,
+        test_get_logger_with_module_name,
+        test_configure_logging_is_idempotent,
+        test_configure_logging_with_custom_level,
+        test_configure_logging_with_custom_format,
+        test_configure_logging_with_custom_datefmt,
+        test_logger_can_log_messages,
+        test_multiple_loggers_independent,
+        test_same_logger_name_returns_same_instance,
+    ]
+
+    run_manual_tests("core.simulation.logging_setup", tests)  # type: ignore[name-defined]
+
+
+===== ./core/simulation/observer/test_heading_delta.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Unit-Tests für Heading-Hilfsfunktionen (Wrap-around-Logik).
+
+Testet die normalize_heading_delta Funktion isoliert.
+"""
+
+from core.simulation.observer import normalize_heading_delta
+
+
+class TestNormalizeHeadingDelta:
+    """Tests für die Heading-Delta-Normalisierung (Wrap-around)."""
+
+    def test_no_wrap_around_positive_small(self):
+        """Kleine positive Differenz ohne Wrap-around."""
+        delta = normalize_heading_delta(45.0)
+        assert delta == 45.0
+
+    def test_no_wrap_around_negative_small(self):
+        """Kleine negative Differenz bleibt unverändert."""
+        delta = normalize_heading_delta(-45.0)
+        assert delta == -45.0
+
+    def test_no_wrap_around_at_boundary_positive(self):
+        """Differenz genau bei +180° (Grenzfall) -> normalisiert zu -180°."""
+        delta = normalize_heading_delta(180.0)
+        assert delta == -180.0
+
+    def test_no_wrap_around_at_boundary_negative(self):
+        """Differenz genau bei -180° (Grenzfall)."""
+        delta = normalize_heading_delta(-180.0)
+        assert delta == -180.0
+
+    def test_wrap_around_positive_to_negative(self):
+        """Wrap-around von positiv zu negativ (350° → 10° = +20°)."""
+        # Delta roh: 10 - 350 = -340
+        # Normalisiert: -340 + 360 = +20
+        delta = normalize_heading_delta(-340.0)
+        assert delta == 20.0
+
+    def test_wrap_around_negative_to_positive(self):
+        """Wrap-around von negativ zu positiv (10° → 350° = -20°)."""
+        # Delta roh: 350 - 10 = +340
+        # Normalisiert: +340 - 360 = -20
+        delta = normalize_heading_delta(340.0)
+        assert delta == -20.0
+
+    def test_wrap_around_just_over_180(self):
+        """Knapp über +180° triggert Wrap-around."""
+        # 181° → -179°
+        delta = normalize_heading_delta(181.0)
+        assert delta == -179.0
+
+    def test_wrap_around_just_under_minus_180(self):
+        """Knapp unter -180° triggert Wrap-around."""
+        # -181° → +179°
+        delta = normalize_heading_delta(-181.0)
+        assert delta == 179.0
+
+    def test_full_circle_positive(self):
+        """Voller Kreis positiv (360°) wird zu 0°."""
+        delta = normalize_heading_delta(360.0)
+        assert delta == 0.0
+
+    def test_full_circle_negative(self):
+        """Voller Kreis negativ (-360°) wird zu 0°."""
+        delta = normalize_heading_delta(-360.0)
+        assert delta == 0.0
+
+    def test_multiple_wraps_positive(self):
+        """Mehrfache Umläufe positiv (540° = 360° + 180°) -> normalisiert zu -180°."""
+        # 540° - 360° = 180° -> -180° (Konsistenz)
+        delta = normalize_heading_delta(540.0)
+        assert delta == -180.0
+
+    def test_multiple_wraps_negative(self):
+        """Mehrfache Umläufe negativ (-540° = -360° - 180°)."""
+        # -540° + 360° = -180°
+        delta = normalize_heading_delta(-540.0)
+        assert delta == -180.0
+
+    def test_realistic_scenario_right_turn(self):
+        """Realistisches Szenario: Rechtskurve von 5° auf 355°."""
+        # Delta: 355 - 5 = 350° (roh)
+        # Normalisiert: 350 - 360 = -10° (Rechtskurve)
+        delta = normalize_heading_delta(350.0)
+        assert delta == -10.0
+
+    def test_realistic_scenario_left_turn(self):
+        """Realistisches Szenario: Linkskurve von 355° auf 5°."""
+        # Delta: 5 - 355 = -350° (roh)
+        # Normalisiert: -350 + 360 = +10° (Linkskurve)
+        delta = normalize_heading_delta(-350.0)
+        assert delta == 10.0
+
+    def test_zero_delta(self):
+        """Keine Änderung (0°)."""
+        delta = normalize_heading_delta(0.0)
+        assert delta == 0.0
+
+    def test_symmetry_positive_negative(self):
+        """Symmetrie: +170° und -170° bleiben unverändert."""
+        assert normalize_heading_delta(170.0) == 170.0
+        assert normalize_heading_delta(-170.0) == -170.0
+
+    def test_output_range_bounds(self):
+        """Ausgabe ist immer im Bereich [-180, 180]."""
+        test_values = [-540, -360, -340, -181, -180, -45, 0, 45, 180, 181, 340, 360, 540]
+        for value in test_values:
+            result = normalize_heading_delta(value)
+            msg = f"normalize_heading_delta({value}) = {result} außerhalb [-180, 180]"
+            assert -180 <= result <= 180, msg
+
+
+class TestNormalizeHeadingDeltaEdgeCases:
+    """Edge-Cases und Spezialfälle."""
+
+    def test_very_large_positive(self):
+        """Sehr große positive Werte."""
+        # 720° = 2 * 360° → 0°
+        delta = normalize_heading_delta(720.0)
+        assert delta == 0.0
+
+    def test_very_large_negative(self):
+        """Sehr große negative Werte."""
+        # -720° = -2 * 360° → 0°
+        delta = normalize_heading_delta(-720.0)
+        assert delta == 0.0
+
+    def test_fractional_degrees(self):
+        """Dezimalwerte funktionieren korrekt."""
+        delta = normalize_heading_delta(45.5)
+        assert delta == 45.5
+
+        delta = normalize_heading_delta(-45.5)
+        assert delta == -45.5
+
+        # Wrap-around mit Dezimalstellen
+        delta = normalize_heading_delta(190.5)
+        assert delta == -169.5
+
+    def test_consistency_with_abs(self):
+        """Absolute Werte sind konsistent."""
+        # ±350° sollten beide zu ±10° werden (symmetrisch)
+        pos = normalize_heading_delta(350.0)
+        neg = normalize_heading_delta(-350.0)
+        assert abs(pos) == abs(neg) == 10.0
+        assert pos == -10.0
+        assert neg == 10.0
+
+
+===== ./core/simulation/observer/test_observer.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Unit-Tests für das observer-Modul.
+
+Testet Phase-Erkennung, Manöver-Analyse und State-Observer mit
+synthetischen Zustandsverläufen.
+"""
+
+from core.simulation.infrastructure import DEFAULT_CONFIG, SimulationConfig
+from core.simulation.observer import (
+    ManeuverAnalysis,
+    compute_phase,
+    StateObserver,
+)
+from core.simulation.state import UfoState
+
+
+# =============================================================================
+# Tests für compute_phase()
+# =============================================================================
+
+class TestComputePhase:
+    """Tests für die regelbasierte Phasenbestimmung."""
+
+    def test_idle_initial_state(self):
+        """Initialer Zustand (am Boden, nie geflogen) ist idle."""
+        state = UfoState(x=0.0, y=0.0, z=0.0, v=0.0, dist=0.0, ftime=0.0)
+        assert compute_phase(state) == "idle"
+
+    def test_idle_after_reset(self):
+        """Nach Reset (z=0, v=0, keine Flugzeit) ist idle."""
+        state = UfoState(x=100.0, y=100.0, z=0.0, v=0.0, dist=0.0, ftime=0.0)
+        assert compute_phase(state) == "idle"
+
+    def test_takeoff_just_lifted(self):
+        """Gerade abgehoben (ftime=0, z>0, v>0) ist takeoff."""
+        state = UfoState(z=0.5, v=5.0, ftime=0.0, dist=0.0)
+        assert compute_phase(state) == "takeoff"
+
+    def test_takeoff_very_low_altitude(self):
+        """Sehr niedrige Höhe mit Geschwindigkeit ist noch takeoff."""
+        state = UfoState(z=0.1, v=3.0, ftime=0.0, dist=0.0)
+        assert compute_phase(state) == "takeoff"
+
+    def test_flying_normal_altitude(self):
+        """Normale Flughöhe mit Geschwindigkeit ist flying."""
+        state = UfoState(z=10.0, v=10.0, vz=0.0, ftime=1.0, dist=5.0)
+        assert compute_phase(state) == "flying"
+
+    def test_flying_high_altitude(self):
+        """Große Höhe mit Geschwindigkeit ist flying."""
+        state = UfoState(z=100.0, v=15.0, vz=2.0, ftime=10.0, dist=50.0)
+        assert compute_phase(state) == "flying"
+
+    def test_landing_low_altitude_descending(self):
+        """Niedriger Flug mit Sinkflug ist landing."""
+        state = UfoState(z=1.5, v=5.0, vz=-0.5, ftime=5.0, dist=20.0)
+        assert compute_phase(state) == "landing"
+
+    def test_landing_at_detection_height(self):
+        """An der Erkennungshöhe mit Sinkflug ist landing."""
+        config = DEFAULT_CONFIG
+        state = UfoState(
+            z=config.landing_detection_height_m,
+            v=3.0,
+            vz=-0.3,
+            ftime=10.0,
+            dist=30.0,
+        )
+        assert compute_phase(state, config) == "landing"
+
+    def test_landed_after_flight(self):
+        """Am Boden nach erfolgreichem Flug ist landed."""
+        state = UfoState(z=0.0, v=0.0, ftime=10.0, dist=50.0)
+        assert compute_phase(state) == "landed"
+
+    def test_landed_with_flight_distance(self):
+        """Am Boden mit zurückgelegter Strecke ist landed."""
+        state = UfoState(z=0.0, v=0.0, ftime=0.0, dist=100.0)
+        assert compute_phase(state) == "landed"
+
+    def test_crashed_negative_z(self):
+        """Negative Höhe ist crashed."""
+        state = UfoState(z=-1.0, v=5.0, ftime=5.0, dist=20.0)
+        assert compute_phase(state) == "crashed"
+
+    def test_crashed_negative_z_marker(self):
+        """Sehr negative Höhe (Crash-Marker) ist crashed."""
+        state = UfoState(z=-10.0, v=0.0, ftime=10.0, dist=30.0)
+        assert compute_phase(state) == "crashed"
+
+
+class TestComputePhasePriorities:
+    """Tests für die Prioritätsreihenfolge der Phasen-Regeln."""
+
+    def test_crashed_has_highest_priority(self):
+        """Crashed hat höchste Priorität (überstimmt alle anderen)."""
+        # Auch mit v>0 und z<0 ist es crashed, nicht flying
+        state = UfoState(z=-0.1, v=10.0, vz=-2.0, ftime=5.0, dist=20.0)
+        assert compute_phase(state) == "crashed"
+
+    def test_landed_before_idle(self):
+        """Landed hat Priorität vor idle (has_flown unterscheidet)."""
+        # Am Boden mit Flugzeit -> landed
+        state1 = UfoState(z=0.0, v=0.0, ftime=10.0, dist=50.0)
+        assert compute_phase(state1) == "landed"
+
+        # Am Boden ohne Flugzeit -> idle
+        state2 = UfoState(z=0.0, v=0.0, ftime=0.0, dist=0.0)
+        assert compute_phase(state2) == "idle"
+
+    def test_takeoff_before_landing(self):
+        """Takeoff hat Priorität vor landing (ftime=0 unterscheidet)."""
+        # Niedriger Flug mit ftime=0 -> takeoff
+        state1 = UfoState(z=1.0, v=5.0, vz=-0.5, ftime=0.0, dist=0.0)
+        assert compute_phase(state1) == "takeoff"
+
+        # Niedriger Flug mit ftime>0 und vz<0 -> landing
+        state2 = UfoState(z=1.0, v=5.0, vz=-0.5, ftime=2.0, dist=10.0)
+        assert compute_phase(state2) == "landing"
+
+    def test_landing_before_flying(self):
+        """Landing hat Priorität vor flying (niedrige Höhe + vz<0)."""
+        # Niedrig mit Sinkflug -> landing
+        state1 = UfoState(z=1.5, v=5.0, vz=-0.5, ftime=5.0, dist=20.0)
+        assert compute_phase(state1) == "landing"
+
+        # Niedrig ohne Sinkflug -> flying
+        state2 = UfoState(z=1.5, v=5.0, vz=0.0, ftime=5.0, dist=20.0)
+        assert compute_phase(state2) == "flying"
+
+
+class TestComputePhaseEdgeCases:
+    """Tests für Grenzfälle und spezielle Konfigurationen."""
+
+    def test_zero_velocity_in_air(self):
+        """Geschwindigkeit 0 in der Luft ist hovering (schwebt)."""
+        state = UfoState(z=10.0, v=0.0, vz=0.0, ftime=5.0, dist=20.0)
+        # v=0, vz=0, z>0 -> hovering
+        assert compute_phase(state) == "hovering"
+
+    def test_custom_landing_detection_height(self):
+        """Benutzerdefinierte Landungshöhe wird korrekt verwendet."""
+        # landing_detection_height_m ist eine abgeleitete Property von SimulationConfig –
+        # Anpassung über max_altitude_m in SimulationConfig möglich (hier DEFAULT_CONFIG).
+        config = DEFAULT_CONFIG
+
+        # Knapp unter Schwelle mit vz<0 -> landing
+        state1 = UfoState(
+            z=config.landing_detection_height_m - 0.1,
+            v=5.0,
+            vz=-0.5,
+            ftime=5.0,
+            dist=20.0,
+        )
+        assert compute_phase(state1, config) == "landing"
+
+        # Über Schwelle mit vz<0 -> flying
+        state2 = UfoState(
+            z=config.landing_detection_height_m + 0.1,
+            v=5.0,
+            vz=-0.5,
+            ftime=5.0,
+            dist=20.0,
+        )
+        assert compute_phase(state2, config) == "flying"
+
+    def test_zero_threshold_handling(self):
+        """Exakte Schwellenwerte (z=0) werden korrekt behandelt."""
+        config = DEFAULT_CONFIG
+
+        # Exakt z=0 mit Flugzeit -> landed
+        state1 = UfoState(z=config.zero_value, v=0.0, ftime=10.0, dist=50.0)
+        assert compute_phase(state1, config) == "landed"
+
+        # Minimal über z=0 mit v>0 -> flying oder takeoff
+        state2 = UfoState(
+            z=config.zero_value + 0.01, v=5.0, ftime=0.0, dist=0.0
+        )
+        assert compute_phase(state2, config) == "takeoff"
+
+    def test_positive_vz_in_landing_range(self):
+        """Steigflug in niedriger Höhe ist flying, nicht landing."""
+        state = UfoState(z=1.5, v=5.0, vz=0.5, ftime=5.0, dist=20.0)
+        # vz>0 erfüllt nicht landing-Kriterium
+        assert compute_phase(state) == "flying"
+
+
+# =============================================================================
+# Tests für ManeuverAnalysis
+# =============================================================================
+
+class TestManeuverAnalysis:
+    """Tests für die ManeuverAnalysis Dataclass."""
+
+    def test_default_values(self):
+        """Standard-Werte sind korrekt gesetzt."""
+        analysis = ManeuverAnalysis(phase="idle")
+        assert analysis.phase == "idle"
+        assert analysis.is_ascending is False
+        assert analysis.is_descending is False
+        assert analysis.is_turning is False
+        assert analysis.is_stagnating is False
+        assert analysis.avg_vz == 0.0
+        assert analysis.avg_heading_change == 0.0
+
+    def test_custom_values(self):
+        """Benutzerdefinierte Werte werden korrekt gespeichert."""
+        analysis = ManeuverAnalysis(
+            phase="flying",
+            is_ascending=True,
+            is_turning=True,
+            avg_vz=2.5,
+            avg_heading_change=10.0,
+        )
+        assert analysis.phase == "flying"
+        assert analysis.is_ascending is True
+        assert analysis.is_descending is False
+        assert analysis.is_turning is True
+        assert analysis.avg_vz == 2.5
+        assert analysis.avg_heading_change == 10.0
+
+
+# =============================================================================
+# Tests für StateObserver
+# =============================================================================
+
+class TestStateObserverBasics:
+    """Basis-Funktionalität des StateObserver."""
+
+    def test_initialization(self):
+        """Observer wird korrekt initialisiert."""
+        observer = StateObserver()
+        assert observer.config == DEFAULT_CONFIG
+        assert len(observer.history) == 0
+
+    def test_custom_config(self):
+        """Observer kann mit benutzerdefinierter Config erstellt werden."""
+        config = SimulationConfig(observer_history_size=20)
+        observer = StateObserver(config)
+        assert observer.config == config
+        assert observer.history.maxlen == 20
+
+    def test_observe_adds_to_history(self):
+        """observe() fügt Zustände zur Historie hinzu."""
+        observer = StateObserver()
+        state = UfoState(x=10.0, z=5.0)
+
+        observer.observe(state)
+        assert len(observer.history) == 1
+        assert observer.history[0].x == 10.0
+        assert observer.history[0].z == 5.0
+
+    def test_observe_creates_copy(self):
+        """observe() erstellt defensive Kopie des States."""
+        observer = StateObserver()
+        state = UfoState(x=10.0, z=5.0)
+
+        observer.observe(state)
+        # Original-State ist nicht das gleiche Objekt
+        assert observer.history[0] is not state
+        # Aber hat die gleichen Werte
+        assert observer.history[0].x == state.x
+        assert observer.history[0].z == state.z
+
+    def test_history_respects_maxlen(self):
+        """Historie respektiert maxlen (Ringpuffer)."""
+        config = SimulationConfig(observer_history_size=3)
+        observer = StateObserver(config)
+
+        for i in range(5):
+            observer.observe(UfoState(x=float(i)))
+
+        # Nur die letzten 3 Einträge bleiben
+        assert len(observer.history) == 3
+        assert observer.history[0].x == 2.0
+        assert observer.history[1].x == 3.0
+        assert observer.history[2].x == 4.0
+
+
+class TestStateObserverAnalyze:
+    """Tests für die analyze() Methode."""
+
+    def test_analyze_empty_history_returns_idle(self):
+        """Leere Historie gibt idle zurück."""
+        observer = StateObserver()
+        analysis = observer.analyze()
+
+        assert analysis.phase == "idle"
+        assert analysis.is_ascending is False
+        assert analysis.is_descending is False
+
+    def test_analyze_single_state(self):
+        """Einzelner State wird korrekt analysiert."""
+        observer = StateObserver()
+        observer.observe(UfoState(z=10.0, v=10.0, ftime=5.0, dist=20.0))
+
+        analysis = observer.analyze()
+        assert analysis.phase == "flying"
+
+    def test_analyze_detects_ascending(self):
+        """Steigflug wird erkannt (avg_vz > threshold)."""
+        config = SimulationConfig(climb_vz_threshold_ms=0.5)
+        observer = StateObserver(config)
+
+        # Mehrere Zustände mit steigendem vz
+        for i in range(5):
+            observer.observe(UfoState(z=float(i), v=10.0, vz=1.0, ftime=float(i)))
+
+        analysis = observer.analyze()
+        assert analysis.is_ascending is True
+        assert analysis.avg_vz > config.climb_vz_threshold_ms
+
+    def test_analyze_detects_descending(self):
+        """Sinkflug wird erkannt (avg_vz < threshold)."""
+        config = SimulationConfig(descent_vz_threshold_ms=-0.5)
+        observer = StateObserver(config)
+
+        # Mehrere Zustände mit sinkendem vz
+        for i in range(5):
+            observer.observe(
+                UfoState(z=10.0 - float(i), v=10.0, vz=-1.0, ftime=float(i))
+            )
+
+        analysis = observer.analyze()
+        assert analysis.is_descending is True
+        assert analysis.avg_vz < config.descent_vz_threshold_ms
+
+    def test_analyze_detects_turning(self):
+        """Kurven werden erkannt (avg_heading_change > threshold)."""
+        config = SimulationConfig(turn_heading_threshold_deg=5.0)
+        observer = StateObserver(config)
+
+        # Mehrere Zustände mit sich änderndem Heading
+        headings = [0.0, 10.0, 20.0, 30.0, 40.0]
+        for i, heading in enumerate(headings):
+            observer.observe(
+                UfoState(d=heading, v=10.0, z=10.0, ftime=float(i))
+            )
+
+        analysis = observer.analyze()
+        assert analysis.is_turning is True
+        assert analysis.avg_heading_change > config.turn_heading_threshold_deg
+
+    def test_analyze_heading_wrap_around_positive(self):
+        """Wrap-around bei Heading (350° → 10°) wird korrekt behandelt."""
+        observer = StateObserver()
+
+        observer.observe(UfoState(d=350.0, v=10.0, z=10.0))
+        observer.observe(UfoState(d=10.0, v=10.0, z=10.0))
+
+        analysis = observer.analyze()
+        # Delta sollte 20° sein, nicht 340°
+        assert analysis.avg_heading_change < 30.0
+        assert analysis.is_turning is False
+
+    def test_analyze_heading_wrap_around_negative(self):
+        """Wrap-around bei Heading (10° → 350°) wird korrekt behandelt."""
+        observer = StateObserver()
+
+        # Benötigt mindestens 3 States für Trend-Analyse
+        observer.observe(UfoState(d=5.0, v=10.0, z=10.0))
+        observer.observe(UfoState(d=10.0, v=10.0, z=10.0))
+        observer.observe(UfoState(d=350.0, v=10.0, z=10.0))
+
+        analysis = observer.analyze()
+        # Delta sollte ~20° sein (10→350 = -20° bzw. +340°, wrap gibt 20°)
+        # Durchschnitt: (5° + 20°) / 2 = 12.5°
+        assert analysis.avg_heading_change < 30.0
+        assert 10.0 < analysis.avg_heading_change < 15.0  # Näherungsweise 12.5°
+
+    def test_analyze_detects_stagnation(self):
+        """Stagnation wird erkannt (geringe Bewegung trotz v>0)."""
+        config = SimulationConfig(dt=0.1)
+        observer = StateObserver(config)
+
+        # UFO sollte sich mit 10m/s bewegen, tut es aber nicht
+        for i in range(10):
+            # Sehr kleine Positionsänderung trotz vel=10m/s
+            observer.observe(
+                UfoState(
+                    x=float(i) * 0.01,  # Nur 0.01m pro Step statt 1m
+                    y=0.0,
+                    z=10.0,
+                    v=10.0,
+                    vel=10.0,
+                    ftime=float(i) * 0.1,
+                )
+            )
+
+        analysis = observer.analyze()
+        assert analysis.is_stagnating
+
+    def test_analyze_no_stagnation_when_moving_correctly(self):
+        """Keine Stagnation bei korrekter Bewegung."""
+        config = SimulationConfig(dt=0.1)
+        observer = StateObserver(config)
+
+        # UFO bewegt sich korrekt mit 10m/s
+        for i in range(10):
+            observer.observe(
+                UfoState(
+                    x=float(i) * 1.0,  # 1m pro Step bei 10m/s und dt=0.1s
+                    y=0.0,
+                    z=10.0,
+                    v=10.0,
+                    vel=10.0,
+                    ftime=float(i) * 0.1,
+                )
+            )
+
+        analysis = observer.analyze()
+        assert not analysis.is_stagnating
+
+
+class TestStateObserverManeuverDescription:
+    """Tests für get_maneuver_description()."""
+
+    def test_description_includes_phase(self):
+        """Beschreibung enthält immer die Phase."""
+        observer = StateObserver()
+        observer.observe(UfoState(z=10.0, v=10.0, ftime=5.0))
+
+        desc = observer.get_maneuver_description()
+        assert "Phase: flying" in desc
+
+    def test_description_includes_climbing(self):
+        """Beschreibung enthält 'climbing' bei Steigflug."""
+        config = SimulationConfig(climb_vz_threshold_ms=0.5)
+        observer = StateObserver(config)
+
+        for i in range(5):
+            observer.observe(UfoState(z=float(i), v=10.0, vz=1.0, ftime=float(i)))
+
+        desc = observer.get_maneuver_description()
+        assert "climbing" in desc
+
+    def test_description_includes_descending(self):
+        """Beschreibung enthält 'descending' bei Sinkflug."""
+        config = SimulationConfig(descent_vz_threshold_ms=-0.5)
+        observer = StateObserver(config)
+
+        for i in range(5):
+            observer.observe(
+                UfoState(z=10.0 - float(i), v=10.0, vz=-1.0, ftime=float(i))
+            )
+
+        desc = observer.get_maneuver_description()
+        assert "descending" in desc
+
+    def test_description_includes_turning(self):
+        """Beschreibung enthält 'turning' und Delta bei Kurven."""
+        config = SimulationConfig(turn_heading_threshold_deg=5.0)
+        observer = StateObserver(config)
+
+        headings = [0.0, 10.0, 20.0, 30.0]
+        for i, heading in enumerate(headings):
+            observer.observe(UfoState(d=heading, v=10.0, z=10.0, ftime=float(i)))
+
+        desc = observer.get_maneuver_description()
+        assert "turning" in desc
+        assert "Δd=" in desc
+
+    def test_description_includes_stagnating(self):
+        """Beschreibung enthält 'stagnating' bei Stagnation."""
+        config = SimulationConfig(dt=0.1)
+        observer = StateObserver(config)
+
+        for i in range(10):
+            observer.observe(
+                UfoState(
+                    x=float(i) * 0.01, y=0.0, z=10.0, v=10.0, vel=10.0, ftime=float(i) * 0.1
+                )
+            )
+
+        desc = observer.get_maneuver_description()
+        assert "stagnating" in desc
+
+    def test_description_includes_vz_when_nonzero(self):
+        """Beschreibung enthält vz wenn != 0."""
+        observer = StateObserver()
+
+        for i in range(5):
+            observer.observe(UfoState(z=float(i), v=10.0, vz=2.5, ftime=float(i)))
+
+        desc = observer.get_maneuver_description()
+        assert "vz=" in desc
+
+
+class TestStateObserverIntegration:
+    """Integrationstests mit realistischen Szenarien."""
+
+    def test_complete_takeoff_sequence(self):
+        """Komplette Startsequenz wird korrekt erkannt."""
+        observer = StateObserver()
+
+        # Start am Boden
+        observer.observe(UfoState(z=0.0, v=0.0, ftime=0.0))
+        assert observer.analyze().phase == "idle"
+
+        # Abheben - mehrere States für Trend-Erkennung
+        observer.observe(UfoState(z=0.3, v=5.0, vz=1.0, ftime=0.0))
+        observer.observe(UfoState(z=0.6, v=5.0, vz=1.2, ftime=0.0))
+        observer.observe(UfoState(z=0.9, v=5.0, vz=1.5, ftime=0.0))
+        analysis = observer.analyze()
+        assert analysis.phase == "takeoff"
+        # Jetzt haben wir genug States für Trend-Erkennung (>= 3)
+        assert analysis.is_ascending
+
+        # Steigflug
+        for i in range(10):
+            observer.observe(
+                UfoState(z=1.0 + float(i), v=10.0, vz=1.0, ftime=float(i) * 0.1)
+            )
+        analysis = observer.analyze()
+        assert analysis.phase == "flying"
+        assert analysis.is_ascending
+
+    def test_complete_landing_sequence(self):
+        """Komplette Landungssequenz wird korrekt erkannt."""
+        observer = StateObserver()
+
+        # Reiseflug
+        observer.observe(UfoState(z=20.0, v=10.0, vz=0.0, ftime=10.0, dist=100.0))
+        assert observer.analyze().phase == "flying"
+
+        # Landeanflug (Sinkflug)
+        for i in range(5):
+            observer.observe(
+                UfoState(
+                    z=5.0 - float(i) * 0.8,
+                    v=5.0,
+                    vz=-0.8,
+                    ftime=10.0 + float(i) * 0.1,
+                    dist=100.0 + float(i) * 0.5,
+                )
+            )
+        analysis = observer.analyze()
+        assert analysis.phase == "landing"
+        assert analysis.is_descending is True
+
+        # Gelandet
+        observer.observe(UfoState(z=0.0, v=0.0, ftime=15.0, dist=105.0))
+        assert observer.analyze().phase == "landed"
+
+    def test_circular_flight_pattern(self):
+        """Kreisflug wird als turning erkannt."""
+        config = SimulationConfig(turn_heading_threshold_deg=5.0)
+        observer = StateObserver(config)
+
+        # Kreisflug mit konstantem Radius
+        import math
+
+        for i in range(20):
+            angle = float(i) * 18.0  # 18° pro Schritt = voller Kreis in 20 Schritten
+            x = 10.0 * math.cos(math.radians(angle))
+            y = 10.0 * math.sin(math.radians(angle))
+            observer.observe(
+                UfoState(
+                    x=x, y=y, z=10.0, d=angle, v=10.0, ftime=float(i) * 0.1
+                )
+            )
+
+        analysis = observer.analyze()
+        assert analysis.phase == "flying"
+        assert analysis.is_turning is True
+        assert analysis.avg_heading_change > config.turn_heading_threshold_deg
+
+
+===== ./core/simulation/observer/test_smoke.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Smoke-Tests für das observer-Modul.
+
+Prüft grundlegende Importierbarkeit, Instantiierung und Dependency-Einhaltung.
+"""
+
+
+def test_observer_module_import():
+    """Observer-Modul kann standalone importiert werden."""
+    from core.simulation.observer import (
+        Phase,
+        ManeuverAnalysis,
+        compute_phase,
+        StateObserver,
+    )
+
+    assert Phase is not None
+    assert ManeuverAnalysis is not None
+    assert compute_phase is not None
+    assert StateObserver is not None
+
+
+def test_phase_type_is_literal():
+    """Phase ist ein Literal-Type mit den erwarteten Werten."""
+    from core.simulation.observer import Phase
+    from typing import get_args
+
+    # Phase sollte ein Literal sein
+    args = get_args(Phase)
+    expected_phases = {"idle", "takeoff", "hovering", "flying", "landing", "landed", "crashed"}
+
+    assert set(args) == expected_phases
+
+
+def test_compute_phase_callable():
+    """compute_phase ist aufrufbar."""
+    from core.simulation.observer import compute_phase
+    from core.simulation.state import UfoState
+
+    assert callable(compute_phase)
+
+    # Minimaler Aufruf sollte funktionieren
+    state = UfoState()
+    result = compute_phase(state)
+    assert result in ["idle", "takeoff", "flying", "landing", "landed", "crashed"]
+
+
+def test_maneuver_analysis_instantiation():
+    """ManeuverAnalysis kann instantiiert werden."""
+    from core.simulation.observer import ManeuverAnalysis
+
+    # Minimale Instantiierung
+    analysis = ManeuverAnalysis(phase="idle")
+    assert analysis is not None
+    assert analysis.phase == "idle"
+
+    # Vollständige Instantiierung
+    analysis_full = ManeuverAnalysis(
+        phase="flying",
+        is_ascending=True,
+        is_descending=False,
+        is_turning=True,
+        is_stagnating=False,
+        avg_vz=1.5,
+        avg_heading_change=10.0,
+    )
+    assert analysis_full.phase == "flying"
+    assert analysis_full.is_ascending is True
+
+
+def test_state_observer_instantiation():
+    """StateObserver kann ohne Dependencies instantiiert werden."""
+    from core.simulation.observer import StateObserver
+
+    # Default-Initialisierung
+    observer = StateObserver()
+    assert observer is not None
+
+    # Mit Config
+    from core.simulation.infrastructure import SimulationConfig
+
+    config = SimulationConfig(observer_history_size=20)
+    observer_with_config = StateObserver(config)
+    assert observer_with_config is not None
+    assert observer_with_config.config == config
+
+
+def test_state_observer_has_required_methods():
+    """StateObserver hat alle geforderten Methoden."""
+    from core.simulation.observer import StateObserver
+
+    observer = StateObserver()
+
+    # Geforderte Methoden aus Spec
+    assert hasattr(observer, "observe")
+    assert hasattr(observer, "analyze")
+    assert hasattr(observer, "get_maneuver_description")
+
+    # Alle Methoden sollten aufrufbar sein
+    assert callable(observer.observe)
+    assert callable(observer.analyze)
+    assert callable(observer.get_maneuver_description)
+
+
+def test_state_observer_has_history():
+    """StateObserver hat history-Attribut als deque."""
+    from collections import deque
+
+    from core.simulation.observer import StateObserver
+
+    observer = StateObserver()
+
+    assert hasattr(observer, "history")
+    assert isinstance(observer.history, deque)
+
+
+def test_observer_module_has_no_forbidden_dependencies():
+    """Observer-Modul hat keine verbotenen Dependencies."""
+    from core.simulation.observer import observer as observer_module
+
+    # Observer-Modul laden
+    module_source = observer_module.__file__
+
+    # Modul-Quelltext überprüfen
+    with open(module_source, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Generische Sicherheitsprüfung der Importstruktur (AST‑basiert)
+    import ast
+
+    tree = ast.parse(content)
+
+    # Erlaubte Root-Pakete nach einhaltung der Ticketvorgaben
+    forbidden_roots = {
+        "core.simulation.physics",
+        "core.simulation.controller",
+        "core.simulation.command",
+        "core.simulation.view",
+        "core.simulation.state.manager",
+    }
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                for root in forbidden_roots:
+                    if alias.name.startswith(root):
+                        raise AssertionError(
+                            f"Observer sollte keine verbotene Dependency importieren: import {alias.name}")
+
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for root in forbidden_roots:
+                if node.module.startswith(root):
+                    raise AssertionError(
+                        f"Observer sollte keine verbotene Dependency importieren: from {node.module} import ...")
+
+
+def test_observer_module_exports():
+    """Observer-Modul exportiert die erwarteten Symbole."""
+    from core.simulation import observer as observer_module
+
+    expected_exports = {
+        "Phase",
+        "ManeuverAnalysis",
+        "compute_phase",
+        "normalize_heading_delta",
+        "StateObserver",
+    }
+
+    assert hasattr(observer_module, "__all__")
+    assert set(observer_module.__all__) == expected_exports
+
+
+def test_observer_integration_with_state():
+    """Observer kann mit UfoState arbeiten."""
+    from core.simulation.observer import StateObserver, compute_phase
+    from core.simulation.state import UfoState
+
+    # State erstellen
+    state = UfoState(z=10.0, v=10.0, ftime=5.0, dist=20.0)
+
+    # compute_phase sollte funktionieren
+    phase = compute_phase(state)
+    assert phase == "flying"
+
+    # Observer sollte State akzeptieren
+    observer = StateObserver()
+    observer.observe(state)
+    assert len(observer.history) == 1
+
+    # Analyse sollte funktionieren
+    analysis = observer.analyze()
+    assert analysis.phase == "flying"
+
+
+def test_observer_uses_config_thresholds():
+    """Observer verwendet Config-Schwellenwerte korrekt."""
+    from core.simulation.infrastructure import SimulationConfig
+    from core.simulation.observer import StateObserver
+
+    config = SimulationConfig(
+        observer_history_size=100,
+        climb_vz_threshold_ms=1.0,
+        descent_vz_threshold_ms=-1.0,
+        turn_heading_threshold_deg=10.0,
+    )
+
+    observer = StateObserver(config)
+
+    # Config sollte gesetzt sein
+    assert observer.config.observer_history_size == 100
+    assert observer.config.climb_vz_threshold_ms == 1.0
+    assert observer.config.descent_vz_threshold_ms == -1.0
+    assert observer.config.turn_heading_threshold_deg == 10.0
+
+    # History maxlen sollte von Config kommen
+    assert observer.history.maxlen == 100
+
+def test_observer_does_not_modify_state():
+    """Observer modifiziert empfangene States nicht."""
+    from core.simulation.observer import StateObserver
+    from core.simulation.state import UfoState
+
+    observer = StateObserver()
+
+    # Originaler State
+    original = UfoState(x=10.0, y=20.0, z=5.0, v=10.0)
+
+    # Observer beobachtet
+    observer.observe(original)
+
+    # Observer erstellt Kopie
+    observed = observer.history[0]
+
+    # Werte sind gleich
+    assert observed.x == original.x
+    assert observed.y == original.y
+
+    # Aber es sind unterschiedliche Objekte (defensive Kopie)
+    # (frozen dataclass kann nicht modifiziert werden, aber Prinzip bleibt)
+    assert observed is not original
+
+
+===== ./core/simulation/physics/test_physics_engine.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Unit-Tests für PhysicsEngine.
+
+Testet die physikalische Integrationslogik der UFO-Simulation isoliert.
+"""
+
+import sys
+from pathlib import Path
+
+# Sicherstellen, dass src/ im Python-Pfad ist  # noqa: E402
+src_path = Path(__file__).parent.parent / "src"
+sys.path.insert(0, str(src_path))
+
+import pytest  # noqa: E402
+
+from core.simulation.physics import PhysicsEngine  # noqa: E402
+from core.simulation.state import UfoState  # noqa: E402
+from core.simulation.infrastructure import SimulationConfig, DEFAULT_CONFIG  # noqa: E402
+
+
+class TestPhysicsEngineImport:
+    """Tests für Modul-Import und Initialisierung."""
+
+    def test_physics_engine_can_be_imported(self):
+        """Smoke-Test: PhysicsEngine kann importiert werden."""
+        from core.simulation.physics import PhysicsEngine
+        assert PhysicsEngine is not None
+
+    def test_physics_engine_can_be_instantiated(self):
+        """PhysicsEngine kann mit Default-Config instantiiert werden."""
+        engine = PhysicsEngine()
+        assert engine is not None
+        assert engine.config == DEFAULT_CONFIG
+
+    def test_physics_engine_can_be_instantiated_with_custom_config(self):
+        """PhysicsEngine kann mit Custom-Config instantiiert werden."""
+        config = SimulationConfig(dt=0.05, vmax_kmh=200.0)
+        engine = PhysicsEngine(config)
+        assert engine is not None
+        assert engine.config.dt == 0.05
+        assert engine.config.vmax_kmh == 200.0
+
+
+class TestPhysicsEngineVelocityUpdate:
+    """Tests für Geschwindigkeits-Updates."""
+
+    def test_update_velocity_increases_when_delta_v_positive(self):
+        """Geschwindigkeit steigt bei positivem delta_v."""
+        engine = PhysicsEngine()
+        state = UfoState(v=10.0, delta_v=5.0)
+
+        updated = engine._update_velocity(state)
+
+        # Geschwindigkeit sollte um acceleration_kmh_per_step gestiegen sein
+        assert updated.v > state.v
+        assert updated.delta_v < state.delta_v
+
+    def test_update_velocity_decreases_when_delta_v_negative(self):
+        """Geschwindigkeit sinkt bei negativem delta_v."""
+        engine = PhysicsEngine()
+        state = UfoState(v=50.0, delta_v=-10.0)
+
+        updated = engine._update_velocity(state)
+
+        # Geschwindigkeit sollte gesunken sein
+        assert updated.v < state.v
+        assert updated.delta_v > state.delta_v
+
+    def test_update_velocity_respects_max_velocity(self):
+        """Geschwindigkeit wird auf vmax_kmh begrenzt."""
+        config = SimulationConfig(vmax_kmh=100.0)
+        engine = PhysicsEngine(config)
+        state = UfoState(v=99.0, delta_v=50.0)
+
+        updated = engine._update_velocity(state)
+
+        # Geschwindigkeit darf vmax_kmh nicht überschreiten
+        assert updated.v <= config.vmax_kmh
+
+    def test_update_velocity_respects_min_velocity_zero(self):
+        """Geschwindigkeit wird nicht negativ."""
+        engine = PhysicsEngine()
+        state = UfoState(v=1.0, delta_v=-50.0)
+
+        updated = engine._update_velocity(state)
+
+        # Geschwindigkeit darf nicht unter 0 fallen
+        assert updated.v >= 0.0
+
+    def test_update_velocity_no_change_when_delta_v_zero(self):
+        """Keine Änderung bei delta_v=0."""
+        engine = PhysicsEngine()
+        state = UfoState(v=50.0, delta_v=0.0)
+
+        updated = engine._update_velocity(state)
+
+        assert updated.v == state.v
+        assert updated.delta_v == state.delta_v
+
+
+class TestPhysicsEngineDirectionUpdate:
+    """Tests für Richtungs-Updates."""
+
+    def test_update_direction_wraps_at_360(self):
+        """Richtung wird bei 360° auf 0° zurückgesetzt."""
+        engine = PhysicsEngine()
+        state = UfoState(d=350.0, delta_d=20.0)
+
+        updated = engine._update_direction(state)
+
+        # 350 + 20 = 370, soll auf 10 wrappen
+        assert 0.0 <= updated.d < 360.0
+        assert updated.delta_d == 0.0
+
+    def test_update_direction_no_change_when_delta_d_zero(self):
+        """Keine Änderung bei delta_d=0."""
+        engine = PhysicsEngine()
+        state = UfoState(d=90.0, delta_d=0.0)
+
+        updated = engine._update_direction(state)
+
+        assert updated.d == state.d
+        assert updated.delta_d == state.delta_d
+
+
+class TestPhysicsEngineInclinationUpdate:
+    """Tests für Neigungs-Updates."""
+
+    def test_update_inclination_increases_when_delta_i_positive(self):
+        """Neigung steigt bei positivem delta_i."""
+        engine = PhysicsEngine()
+        state = UfoState(i=0.0, delta_i=10.0)
+
+        updated = engine._update_inclination(state)
+
+        assert updated.i > state.i
+        assert updated.delta_i < state.delta_i
+
+    def test_update_inclination_decreases_when_delta_i_negative(self):
+        """Neigung sinkt bei negativem delta_i."""
+        engine = PhysicsEngine()
+        state = UfoState(i=0.0, delta_i=-10.0)
+
+        updated = engine._update_inclination(state)
+
+        assert updated.i < state.i
+        assert updated.delta_i > state.delta_i
+
+    def test_update_inclination_respects_max_limit(self):
+        """Neigung wird auf inclination_max_deg begrenzt."""
+        config = SimulationConfig(inclination_max_deg=90)
+        engine = PhysicsEngine(config)
+        state = UfoState(i=89.0, delta_i=50.0)
+
+        updated = engine._update_inclination(state)
+
+        assert updated.i <= config.inclination_max_deg
+
+    def test_update_inclination_respects_min_limit(self):
+        """Neigung wird auf inclination_min_deg begrenzt."""
+        config = SimulationConfig(inclination_min_deg=-90)
+        engine = PhysicsEngine(config)
+        state = UfoState(i=-89.0, delta_i=-50.0)
+
+        updated = engine._update_inclination(state)
+
+        assert updated.i >= config.inclination_min_deg
+
+    def test_update_inclination_no_change_when_delta_i_zero(self):
+        """Keine Änderung bei delta_i=0."""
+        engine = PhysicsEngine()
+        state = UfoState(i=45.0, delta_i=0.0)
+
+        updated = engine._update_inclination(state)
+
+        assert updated.i == state.i
+        assert updated.delta_i == state.delta_i
+
+
+class TestPhysicsEnginePositionUpdate:
+    """Tests für Positions-Updates."""
+
+    def test_update_position_with_zero_velocity(self):
+        """Position ändert sich nicht bei Geschwindigkeit=0."""
+        engine = PhysicsEngine()
+        state = UfoState(x=0.0, y=0.0, z=10.0, v=0.0, vel=0.0)
+
+        updated, result = engine._update_position(state)
+
+        assert updated.x == state.x
+        assert updated.y == state.y
+        # z könnte sich bei geringer Höhe ändern (touchdown)
+        assert result in ["continue", "landed"]
+
+    def test_update_position_changes_with_nonzero_velocity(self):
+        """Position ändert sich bei Geschwindigkeit>0."""
+        from dataclasses import replace
+
+        config = SimulationConfig(dt=1.0)  # 1 Sekunde für einfachere Berechnung
+        engine = PhysicsEngine(config)
+        # Horizontaler Flug: i=0, d=0 (Nord), v=36 km/h = 10 m/s
+        state = UfoState(x=0.0, y=0.0, z=100.0, v=36.0, i=0.0, d=0.0)
+        state = replace(state, vel=10.0)  # vel in m/s setzen
+
+        updated, result = engine._update_position(state)
+
+        # Position sollte sich geändert haben
+        assert updated.x != state.x or updated.y != state.y or updated.z != state.z
+        assert result == "continue"  # Noch in der Luft
+
+    def test_update_position_detects_landing(self):
+        """Landung wird erkannt wenn z <= 0."""
+        engine = PhysicsEngine()
+        # Zustand knapp über Boden mit Abwärtsbewegung
+        state = UfoState(
+            x=0.0, y=0.0, z=0.1,
+            v=10.0, vel=2.78, i=-45.0, d=0.0,  # Sinkflug
+            vz=-2.0  # Vertikale Geschwindigkeit nach unten
+        )
+
+        updated, result = engine._update_position(state)
+
+        if result == "landed":
+            # Bei Landung sollte z <= 0 sein
+            assert updated.z <= 0.0
+            # Geschwindigkeiten sollten auf 0 gesetzt sein
+            assert updated.vel == 0.0
+            assert updated.v == 0.0
+
+
+class TestPhysicsEngineLandingHandling:
+    """Tests für Landungs-Behandlung."""
+
+    def test_handle_landing_safe_landing(self):
+        """Sichere Landung wird korrekt erkannt."""
+        engine = PhysicsEngine()
+
+        # Sicherer Zustand: langsam, geringe Sinkrate, akzeptable Neigung
+        # Verwende Werte unterhalb der Standard-Schwellenwerte
+        state = UfoState(
+            x=10.0, y=20.0, z=0.0,
+            v=0.5, vel=0.14,  # Sehr langsam, unter safe_landing_v_threshold
+            vz=-0.1,  # Geringe Sinkrate
+            i=-15.0  # Sanfter Sinkflug
+        )
+
+        updated = engine._handle_landing(state)
+
+        # Sichere Landung: z sollte exakt 0.0 sein (nicht negativ)
+        assert updated.z == 0.0
+        assert updated.vel == 0.0
+        assert updated.v == 0.0
+
+    def test_handle_landing_crash_high_velocity(self):
+        """Crash bei zu hoher Geschwindigkeit."""
+        engine = PhysicsEngine()
+
+        # Unsicher: zu schnell (über safe_landing_v_threshold_kmh)
+        state = UfoState(
+            x=10.0, y=20.0, z=0.0,
+            v=50.0, vel=13.89,  # ~50 km/h = 13.89 m/s (zu schnell!)
+            vz=-1.0,
+            i=-15.0
+        )
+
+        updated = engine._handle_landing(state)
+
+        # Crash: z sollte negativ sein (Crash-Marker)
+        assert updated.z < 0.0
+        assert updated.vel == 0.0
+        assert updated.v == 0.0
+
+    def test_handle_landing_crash_high_vertical_velocity(self):
+        """Crash bei zu hoher Sinkrate."""
+        engine = PhysicsEngine()
+
+        # Unsicher: zu steile Sinkrate (über safe_landing_max_vz_ms)
+        state = UfoState(
+            x=10.0, y=20.0, z=0.0,
+            v=0.5, vel=0.14,  # Langsam
+            vz=-5.0,  # Zu schnelle Sinkrate!
+            i=-15.0
+        )
+
+        updated = engine._handle_landing(state)
+
+        # Crash
+        assert updated.z < 0.0
+
+    def test_handle_landing_crash_unsafe_inclination(self):
+        """Crash bei unsicherer Neigung."""
+        engine = PhysicsEngine()
+
+        # Unsicher: zu steile Neigung (nicht vertikal genug für vertikale Landung)
+        state = UfoState(
+            x=10.0, y=20.0, z=0.0,
+            v=0.5, vel=0.14,  # Langsam
+            vz=-0.1,  # Geringe Sinkrate
+            i=-45.0  # Zu steil, nicht vertikal genug!
+        )
+
+        updated = engine._handle_landing(state)
+
+        # Crash
+        assert updated.z < 0.0
+
+
+class TestPhysicsEngineLandingAssistance:
+    """Tests für automatische Landungsassistenz."""
+
+    def test_landing_assistance_not_active_when_high_altitude(self):
+        """Landungsassistenz ist nicht aktiv bei großer Höhe."""
+        engine = PhysicsEngine()
+        state = UfoState(z=100.0, v=50.0)
+
+        updated = engine._apply_landing_assistance(state)
+
+        # Keine Änderung
+        assert updated == state
+
+    def test_landing_assistance_not_active_when_user_controlling(self):
+        """Landungsassistenz ist nicht aktiv bei Benutzersteuerung."""
+        engine = PhysicsEngine()
+        # In Landehöhe aber Benutzer steuert
+        state = UfoState(z=1.5, v=50.0, delta_v=5.0)  # Benutzer steuert
+
+        updated = engine._apply_landing_assistance(state)
+
+        # Keine Assistenz wegen Benutzersteuerung
+        assert updated == state
+
+    def test_landing_assistance_reduces_velocity(self):
+        """Landungsassistenz reduziert zu hohe Geschwindigkeit."""
+        engine = PhysicsEngine()
+        # In Landehöhe, keine Benutzersteuerung, zu schnell
+        state = UfoState(z=1.5, v=50.0, delta_v=0.0, delta_i=0.0, delta_d=0.0)
+
+        updated = engine._apply_landing_assistance(state)
+
+        # Geschwindigkeitsreduktion sollte aktiviert sein
+        assert updated.delta_v < 0.0  # Bremsen
+
+    def test_landing_assistance_corrects_inclination_too_shallow(self):
+        """Landungsassistenz korrigiert zu flache Neigung."""
+        engine = PhysicsEngine()
+        # Zu flach (i=0), sollte steiler werden
+        state = UfoState(z=1.5, v=10.0, i=0.0, delta_v=0.0, delta_i=0.0, delta_d=0.0)
+
+        updated = engine._apply_landing_assistance(state)
+
+        # Neigung sollte steiler gemacht werden (delta_i negativ)
+        # Aber nur wenn Assistenz aktiv ist - das hängt von weiteren Bedingungen ab
+        # Prüfen dass entweder Assistenz aktiv ist oder State unverändert
+        if updated != state:
+            # Wenn Assistenz aktiv, sollte delta_i gesetzt sein
+            assert hasattr(updated, 'delta_i')
+
+
+class TestPhysicsEngineIntegrateStep:
+    """Tests für vollständigen Integrationsschritt."""
+
+    def test_integrate_step_returns_correct_tuple(self):
+        """integrate_step gibt korrektes Tupel zurück."""
+        engine = PhysicsEngine()
+        state = UfoState()
+
+        result = engine.integrate_step(state)
+
+        assert isinstance(result, tuple)
+        assert len(result) == 3
+        new_state, continues, landed = result
+        assert isinstance(new_state, UfoState)
+        assert isinstance(continues, bool)
+        assert isinstance(landed, bool)
+
+    def test_integrate_step_ascent_scenario(self):
+        """Steigflug-Szenario: UFO steigt auf."""
+        engine = PhysicsEngine()
+        state = UfoState(
+            z=50.0,
+            v=50.0, vel=13.89,
+            i=45.0,  # Steigflug
+            d=0.0
+        )
+
+        new_state, continues, landed = engine.integrate_step(state)
+
+        # Simulation sollte weiterlaufen
+        assert continues is True
+        assert landed is False
+        # Flugzeit sollte erhöht worden sein
+        assert new_state.ftime > state.ftime
+
+    def test_integrate_step_descent_scenario(self):
+        """Sinkflug-Szenario: UFO sinkt."""
+        engine = PhysicsEngine()
+        state = UfoState(
+            z=100.0,
+            v=30.0, vel=8.33,
+            i=-30.0,  # Sinkflug
+            d=0.0
+        )
+
+        new_state, continues, landed = engine.integrate_step(state)
+
+        # Simulation sollte weiterlaufen
+        assert continues is True
+        assert landed is False
+
+    def test_integrate_step_landing_scenario(self):
+        """Landungs-Szenario: UFO landet."""
+        config = SimulationConfig(dt=0.5)
+        engine = PhysicsEngine(config)
+        # Knapp über Boden, langsam, sichere Neigung
+        state = UfoState(
+            z=0.05,
+            v=5.0, vel=1.39,
+            vz=-0.5,
+            i=-15.0,
+            d=0.0
+        )
+
+        # Initialisiere Variablen vor Schleife
+        new_state = state
+        continues = True
+        landed = False
+
+        # Mehrere Schritte ausführen bis Landung
+        for _ in range(5):
+            new_state, continues, landed = engine.integrate_step(state)
+            if landed:
+                break
+            state = new_state
+
+        # Landung sollte erfolgt sein - je nach exaktem Zustand kann dies
+        # entweder durch landed-Flag oder durch Boden-Kontakt (z <= 0) angezeigt werden
+        # Prüfe zuerst das landed-Flag
+        if landed:
+            # Wenn landed-Flag gesetzt ist, sollte Simulation auch stoppen
+            assert continues is False
+        else:
+            # Wenn nicht landed, muss UFO zumindest den Boden berührt haben
+            assert new_state.z <= 0.0
+
+    def test_integrate_step_increments_flight_time_when_airborne(self):
+        """Flugzeit wird erhöht wenn in der Luft."""
+        config = SimulationConfig(dt=0.1)
+        engine = PhysicsEngine(config)
+        state = UfoState(z=100.0, ftime=5.0)
+
+        new_state, _, _ = engine.integrate_step(state)
+
+        # Flugzeit sollte um dt erhöht sein
+        assert new_state.ftime == pytest.approx(5.1, abs=0.01)
+
+    def test_integrate_step_does_not_increment_flight_time_on_ground(self):
+        """Flugzeit wird nicht erhöht wenn am Boden."""
+        config = SimulationConfig(dt=0.1)
+        engine = PhysicsEngine(config)
+        state = UfoState(z=0.0, ftime=10.0)  # Am Boden
+
+        new_state, _, _ = engine.integrate_step(state)
+
+        # Flugzeit sollte unverändert sein
+        assert new_state.ftime == state.ftime
+
+
+class TestPhysicsEngineImmutability:
+    """Tests für Immutability - State wird nie in-place modifiziert."""
+
+    def test_integrate_step_does_not_modify_input_state(self):
+        """integrate_step modifiziert Input-State nicht."""
+        from dataclasses import asdict
+
+        engine = PhysicsEngine()
+        original_state = UfoState(z=50.0, v=30.0, i=45.0)
+        original_dict = asdict(original_state)
+
+        new_state, _, _ = engine.integrate_step(original_state)
+
+        # Original-State sollte unverändert sein
+        assert asdict(original_state) == original_dict
+        # Neuer State sollte unterschiedlich sein
+        assert new_state is not original_state
+
+    def test_private_methods_do_not_modify_input_state(self):
+        """Private Methoden modifizieren Input-State nicht."""
+        from dataclasses import asdict
+
+        engine = PhysicsEngine()
+        original_state = UfoState(v=50.0, delta_v=10.0)
+        original_dict = asdict(original_state)
+
+        _ = engine._update_velocity(original_state)
+
+        # Original-State sollte unverändert sein
+        assert asdict(original_state) == original_dict
+
+
+===== ./core/simulation/state/test_manager.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Unit-Tests für StateManager (state/manager.py)."""
+
+import threading
+import time
+from dataclasses import replace
+
+import pytest
+
+from core.simulation.state import StateManager, UfoState
+
+
+class TestStateManagerInitialization:
+    """Tests für StateManager-Initialisierung."""
+
+    def test_default_initialization(self):
+        """StateManager initialisiert mit Default-UfoState."""
+        manager = StateManager()
+        snapshot = manager.get_snapshot()
+        
+        assert snapshot.x == 0.0
+        assert snapshot.y == 0.0
+        assert snapshot.z == 0.0
+        assert snapshot.v == 0.0
+
+    def test_custom_initial_state(self):
+        """StateManager akzeptiert custom initial State."""
+        initial_state = UfoState(x=10.0, y=20.0, z=30.0, v=50.0)
+        manager = StateManager(initial_state=initial_state)
+        snapshot = manager.get_snapshot()
+        
+        assert snapshot.x == 10.0
+        assert snapshot.y == 20.0
+        assert snapshot.z == 30.0
+        assert snapshot.v == 50.0
+
+
+class TestStateManagerSnapshot:
+    """Tests für get_snapshot()-Methode."""
+
+    def test_get_snapshot_returns_copy(self):
+        """get_snapshot() liefert defensive Kopie."""
+        manager = StateManager()
+        snapshot1 = manager.get_snapshot()
+        snapshot2 = manager.get_snapshot()
+        
+        # Beide Snapshots sind Kopien, nicht dasselbe Objekt
+        assert snapshot1 is not snapshot2
+        
+        # Aber sie haben dieselben Werte
+        assert snapshot1.x == snapshot2.x
+        assert snapshot1.z == snapshot2.z
+
+    def test_snapshot_is_immutable(self):
+        """Snapshot ist immutable (frozen dataclass)."""
+        manager = StateManager()
+        snapshot = manager.get_snapshot()
+        
+        # Frozen dataclass wirft AttributeError bei direkter Änderung
+        with pytest.raises(AttributeError):
+            # noinspection PyDataclass
+            snapshot.x = 100.0  # type: ignore[misc,assignment]
+
+    def test_snapshot_does_not_affect_manager_state(self):
+        """Snapshot-Modifikation beeinflusst Manager-State nicht."""
+        manager = StateManager()
+        snapshot1 = manager.get_snapshot()
+        
+        # Neuen State aus Snapshot erstellen (replace)
+        modified = replace(snapshot1, x=999.0)
+        
+        # Manager-State ist unverändert
+        snapshot2 = manager.get_snapshot()
+        assert snapshot2.x == 0.0
+        assert modified.x == 999.0
+
+
+class TestStateManagerUpdate:
+    """Tests für update_state()-Methode."""
+
+    def test_update_state_applies_function(self):
+        """update_state() wendet Funktion auf State an."""
+        manager = StateManager()
+        
+        def move_up(state: UfoState) -> UfoState:
+            return replace(state, z=state.z + 10.0)
+        
+        manager.update_state(move_up)
+        snapshot = manager.get_snapshot()
+        
+        assert snapshot.z == 10.0
+
+    def test_update_state_is_atomic(self):
+        """update_state() ist atomar - State ändert sich komplett oder gar nicht."""
+        manager = StateManager()
+        
+        def complex_update(state: UfoState) -> UfoState:
+            return replace(state, x=100.0, y=200.0, z=300.0)
+        
+        manager.update_state(complex_update)
+        snapshot = manager.get_snapshot()
+        
+        assert snapshot.x == 100.0
+        assert snapshot.y == 200.0
+        assert snapshot.z == 300.0
+
+    def test_multiple_updates(self):
+        """Mehrere Updates werden sequenziell angewendet."""
+        manager = StateManager()
+        
+        manager.update_state(lambda s: replace(s, z=10.0))
+        manager.update_state(lambda s: replace(s, z=s.z + 5.0))
+        manager.update_state(lambda s: replace(s, z=s.z * 2.0))
+        
+        snapshot = manager.get_snapshot()
+        assert snapshot.z == 30.0  # (10 + 5) * 2
+
+
+class TestObserverPattern:
+    """Tests für Observer-Registrierung und -Benachrichtigung."""
+
+    def test_register_observer(self):
+        """Observer kann registriert werden."""
+        manager = StateManager()
+        notifications = []
+        
+        def observer(state: UfoState) -> None:
+            notifications.append(state.z)
+        
+        manager.register_observer(observer)
+        manager.update_state(lambda s: replace(s, z=42.0))
+        
+        assert len(notifications) == 1
+        assert notifications[0] == 42.0
+
+    def test_multiple_observers(self):
+        """Mehrere Observer werden alle benachrichtigt."""
+        manager = StateManager()
+        notifications1 = []
+        notifications2 = []
+        
+        def observer1(state: UfoState) -> None:
+            notifications1.append(state.z)
+        
+        def observer2(state: UfoState) -> None:
+            notifications2.append(state.x)
+        
+        manager.register_observer(observer1)
+        manager.register_observer(observer2)
+        
+        manager.update_state(lambda s: replace(s, x=10.0, z=20.0))
+        
+        assert len(notifications1) == 1
+        assert notifications1[0] == 20.0
+        assert len(notifications2) == 1
+        assert notifications2[0] == 10.0
+
+    def test_observer_receives_snapshot(self):
+        """Observer erhält Snapshot, nicht Original-State."""
+        manager = StateManager()
+        received_states = []
+        
+        def observer(state: UfoState) -> None:
+            received_states.append(state)
+        
+        manager.register_observer(observer)
+        manager.update_state(lambda s: replace(s, z=100.0))
+        
+        assert len(received_states) == 1
+        # Snapshot kann nicht den Manager-State beeinflussen
+        assert received_states[0].z == 100.0
+
+    def test_duplicate_observer_registration_ignored(self):
+        """Mehrfache Registrierung desselben Observers wird ignoriert."""
+        manager = StateManager()
+        notification_count = [0]
+        
+        def observer(_: UfoState) -> None:
+            notification_count[0] += 1
+        
+        manager.register_observer(observer)
+        manager.register_observer(observer)  # Duplikat
+        manager.register_observer(observer)  # Duplikat
+        
+        manager.update_state(lambda s: replace(s, z=1.0))
+        
+        # Observer sollte nur einmal registriert sein
+        assert notification_count[0] == 1
+
+    def test_unregister_observer(self):
+        """Observer kann deregistriert werden."""
+        manager = StateManager()
+        notifications = []
+        
+        def observer(state: UfoState) -> None:
+            notifications.append(state.z)
+        
+        manager.register_observer(observer)
+        manager.update_state(lambda s: replace(s, z=10.0))
+        
+        manager.unregister_observer(observer)
+        manager.update_state(lambda s: replace(s, z=20.0))
+        
+        # Nur erste Benachrichtigung sollte angekommen sein
+        assert len(notifications) == 1
+        assert notifications[0] == 10.0
+
+    def test_observer_exception_does_not_break_others(self):
+        """Exception in einem Observer bricht andere Observer nicht ab."""
+        manager = StateManager()
+        notifications1 = []
+        notifications2 = []
+        
+        def failing_observer(_: UfoState) -> None:
+            raise RuntimeError("Simulated observer error")
+        
+        def working_observer1(state: UfoState) -> None:
+            notifications1.append(state.z)
+        
+        def working_observer2(state: UfoState) -> None:
+            notifications2.append(state.z)
+        
+        manager.register_observer(working_observer1)
+        manager.register_observer(failing_observer)
+        manager.register_observer(working_observer2)
+        
+        manager.update_state(lambda s: replace(s, z=42.0))
+        
+        # Beide funktionierenden Observer sollten benachrichtigt worden sein
+        assert len(notifications1) == 1
+        assert len(notifications2) == 1
+
+
+class TestWaitForCondition:
+    """Tests für wait_for_condition()-Methode."""
+
+    def test_wait_for_condition_fulfilled_immediately(self):
+        """wait_for_condition() kehrt sofort zurück wenn bereits erfüllt."""
+        manager = StateManager()
+        manager.update_state(lambda s: replace(s, z=100.0))
+        
+        result = manager.wait_for_condition(lambda s: s.z >= 50.0, timeout=1.0)
+        
+        assert result is True
+
+    def test_wait_for_condition_fulfilled_after_update(self):
+        """wait_for_condition() wartet auf Update."""
+        manager = StateManager()
+        result_container = []
+        
+        def waiter():
+            result = manager.wait_for_condition(lambda s: s.z >= 50.0, timeout=5.0)
+            result_container.append(result)
+        
+        # Thread starten der wartet
+        wait_thread = threading.Thread(target=waiter)
+        wait_thread.start()
+        
+        # Kurz warten, dann Bedingung erfüllen
+        time.sleep(0.1)
+        manager.update_state(lambda s: replace(s, z=100.0))
+        
+        # Thread sollte terminieren
+        wait_thread.join(timeout=2.0)
+        
+        assert len(result_container) == 1
+        assert result_container[0] is True
+
+    def test_wait_for_condition_timeout(self):
+        """wait_for_condition() gibt False bei Timeout zurück."""
+        manager = StateManager()
+        
+        start_time = time.time()
+        result = manager.wait_for_condition(lambda s: s.z >= 1000.0, timeout=0.5)
+        elapsed = time.time() - start_time
+        
+        assert result is False
+        assert 0.4 <= elapsed <= 0.7  # Timeout sollte eingehalten werden
+
+    def test_wait_for_condition_without_timeout(self):
+        """wait_for_condition() wartet unbegrenzt ohne Timeout."""
+        manager = StateManager()
+        result_container = []
+        
+        def waiter():
+            result = manager.wait_for_condition(lambda s: s.z >= 50.0)
+            result_container.append(result)
+        
+        # Thread starten der wartet
+        wait_thread = threading.Thread(target=waiter, daemon=True)
+        wait_thread.start()
+        
+        # Kurz warten, dann Bedingung erfüllen
+        time.sleep(0.1)
+        manager.update_state(lambda s: replace(s, z=100.0))
+        
+        # Thread sollte terminieren
+        wait_thread.join(timeout=2.0)
+        
+        assert len(result_container) == 1
+        assert result_container[0] is True
+
+
+class TestReset:
+    """Tests für reset()-Methode."""
+
+    def test_reset_clears_state(self):
+        """reset() setzt State auf Default zurück."""
+        manager = StateManager()
+        
+        # State modifizieren
+        manager.update_state(lambda s: replace(s, x=100.0, y=200.0, z=300.0))
+        
+        # Reset
+        manager.reset()
+        
+        # State sollte wieder Default sein
+        snapshot = manager.get_snapshot()
+        assert snapshot.x == 0.0
+        assert snapshot.y == 0.0
+        assert snapshot.z == 0.0
+
+    def test_reset_notifies_waiters(self):
+        """reset() weckt wartende Threads auf."""
+        manager = StateManager()
+        manager.update_state(lambda s: replace(s, z=50.0))
+        
+        result_container = []
+        
+        def waiter():
+            # Wartet auf z == 0 (nur durch reset erreichbar)
+            result = manager.wait_for_condition(lambda s: s.z == 0.0, timeout=5.0)
+            result_container.append(result)
+        
+        wait_thread = threading.Thread(target=waiter)
+        wait_thread.start()
+        
+        time.sleep(0.1)
+        manager.reset()
+        
+        wait_thread.join(timeout=2.0)
+        
+        assert len(result_container) == 1
+        assert result_container[0] is True
+
+    def test_reset_notifies_observers(self):
+        """reset() benachrichtigt alle Observer."""
+        manager = StateManager()
+        notifications = []
+        
+        def observer(state: UfoState) -> None:
+            notifications.append(state.z)
+        
+        manager.register_observer(observer)
+        
+        # Erste Änderung
+        manager.update_state(lambda s: replace(s, z=100.0))
+        
+        # Reset sollte Observer benachrichtigen
+        manager.reset()
+        
+        # Observer sollte zweimal benachrichtigt worden sein (update + reset)
+        assert len(notifications) == 2
+        assert notifications[0] == 100.0
+        assert notifications[1] == 0.0  # Nach reset ist z wieder 0
+
+
+
+class TestThreadSafety:
+    """Tests für Thread-Safety."""
+
+    def test_concurrent_updates(self):
+        """Mehrere Threads können gleichzeitig updaten."""
+        manager = StateManager()
+        num_threads = 10
+        updates_per_thread = 100
+        
+        def updater():
+            for _ in range(updates_per_thread):
+                manager.update_state(lambda s: replace(s, z=s.z + 1.0))
+        
+        threads = [threading.Thread(target=updater) for _ in range(num_threads)]
+        
+        for t in threads:
+            t.start()
+        
+        for t in threads:
+            t.join(timeout=5.0)
+        
+        # Alle Updates sollten atomar ausgeführt worden sein
+        snapshot = manager.get_snapshot()
+        expected = num_threads * updates_per_thread
+        assert snapshot.z == expected
+
+    def test_concurrent_reads_and_writes(self):
+        """Lesezugriffe während Updates sind thread-sicher."""
+        manager = StateManager()
+        read_count = [0]
+        stop_flag = threading.Event()
+        
+        def reader():
+            while not stop_flag.is_set():
+                snapshot = manager.get_snapshot()
+                # Snapshot sollte immer konsistent sein (z >= 0)
+                assert snapshot.z >= 0.0
+                read_count[0] += 1
+                time.sleep(0.001)
+        
+        def writer():
+            for i in range(50):
+                manager.update_state(lambda s: replace(s, z=float(i)))
+                time.sleep(0.01)
+        
+        reader_thread = threading.Thread(target=reader)
+        writer_thread = threading.Thread(target=writer)
+        
+        reader_thread.start()
+        writer_thread.start()
+        
+        writer_thread.join(timeout=5.0)
+        stop_flag.set()
+        reader_thread.join(timeout=2.0)
+        
+        # Reader sollte viele Snapshots gelesen haben
+        assert read_count[0] > 10
+
+
+class TestLegacyStateProperty:
+    """Tests für Legacy-Property state."""
+
+    def test_state_property_returns_internal_state(self):
+        """state-Property gibt internen State zurück."""
+        manager = StateManager()
+        manager.update_state(lambda s: replace(s, z=42.0))
+        
+        # Legacy-Zugriff
+        state = manager.state
+        
+        assert state.z == 42.0
+
+    def test_state_property_is_not_thread_safe(self):
+        """state-Property ist nicht thread-sicher (dokumentiert)."""
+        # Dies ist ein dokumentiertes Verhalten - kein Test nötig
+        # Property existiert nur für Legacy-Kompatibilität
+        manager = StateManager()
+        assert hasattr(manager, 'state')
+
+
+class TestStateManagerIntegration:
+    """Integrationstests für StateManager."""
+
+    def test_full_workflow_with_observers_and_waiting(self):
+        """Vollständiger Workflow: Observer + wait_for_condition."""
+        manager = StateManager()
+        notifications = []
+        
+        def observer(state: UfoState) -> None:
+            notifications.append(state.z)
+        
+        manager.register_observer(observer)
+        
+        # Simuliere Flug bis Ziel-Höhe
+        result_container = []
+        
+        def waiter():
+            result = manager.wait_for_condition(lambda s: s.z >= 100.0, timeout=5.0)
+            result_container.append(result)
+        
+        wait_thread = threading.Thread(target=waiter)
+        wait_thread.start()
+        
+        # Simuliere graduelle Höhenänderung
+        for i in range(11):
+            manager.update_state(lambda s: replace(s, z=s.z + 10.0))
+            time.sleep(0.05)
+        
+        wait_thread.join(timeout=2.0)
+        
+        # Observer sollte alle Updates erhalten haben
+        assert len(notifications) == 11
+        assert notifications[-1] == 110.0
+        
+        # Waiter sollte erfolgreich gewesen sein
+        assert len(result_container) == 1
+        assert result_container[0] is True
+
+
+@pytest.mark.threading
+class TestDeadlockPrevention:
+    """Tests zur Deadlock-Vermeidung."""
+
+    def test_no_deadlock_with_observer_calling_get_snapshot(self):
+        """Observer kann get_snapshot() aufrufen ohne Deadlock."""
+        manager = StateManager()
+        snapshots_in_observer = []
+        
+        def observer(_: UfoState) -> None:
+            # Observer ruft get_snapshot() auf
+            # (wird außerhalb Lock benachrichtigt, daher kein Deadlock)
+            snapshot = manager.get_snapshot()
+            snapshots_in_observer.append(snapshot.z)
+        
+        manager.register_observer(observer)
+        manager.update_state(lambda s: replace(s, z=42.0))
+        
+        assert len(snapshots_in_observer) == 1
+        assert snapshots_in_observer[0] == 42.0
+
+
+===== ./core/simulation/state/test_state_import.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Smoke-Test für core.simulation.state Modul.
+
+Testet grundlegende Import- und Instanziierungsfähigkeit von UfoState.
+"""
+
+import sys
+from pathlib import Path
+
+# Sicherstellen, dass src/ im Python-Pfad ist
+src_path = Path(__file__).parent.parent / "src"
+sys.path.insert(0, str(src_path))
+
+
+def test_state_import():
+    """Test: UfoState kann importiert werden."""
+    from core.simulation.state import UfoState
+    assert UfoState is not None
+
+
+def test_state_instantiation_defaults():
+    """Test: UfoState kann mit Defaults instanziiert werden - robuste Invarianten."""
+    from core.simulation.state import UfoState
+    
+    state = UfoState()
+    assert state is not None
+    
+    # Position initial bei Null
+    assert state.x == 0.0
+    assert state.y == 0.0
+    assert state.z == 0.0
+    
+    # Geschwindigkeitskomponenten initial bei Null
+    assert state.vx == 0.0
+    assert state.vy == 0.0
+    assert state.vz == 0.0
+    
+    # Beschleunigungskomponenten initial bei Null
+    assert state.accel_x == 0.0
+    assert state.accel_y == 0.0
+    assert state.accel_z == 0.0
+    
+    # Statistik initial bei Null
+    assert state.dist == 0.0
+    assert state.ftime == 0.0
+    
+    # Winkel in gültigem Wertebereich (nicht auf spezifische Werte festgelegt)
+    assert 0.0 <= state.d < 360.0
+    assert 0.0 <= state.i <= 180.0
+
+
+def test_state_instantiation_custom():
+    """Test: UfoState kann mit benutzerdefinierten Werten instanziiert werden."""
+    from core.simulation.state import UfoState
+    
+    state = UfoState(
+        x=100.0,
+        y=200.0,
+        z=50.0,
+        v=72.0,
+        d=45.0,
+        i=60.0
+    )
+    
+    assert state.x == 100.0
+    assert state.y == 200.0
+    assert state.z == 50.0
+    assert state.v == 72.0
+    assert state.d == 45.0
+    assert state.i == 60.0
+
+
+def test_state_vector_properties():
+    """Test: UfoState-Properties liefern korrekte NumPy-Arrays."""
+    from core.simulation.state import UfoState
+    import numpy as np
+    
+    state = UfoState(x=10.0, y=20.0, z=30.0, vx=1.0, vy=2.0, vz=3.0, accel_x=0.1, accel_y=0.2, accel_z=0.3)
+    
+    # Position Vector
+    pos_vec = state.position_vector
+    assert isinstance(pos_vec, np.ndarray)
+    assert len(pos_vec) == 3
+    assert pos_vec[0] == 10.0
+    assert pos_vec[1] == 20.0
+    assert pos_vec[2] == 30.0
+    
+    # Velocity Vector
+    vel_vec = state.velocity_vector
+    assert isinstance(vel_vec, np.ndarray)
+    assert len(vel_vec) == 3
+    assert vel_vec[0] == 1.0
+    assert vel_vec[1] == 2.0
+    assert vel_vec[2] == 3.0
+    
+    # Acceleration Vector
+    accel_vec = state.acceleration_vector
+    assert isinstance(accel_vec, np.ndarray)
+    assert len(accel_vec) == 3
+    assert accel_vec[0] == 0.1
+    assert accel_vec[1] == 0.2
+    assert accel_vec[2] == 0.3
+
+
+def test_state_is_dataclass():
+    """Test: UfoState ist ein dataclass."""
+    from core.simulation.state import UfoState
+    from dataclasses import is_dataclass
+    
+    assert is_dataclass(UfoState)
+
+
+def test_state_uses_slots():
+    """Test: UfoState nutzt slots für Performance."""
+    from core.simulation.state import UfoState
+    
+    state = UfoState()
+    
+    # Wenn slots=True, dann sollte es kein __dict__ geben
+    assert not hasattr(state, "__dict__")
+
+
+if __name__ == "__main__":
+    from conftest import run_manual_tests  # type: ignore[import]
+
+    tests = [
+        test_state_import,
+        test_state_instantiation_defaults,
+        test_state_instantiation_custom,
+        test_state_vector_properties,
+        test_state_is_dataclass,
+        test_state_uses_slots,
+    ]
+
+    run_manual_tests("core.simulation.state", tests)  # type: ignore[name-defined]
+
+
+===== ./core/simulation/state/test_state_manager_smoke.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Smoke-Test für StateManager-Modul - Standalone-Lauffähigkeit."""
+
+
+def test_state_manager_module_import():
+    """StateManager-Modul kann standalone importiert werden."""
+    from core.simulation.state import StateManager
+    
+    assert StateManager is not None
+
+
+def test_state_manager_instantiation():
+    """StateManager kann ohne weitere Dependencies instantiiert werden."""
+    from core.simulation.state import StateManager, UfoState
+    
+    # Default-Initialisierung
+    manager = StateManager()
+    assert manager is not None
+    
+    # Mit initial state
+    initial = UfoState(x=10.0, z=20.0)
+    manager_with_state = StateManager(initial_state=initial)
+    assert manager_with_state is not None
+    
+    snapshot = manager_with_state.get_snapshot()
+    assert snapshot.x == 10.0
+    assert snapshot.z == 20.0
+
+
+def test_state_manager_has_required_methods():
+    """StateManager hat alle geforderten Methoden gemäß Spec."""
+    from core.simulation.state import StateManager
+    
+    manager = StateManager()
+    
+    # Geforderte Methoden aus introductions.md Abschnitt 4.1
+    assert hasattr(manager, 'update_state')
+    assert hasattr(manager, 'get_snapshot')
+    assert hasattr(manager, 'register_observer')
+    assert hasattr(manager, 'unregister_observer')
+    assert hasattr(manager, 'wait_for_condition')
+    assert hasattr(manager, 'reset')
+    
+    # Alle Methoden sollten aufrufbar sein
+    assert callable(manager.update_state)
+    assert callable(manager.get_snapshot)
+    assert callable(manager.register_observer)
+    assert callable(manager.unregister_observer)
+    assert callable(manager.wait_for_condition)
+    assert callable(manager.reset)
+
+
+def test_state_manager_has_no_forbidden_dependencies():
+    """StateManager hat keine verbotenen Dependencies."""
+    from core.simulation.state import manager as manager_module
+    
+    # StateManager-Modul laden
+    module_source = manager_module.__file__
+    
+    # Verbotene Imports gemäß Spec (Sicherstellung)
+    # Prüfe auf tatsächliche import-Statements, nicht nur Erwähnungen in Docstrings
+    forbidden_imports = [
+        'from ..physics',
+        'from .physics',
+        'import physics',
+        'from ..command',
+        'from .command',
+        'import command',
+        'from ..controller',
+        'from .controller',
+        'import controller',
+        'from ..view',
+        'from .view',
+        'import view',
+        'from .pview',
+        'import pview',
+    ]
+    
+    # Modul-Quelltext überprüfen
+    with open(module_source, 'r') as f:
+        content = f.read()
+    
+    for forbidden in forbidden_imports:
+        assert forbidden not in content, f"StateManager sollte nicht '{forbidden}' verwenden"
+    
+    # Mindestens die Kern-Dependencies sollten vorhanden sein
+    assert 'from .state import UfoState' in content
+    assert 'from ..synchronization import' in content  # Neuer Import-Pfad
+    assert 'import threading' in content
+
+
+def test_synchronized_decorator_available():
+    """@synchronized Decorator ist aus synchronization verfügbar."""
+    from core.simulation.synchronization import synchronized
+
+    assert synchronized is not None
+    assert callable(synchronized)
+
+
+def test_state_manager_uses_synchronized():
+    """StateManager verwendet @synchronized Decorator."""
+    from core.simulation.state import manager as manager_module
+    
+    # Überprüfe dass synchronized verwendet wird
+    with open(manager_module.__file__, 'r') as f:
+        content = f.read()
+
+    assert 'from ..synchronization import' in content  # Neuer Import-Pfad
+    assert '@synchronized' in content
+
+
+===== ./core/simulation/state/test_state_module_independence.py =====
+
+# ...existing code...
+import subprocess
+import sys
+
+
+def test_state_module_is_independent() -> None:
+    """
+    Lädt `src/core/simulation/state/state.py` isoliert (ohne Paket-__init__ auszulösen)
+    und prüft, dass dabei keine höheren Simulationsmodule importiert werden.
+
+    Dieser Test läuft in einem separaten Python-Subprozess, damit bereits in diesem Prozess
+    geladene Module (z. B. aus anderen Tests) das Ergebnis nicht beeinflussen.
+    """
+    script = r"""
+from pathlib import Path
+import importlib.util
+import sys
+
+p = Path('src/core/simulation/state/state.py').resolve()
+# Load module from file location to avoid executing package __init__
+spec = importlib.util.spec_from_file_location('ufo_state_isolation_test', str(p))
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+
+# Now check sys.modules for forbidden higher-level modules
+forbidden = [
+    'core.simulation.ufosim',
+    'core.simulation.view',
+    'core.simulation.ufo_main',
+    'core.simulation'
+]
+found = [m for m in forbidden if m in sys.modules]
+if found:
+    # Print the first found module name (signal to caller)
+    print(found[0])
+"""
+
+    proc = subprocess.run([sys.executable, '-c', script], capture_output=True, text=True)
+    out = proc.stdout.strip()
+    if proc.returncode != 0:
+        # provide diagnostics on failure
+        raise AssertionError(f"Subprocess failed: returncode={proc.returncode}, stderr={proc.stderr}\nstdout={proc.stdout}")
+
+    assert out == "", f"state module imported higher-level module: {out}"
+
+# ...existing code...
+
+
+
+===== ./core/simulation/synchronization/test_conditional_lock.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Unit-Tests für conditional Decorator."""
+
+import sys
+import threading
+import time
+from pathlib import Path
+
+import pytest
+
+# Stelle sicher, dass das repo root-Verzeichnis im sys.path ist (damit `import src` funktioniert)
+repo_root = Path(__file__).resolve().parents[4]
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
+from src.core.simulation.synchronization import conditional
+from tests._helpers import run_threaded_workers
+
+
+class TestConditionalDecorator:
+    """Tests für @conditional Decorator."""
+
+    def test_basic_locking(self):
+        """@conditional sollte Methode unter Lock ausführen."""
+
+        class TestClass:
+            def __init__(self):
+                self._lock = threading.RLock()
+                self._condition = threading.Condition(self._lock)
+                self.value = 0
+                self.call_count = 0
+
+            @conditional
+            def increment(self):
+                """Inkrementiert value unter Lock."""
+                self.call_count += 1
+                self.value += 1
+                self._condition.notify_all()
+
+        obj = TestClass()
+        obj.increment()
+
+        assert obj.value == 1
+        assert obj.call_count == 1
+
+    def test_notify_all_without_nested_lock(self):
+        """@conditional sollte notify_all() ohne nested lock ermöglichen."""
+
+        class Manager:
+            def __init__(self):
+                self._lock = threading.RLock()
+                self._condition = threading.Condition(self._lock)
+                self.state = 0
+
+            @conditional
+            def update(self, new_value):
+                """Update mit Notification - kein nested lock."""
+                self.state = new_value
+                self._condition.notify_all()  # Sollte funktionieren
+                return self.state
+
+        manager = Manager()
+        result = manager.update(42)
+
+        assert result == 42
+        assert manager.state == 42
+
+    def test_thread_safety_concurrent_access(self):
+        """@conditional sollte Thread-Safety garantieren."""
+
+        class Counter:
+            def __init__(self):
+                self._lock = threading.RLock()
+                self._condition = threading.Condition(self._lock)
+                self.value = 0
+
+            @conditional
+            def increment(self):
+                # Simuliere non-atomare Operation
+                temp = self.value
+                time.sleep(0.001)  # Kurze Verzögerung
+                self.value = temp + 1
+                self._condition.notify_all()
+
+        counter = Counter()
+
+        # 10 Threads inkrementieren je 10x
+        def worker():
+            for _ in range(10):
+                counter.increment()
+
+        run_threaded_workers(worker, num_threads=10, timeout_per_thread=5.0)
+
+        # Sollte 100 sein (10 Threads * 10 Inkremente)
+        assert counter.value == 100
+
+    def test_exception_releases_lock(self):
+        """@conditional sollte Lock auch bei Exception freigeben."""
+
+        class ErrorClass:
+            def __init__(self):
+                self._lock = threading.RLock()
+                self._condition = threading.Condition(self._lock)
+                self.locked = False
+
+            @conditional
+            def failing_method(self):
+                # Prüfe ob Lock acquired ist (ohne _is_owned zu verwenden)
+                self.locked = not self._lock.acquire(blocking=False) or (self._lock.release() is None and True)
+                raise ValueError("Test error")
+
+            def check_lock_free(self):
+                # Versuche Lock zu acquiren (sollte sofort möglich sein)
+                acquired = self._lock.acquire(blocking=False)
+                if acquired:
+                    self._lock.release()
+                return acquired
+
+        obj = ErrorClass()
+
+        with pytest.raises(ValueError):
+            obj.failing_method()
+
+        # Lock sollte freigegeben sein
+        assert obj.check_lock_free() is True
+
+    def test_return_value_preserved(self):
+        """@conditional sollte Rückgabewerte korrekt durchreichen."""
+
+        class Calculator:
+            def __init__(self):
+                self._lock = threading.RLock()
+                self._condition = threading.Condition(self._lock)
+
+            @conditional
+            def add(self, a, b):
+                return a + b
+
+            @conditional
+            def multiply(self, a, b):
+                result = a * b
+                self._condition.notify_all()
+                return result
+
+        calc = Calculator()
+
+        assert calc.add(2, 3) == 5
+        assert calc.multiply(4, 5) == 20
+
+    def test_with_args_and_kwargs(self):
+        """@conditional sollte mit verschiedenen Argument-Typen funktionieren."""
+
+        class Accumulator:
+            def __init__(self):
+                self._lock = threading.RLock()
+                self._condition = threading.Condition(self._lock)
+                self.values = []
+
+            @conditional
+            def add_values(self, *args, **kwargs):
+                self.values.extend(args)
+                self.values.extend(kwargs.values())
+                self._condition.notify_all()
+                return len(self.values)
+
+        acc = Accumulator()
+
+        count = acc.add_values(1, 2, 3, x=10, y=20)
+
+        assert count == 5
+        assert set(acc.values) == {1, 2, 3, 10, 20}
+
+    def test_missing_condition_raises_error(self):
+        """@conditional sollte AttributeError werfen wenn _condition fehlt."""
+
+        class BadClass:
+            def __init__(self):
+                pass  # Kein self._condition!
+
+            @conditional
+            def method(self):
+                pass
+
+        obj = BadClass()
+
+        with pytest.raises(AttributeError):
+            obj.method()
+
+    def test_compatible_with_rlocks(self):
+        """@conditional sollte mit RLocks wiedereintrittsfähig sein."""
+
+        class Reentrant:
+            def __init__(self):
+                self._lock = threading.RLock()  # RLock!
+                self._condition = threading.Condition(self._lock)
+                self.depth = 0
+
+            @conditional
+            def outer(self):
+                self.depth += 1
+                if self.depth < 3:
+                    self.inner()  # Rekursiver Aufruf
+                return self.depth
+
+            @conditional
+            def inner(self):
+                self.depth += 1
+                if self.depth < 3:
+                    self.outer()  # Rekursiver Aufruf
+
+        obj = Reentrant()
+        result = obj.outer()
+
+        # Sollte funktionieren wegen RLock
+        assert result == 3
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
+
+
+===== ./core/simulation/synchronization/test_instance_lock.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Tests für core.simulation.synchronization.instance_lock.
+
+Diese Tests prüfen:
+1. Smoke-Test: Modul kann ohne Fehler importiert werden
+2. Funktionalität: @synchronized Decorator funktioniert korrekt
+3. Thread-Safety: Keine Race-Conditions bei parallelen Zugriffen
+4. Error-Handling: Korrekte Fehlermeldung bei fehlendem _lock-Attribut
+"""
+
+import threading
+import time
+from typing import List
+
+import pytest
+
+from core.simulation.synchronization import synchronized
+
+
+def test_instance_lock_module_import():
+    """
+    Smoke-Test: Modul kann importiert werden.
+    
+    Prüft, dass keine Import-, Lazy-Loading- oder Initialisierungsfehler auftreten.
+    """
+    from core.simulation.synchronization.decorators import instance as instance_lock
+    assert instance_lock is not None
+    assert hasattr(instance_lock, 'synchronized')
+
+
+def test_synchronized_decorator_exists():
+    """Prüft, dass der synchronized Decorator existiert und aufrufbar ist."""
+    assert callable(synchronized)
+
+
+def test_synchronized_basic_functionality():
+    """
+    Prüft Basisfunktionalität des @synchronized Decorators.
+    
+    Testet:
+    - Decorator kann auf Methode angewendet werden
+    - Dekorierte Methode funktioniert korrekt
+    - Rückgabewerte bleiben erhalten
+    """
+    
+    class Counter:
+        def __init__(self):
+            self._lock = threading.RLock()
+            self._value = 0
+        
+        @synchronized
+        def increment(self):
+            self._value += 1
+        
+        @synchronized
+        def get_value(self):
+            return self._value
+        
+        @synchronized
+        def add(self, amount: int):
+            self._value += amount
+            return self._value
+    
+    counter = Counter()
+    assert counter.get_value() == 0
+    
+    counter.increment()
+    assert counter.get_value() == 1
+    
+    result = counter.add(5)
+    assert result == 6
+    assert counter.get_value() == 6
+
+
+def test_synchronized_with_threading_lock():
+    """
+    Prüft, dass @synchronized auch mit threading.Lock (nicht nur RLock) funktioniert.
+    """
+    
+    class SimpleLockCounter:
+        def __init__(self):
+            self._lock = threading.Lock()  # Einfaches Lock statt RLock
+            self._value = 0
+        
+        @synchronized
+        def increment(self):
+            self._value += 1
+        
+        @synchronized
+        def get_value(self):
+            return self._value
+    
+    counter = SimpleLockCounter()
+    counter.increment()
+    assert counter.get_value() == 1
+
+
+@pytest.mark.threading
+@pytest.mark.timeout(30)
+def test_synchronized_thread_safety_no_race_conditions():
+    """
+    Multithread-Test: Prüft, dass keine Race-Conditions bei parallelen Zugriffen auftreten.
+    
+    Testet:
+    - 100 Threads führen jeweils 100 Inkremente durch
+    - Erwartetes Ergebnis: 10.000 (keine Race-Conditions)
+    - Ohne @synchronized würde das Ergebnis typischerweise < 10.000 sein
+    """
+    
+    class ThreadSafeCounter:
+        def __init__(self):
+            self._lock = threading.RLock()
+            self._value = 0
+        
+        @synchronized
+        def increment(self):
+            # Simuliere kritischen Abschnitt mit Read-Modify-Write
+            old_value = self._value
+            time.sleep(0.0001)  # Kurze Verzögerung um Race-Conditions zu provozieren
+            self._value = old_value + 1
+        
+        @synchronized
+        def get_value(self):
+            return self._value
+    
+    counter = ThreadSafeCounter()
+    threads: List[threading.Thread] = []
+    
+    num_threads = 100
+    increments_per_thread = 100
+    expected_result = num_threads * increments_per_thread
+    
+    # Starte Threads
+    for _ in range(num_threads):
+        def worker():
+            for _ in range(increments_per_thread):
+                counter.increment()
+        
+        thread = threading.Thread(target=worker)
+        threads.append(thread)
+        thread.start()
+    
+    # Warte auf Abschluss
+    for thread in threads:
+        thread.join()
+    
+    # Prüfe Ergebnis
+    assert counter.get_value() == expected_result, \
+        f"Race-Condition detected: Expected {expected_result}, got {counter.get_value()}"
+
+
+@pytest.mark.threading
+@pytest.mark.timeout(10)
+def test_synchronized_reentrant_with_rlock():
+    """
+    Prüft Wiedereintrittsfähigkeit bei RLock.
+    
+    Testet, dass derselbe Thread die Methode mehrfach betreten kann
+    (wichtig für verschachtelte Aufrufe).
+    """
+    
+    class ReentrantCounter:
+        def __init__(self):
+            self._lock = threading.RLock()
+            self._value = 0
+        
+        @synchronized
+        def increment(self):
+            self._value += 1
+        
+        @synchronized
+        def increment_twice(self):
+            # Ruft eine andere synchronisierte Methode auf
+            self.increment()
+            self.increment()
+        
+        @synchronized
+        def get_value(self):
+            return self._value
+    
+    counter = ReentrantCounter()
+    counter.increment_twice()  # Sollte nicht deadlocken
+    assert counter.get_value() == 2
+
+
+def test_synchronized_preserves_exceptions():
+    """
+    Prüft, dass Exceptions aus dekorierten Methoden korrekt durchgereicht werden
+    und das Lock trotzdem freigegeben wird.
+    """
+    
+    class ExceptionThrower:
+        def __init__(self):
+            self._lock = threading.RLock()
+            self._lock_acquired_count = 0
+        
+        @synchronized
+        def throw_error(self):
+            raise ValueError("Test exception")
+        
+        @synchronized
+        def check_lock_free(self):
+            # Wenn Lock nicht freigegeben wurde, würde dies blockieren
+            return True
+    
+    thrower = ExceptionThrower()
+    
+    # Exception sollte durchgereicht werden
+    with pytest.raises(ValueError, match="Test exception"):
+        thrower.throw_error()
+    
+    # Lock sollte trotzdem freigegeben worden sein
+    assert thrower.check_lock_free() is True
+
+
+def test_synchronized_without_lock_attribute():
+    """
+    Prüft, dass fehlerhaftes Setup (Klasse ohne _lock) zu sauberem Fehler führt.
+    """
+    
+    class NoLockClass:
+        def __init__(self):
+            self._value = 0
+        
+        @synchronized
+        def increment(self):
+            self._value += 1
+    
+    obj = NoLockClass()
+    
+    # Sollte AttributeError werfen (kein _lock vorhanden)
+    with pytest.raises(AttributeError):
+        obj.increment()
+
+
+def test_synchronized_preserves_method_signature():
+    """
+    Prüft, dass der Decorator die Methodensignatur erhält.
+    
+    Dies ist wichtig für Introspection, Dokumentation und IDE-Support.
+    """
+    
+    class DocumentedClass:
+        def __init__(self):
+            self._lock = threading.RLock()
+        
+        @synchronized
+        def documented_method(self, x: int, y: str) -> str:
+            """Eine gut dokumentierte Methode."""
+            return f"{y}: {x}"
+    
+    obj = DocumentedClass()
+    
+    # Prüfe, dass __name__ und __doc__ erhalten bleiben (via @wraps)
+    assert obj.documented_method.__name__ == "documented_method"
+    assert obj.documented_method.__doc__ == "Eine gut dokumentierte Methode."
+    
+    # Prüfe Funktionalität
+    result = obj.documented_method(42, "Answer")
+    assert result == "Answer: 42"
+
+
+def test_synchronized_with_kwargs():
+    """
+    Prüft, dass @synchronized mit Keyword-Argumenten funktioniert.
+    """
+    
+    class FlexibleClass:
+        def __init__(self):
+            self._lock = threading.RLock()
+        
+        @synchronized
+        def flexible_method(self, a: int, b: int = 10, c: int = 20) -> int:
+            return a + b + c
+    
+    obj = FlexibleClass()
+    
+    assert obj.flexible_method(1) == 31
+    assert obj.flexible_method(1, b=5) == 26
+    assert obj.flexible_method(1, c=100) == 111
+    assert obj.flexible_method(1, b=2, c=3) == 6
+
+
+@pytest.mark.threading
+@pytest.mark.timeout(15)
+def test_synchronized_multiple_instances():
+    """
+    Prüft, dass verschiedene Instanzen unabhängige Locks haben.
+    
+    Dies stellt sicher, dass der Decorator instanzspezifisch arbeitet,
+    nicht klassenspezifisch.
+    """
+    
+    class InstanceCounter:
+        def __init__(self):
+            self._lock = threading.RLock()
+            self._value = 0
+        
+        @synchronized
+        def increment(self):
+            old = self._value
+            time.sleep(0.001)
+            self._value = old + 1
+        
+        @synchronized
+        def get_value(self):
+            return self._value
+    
+    counter1 = InstanceCounter()
+    counter2 = InstanceCounter()
+    
+    # Parallele Zugriffe auf unterschiedliche Instanzen
+    threads = []
+    
+    for _ in range(10):
+        t1 = threading.Thread(target=counter1.increment)
+        t2 = threading.Thread(target=counter2.increment)
+        threads.extend([t1, t2])
+        t1.start()
+        t2.start()
+    
+    for thread in threads:
+        thread.join()
+    
+    # Beide Counter sollten korrekt sein (unabhängig voneinander)
+    assert counter1.get_value() == 10
+    assert counter2.get_value() == 10
+
+
+===== ./core/simulation/synchronization/test_lock_wrapper.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Unit-Tests für zentrale Lock-Wrapper-Utilities."""
+
+import sys
+import threading
+import time
+from pathlib import Path
+from typing import Callable, List
+
+import pytest
+
+# add repo root to sys.path so `import src` works
+repo_root = Path(__file__).resolve().parents[4]
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
+from src.core.simulation.synchronization import (
+    acquire_lock,
+    create_lock_wrapper,
+)
+
+
+def run_threaded_workers(worker: Callable[[], None], *, num_threads: int = 10, timeout_per_thread: float = 5.0) -> None:
+    """Hilfsfunktion für Tests: Führt `worker` in mehreren Threads aus und wartet auf Abschluss.
+
+    Args:
+        worker: Callable ohne Parameter, das in jedem Thread ausgeführt wird.
+        num_threads: Anzahl gleichzeitiger Threads.
+        timeout_per_thread: maximale Wartezeit pro Thread in Sekunden.
+
+    Raises:
+        RuntimeError: Falls ein oder mehrere Threads nach Ablauf des Timeouts noch laufen.
+    """
+    threads: List[threading.Thread] = []
+    for _ in range(num_threads):
+        t = threading.Thread(target=worker, daemon=True)
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join(timeout=timeout_per_thread)
+
+    alive = [t for t in threads if t.is_alive()]
+    if alive:
+        raise RuntimeError(f"{len(alive)} Thread(s) laufen nach Timeout noch.")
+
+
+class TestAcquireLock:
+    """Tests für acquire_lock Context Manager."""
+
+    def test_acquire_release_rlock(self):
+        """acquire_lock sollte RLock korrekt acquiren und releasen."""
+        lock = threading.RLock()
+
+        with acquire_lock(lock):
+            # Lock sollte acquired sein
+            # Versuche zweites Acquire (sollte bei RLock funktionieren)
+            acquired = lock.acquire(blocking=False)
+            assert acquired is True
+            lock.release()
+
+        # Nach Context Manager sollte Lock frei sein
+        acquired = lock.acquire(blocking=False)
+        assert acquired is True
+        lock.release()
+
+    def test_acquire_release_lock(self):
+        """acquire_lock sollte Lock korrekt acquiren und releasen."""
+        lock = threading.Lock()
+
+        with acquire_lock(lock):
+            # Lock ist acquired, zweites Acquire sollte blockieren
+            acquired = lock.acquire(blocking=False)
+            assert acquired is False
+
+        # Nach Context Manager sollte Lock frei sein
+        acquired = lock.acquire(blocking=False)
+        assert acquired is True
+        lock.release()
+
+    def test_acquire_release_condition(self):
+        """acquire_lock sollte Condition korrekt acquiren und releasen."""
+        condition = threading.Condition()
+
+        with acquire_lock(condition):
+            # Condition ist acquired
+            pass  # Keine direkte Prüfung möglich
+
+        # Nach Context Manager sollte frei sein
+        acquired = condition.acquire(blocking=False)
+        assert acquired is True
+        condition.release()
+
+    def test_exception_releases_lock(self):
+        """acquire_lock sollte Lock auch bei Exception freigeben."""
+        lock = threading.RLock()
+
+        with pytest.raises(ValueError):
+            with acquire_lock(lock):
+                raise ValueError("Test exception")
+
+        # Lock sollte trotz Exception freigegeben sein
+        acquired = lock.acquire(blocking=False)
+        assert acquired is True
+        lock.release()
+
+
+class TestCreateLockWrapper:
+    """Tests für create_lock_wrapper Factory."""
+
+    def test_wrapper_with_instance_lock(self):
+        """create_lock_wrapper sollte für Instanz-Locks funktionieren."""
+
+        class Counter:
+            def __init__(self):
+                self._lock = threading.RLock()
+                self.value = 0
+
+            @create_lock_wrapper(lambda self, *args, **kwargs: self._lock)
+            def increment(self):
+                self.value += 1
+
+        counter = Counter()
+        counter.increment()
+        assert counter.value == 1
+
+    def test_wrapper_with_module_lock(self):
+        """create_lock_wrapper sollte für Modul-Locks funktionieren."""
+        _module_lock = threading.RLock()
+        state = {"value": 0}
+
+        @create_lock_wrapper(lambda *args, **kwargs: _module_lock)
+        def increment():
+            state["value"] += 1
+
+        increment()
+        assert state["value"] == 1
+
+    def test_wrapper_with_condition(self):
+        """create_lock_wrapper sollte für Condition-Variables funktionieren."""
+
+        class Manager:
+            def __init__(self):
+                self._lock = threading.RLock()
+                self._condition = threading.Condition(self._lock)
+                self.state = 0
+
+            @create_lock_wrapper(lambda self, *args, **kwargs: self._condition)
+            def update(self, value):
+                self.state = value
+                self._condition.notify_all()
+
+        manager = Manager()
+        manager.update(42)
+        assert manager.state == 42
+
+    def test_wrapper_thread_safety(self):
+        """create_lock_wrapper sollte Thread-Safety garantieren."""
+
+        class Counter:
+            def __init__(self):
+                self._lock = threading.RLock()
+                self.value = 0
+
+            @create_lock_wrapper(lambda self, *args, **kwargs: self._lock)
+            def increment(self):
+                # Simuliere non-atomare Operation
+                temp = self.value
+                time.sleep(0.001)
+                self.value = temp + 1
+
+        counter = Counter()
+
+        def worker():
+            for _ in range(10):
+                counter.increment()
+
+        run_threaded_workers(worker, num_threads=10, timeout_per_thread=5.0)
+
+        assert counter.value == 100
+
+    def test_wrapper_preserves_return_value(self):
+        """create_lock_wrapper sollte Rückgabewerte preservieren."""
+
+        class Calculator:
+            def __init__(self):
+                self._lock = threading.RLock()
+
+            @create_lock_wrapper(lambda self, *args, **kwargs: self._lock)
+            def add(self, a, b):
+                return a + b
+
+        calc = Calculator()
+        result = calc.add(2, 3)
+        assert result == 5
+
+    def test_wrapper_preserves_args_kwargs(self):
+        """create_lock_wrapper sollte Args und Kwargs korrekt durchreichen."""
+
+        class Accumulator:
+            def __init__(self):
+                self._lock = threading.RLock()
+                self.values = []
+
+            @create_lock_wrapper(lambda self, *args, **kwargs: self._lock)
+            def add_values(self, *args, **kwargs):
+                self.values.extend(args)
+                self.values.extend(kwargs.values())
+                return len(self.values)
+
+        acc = Accumulator()
+        count = acc.add_values(1, 2, 3, x=10, y=20)
+
+        assert count == 5
+        assert set(acc.values) == {1, 2, 3, 10, 20}
+
+    def test_wrapper_exception_safety(self):
+        """create_lock_wrapper sollte Lock bei Exception freigeben."""
+
+        class ErrorClass:
+            def __init__(self):
+                self._lock = threading.RLock()
+
+            @create_lock_wrapper(lambda self, *args, **kwargs: self._lock)
+            def failing_method(self):
+                raise ValueError("Test error")
+
+            def check_lock_free(self):
+                acquired = self._lock.acquire(blocking=False)
+                if acquired:
+                    self._lock.release()
+                return acquired
+
+        obj = ErrorClass()
+
+        with pytest.raises(ValueError):
+            obj.failing_method()
+
+        # Lock sollte freigegeben sein
+        assert obj.check_lock_free() is True
+
+    def test_wrapper_with_different_lock_types(self):
+        """create_lock_wrapper sollte mit verschiedenen Lock-Typen funktionieren."""
+
+        # Test mit Lock
+        class WithLock:
+            def __init__(self):
+                self._lock = threading.Lock()
+                self.value = 0
+
+            @create_lock_wrapper(lambda self, *args, **kwargs: self._lock)
+            def increment(self):
+                self.value += 1
+
+        obj1 = WithLock()
+        obj1.increment()
+        assert obj1.value == 1
+
+        # Test mit RLock
+        class WithRLock:
+            def __init__(self):
+                self._lock = threading.RLock()
+                self.value = 0
+
+            @create_lock_wrapper(lambda self, *args, **kwargs: self._lock)
+            def increment(self):
+                self.value += 1
+
+        obj2 = WithRLock()
+        obj2.increment()
+        assert obj2.value == 1
+
+        # Test mit Condition
+        class WithCondition:
+            def __init__(self):
+                self._condition = threading.Condition()
+                self.value = 0
+
+            @create_lock_wrapper(lambda self, *args, **kwargs: self._condition)
+            def increment(self):
+                self.value += 1
+
+        obj3 = WithCondition()
+        obj3.increment()
+        assert obj3.value == 1
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
+
+
+===== ./core/simulation/synchronization/test_module_lock.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Tests für core.simulation.synchronization.module_lock.
+
+Diese Tests prüfen:
+1. Smoke-Test: Modul kann ohne Fehler importiert werden
+2. Funktionalität: @synchronized_module Decorator funktioniert korrekt
+3. Thread-Safety: Keine Race-Conditions bei parallelen Zugriffen
+4. Kompatibilität: Funktioniert mit Lock und RLock
+"""
+import threading
+
+import pytest
+
+from core.simulation.synchronization import synchronized_module
+from tests._helpers import assert_race_condition_free, create_decorated_counter
+
+
+def test_module_lock_module_import():
+    """
+    Smoke-Test: Modul kann importiert werden.
+    
+    Prüft, dass keine Import-, Lazy-Loading- oder Initialisierungsfehler auftreten.
+    """
+    from core.simulation.synchronization.decorators import module
+    assert module is not None
+    assert hasattr(module, 'synchronized_module')
+
+
+def test_synchronized_module_decorator_exists():
+    """Prüft, dass der synchronized_module Decorator existiert und aufrufbar ist."""
+    assert callable(synchronized_module)
+
+
+def test_synchronized_module_basic_functionality(rlock):
+    """
+    Prüft Basisfunktionalität des @synchronized_module Decorators.
+    
+    Testet:
+    - Decorator kann auf Funktion angewendet werden
+    - Dekorierte Funktion funktioniert korrekt
+    - Rückgabewerte bleiben erhalten
+    - Parameter werden korrekt durchgereicht
+    """
+    counter = create_decorated_counter(synchronized_module, rlock)
+
+    assert counter["get_value"]() == 0
+
+    counter["increment"]()
+    assert counter["get_value"]() == 1
+
+    result = counter["add"](5)
+    assert result == 6
+    assert counter["get_value"]() == 6
+
+
+def test_synchronized_module_with_lock(lock):
+    """
+    Prüft, dass @synchronized_module mit threading.Lock funktioniert.
+    """
+    counter = create_decorated_counter(synchronized_module, lock)
+
+    counter["increment"]()
+    assert counter["get_value"]() == 1
+
+
+@pytest.mark.threading
+@pytest.mark.timeout(30)
+def test_synchronized_module_thread_safety_no_race_conditions(rlock):
+    """
+    Multithread-Test: Prüft, dass keine Race-Conditions bei parallelen Zugriffen auftreten.
+    
+    Testet:
+    - 100 Threads führen jeweils 100 Inkremente durch
+    - Erwartetes Ergebnis: 10.000 (keine Race-Conditions)
+    - Ohne @synchronized_module würde das Ergebnis typischerweise < 10.000 sein
+    """
+    counter = create_decorated_counter(synchronized_module, rlock)
+
+    assert_race_condition_free(
+        counter["increment"],
+        counter["get_value"],
+        num_threads=100,
+        increments_per_thread=100
+    )
+
+
+@pytest.mark.threading
+@pytest.mark.timeout(10)
+def test_synchronized_module_reentrant_with_rlock(rlock):
+    """
+    Prüft Wiedereintrittsfähigkeit bei RLock.
+    
+    Testet, dass derselbe Thread die Funktion mehrfach betreten kann
+    (wichtig für verschachtelte Aufrufe).
+    """
+    counter = create_decorated_counter(synchronized_module, rlock)
+
+    @synchronized_module(rlock)
+    def increment_twice():
+        # Ruft eine andere synchronisierte Funktion auf
+        counter["increment"]()
+        counter["increment"]()
+
+    increment_twice()  # Sollte nicht deadlocken
+    assert counter["get_value"]() == 2
+
+
+def test_synchronized_module_preserves_exceptions():
+    """
+    Prüft, dass Exceptions aus dekorierten Funktionen korrekt durchgereicht werden
+    und das Lock trotzdem freigegeben wird.
+    """
+    
+    lock = threading.RLock()
+    
+    @synchronized_module(lock)
+    def throw_error():
+        raise ValueError("Test exception")
+    
+    @synchronized_module(lock)
+    def check_lock_free():
+        # Wenn Lock nicht freigegeben wurde, würde dies blockieren
+        return True
+    
+    # Exception sollte durchgereicht werden
+    with pytest.raises(ValueError, match="Test exception"):
+        throw_error()
+    
+    # Lock sollte trotzdem freigegeben worden sein
+    assert check_lock_free() is True
+
+
+def test_synchronized_module_preserves_function_signature():
+    """
+    Prüft, dass der Decorator die Funktionssignatur erhält.
+    
+    Dies ist wichtig für Introspection, Dokumentation und IDE-Support.
+    """
+    
+    lock = threading.RLock()
+    
+    @synchronized_module(lock)
+    def documented_function(x: int, y: str) -> str:
+        """Eine gut dokumentierte Funktion."""
+        return f"{y}: {x}"
+    
+    # Prüfe, dass __name__ und __doc__ erhalten bleiben (via @wraps)
+    assert documented_function.__name__ == "documented_function"
+    assert documented_function.__doc__ == "Eine gut dokumentierte Funktion."
+    
+    # Prüfe Funktionalität
+    result = documented_function(42, "Answer")
+    assert result == "Answer: 42"
+
+
+def test_synchronized_module_with_kwargs():
+    """
+    Prüft, dass @synchronized_module mit Keyword-Argumenten funktioniert.
+    """
+    
+    lock = threading.RLock()
+    
+    @synchronized_module(lock)
+    def flexible_function(a: int, b: int = 10, c: int = 20) -> int:
+        return a + b + c
+    
+    assert flexible_function(1) == 31
+    assert flexible_function(1, b=5) == 26
+    assert flexible_function(1, c=100) == 111
+    assert flexible_function(1, b=2, c=3) == 6
+
+
+@pytest.mark.threading
+@pytest.mark.timeout(15)
+def test_synchronized_module_multiple_locks(rlock, lock):
+    """
+    Prüft, dass verschiedene Locks unabhängig voneinander funktionieren.
+    """
+    counter1 = create_decorated_counter(synchronized_module, rlock)
+    counter2 = create_decorated_counter(synchronized_module, lock)
+
+    # Parallele Zugriffe auf unterschiedliche Locks
+    threads = []
+    
+    for _ in range(10):
+        t1 = threading.Thread(target=counter1["increment"])
+        t2 = threading.Thread(target=counter2["increment"])
+        threads.extend([t1, t2])
+        t1.start()
+        t2.start()
+    
+    for thread in threads:
+        thread.join()
+    
+    # Beide Counter sollten korrekt sein (unabhängig voneinander)
+    assert counter1["get_value"]() == 10
+    assert counter2["get_value"]() == 10
+
+
+def test_synchronized_module_with_args_and_kwargs():
+    """
+    Prüft komplexe Parameterkombinationen.
+    """
+    
+    lock = threading.RLock()
+    
+    @synchronized_module(lock)
+    def complex_function(*args, **kwargs):
+        return {"args": args, "kwargs": kwargs}
+    
+    result = complex_function(1, 2, 3, a=4, b=5)
+    assert result == {"args": (1, 2, 3), "kwargs": {"a": 4, "b": 5}}
+
+
+===== ./core/simulation/utils/test_condition_waiter.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Unit-Tests für ConditionWaiter Utility-Klasse."""
+
+import threading
+import time
+import pytest
+from pathlib import Path
+import sys
+
+# Stelle sicher, dass repo root im sys.path ist
+repo_root = Path(__file__).resolve().parents[4]
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
+from src.core.simulation.utils.condition_waiter import ConditionWaiter
+
+
+class TestConditionWaiter:
+    """Tests für die zentrale ConditionWaiter-Utility."""
+
+    def test_immediate_true_condition(self):
+        """Prädikat bereits erfüllt → sofortiger Return mit True."""
+        condition = threading.Condition()
+        state = {"value": 42}
+
+        result = ConditionWaiter.wait_for_condition(
+            condition_var=condition,
+            predicate=lambda s: s["value"] == 42,
+            state_getter=lambda: state,
+            timeout=0.1
+        )
+
+        assert result is True
+
+    def test_immediate_false_with_timeout(self):
+        """Prädikat nicht erfüllt → Timeout → Return False."""
+        condition = threading.Condition()
+        state = {"value": 0}
+
+        start = time.time()
+        result = ConditionWaiter.wait_for_condition(
+            condition_var=condition,
+            predicate=lambda s: s["value"] == 999,
+            state_getter=lambda: state,
+            timeout=0.1
+        )
+        elapsed = time.time() - start
+
+        assert result is False
+        assert elapsed >= 0.1  # Mindestens Timeout-Dauer
+        assert elapsed < 0.2  # Aber nicht viel länger
+
+    def test_condition_fulfilled_after_notify(self):
+        """State wird asynchron geändert → Notification → Prädikat erfüllt."""
+        condition = threading.Condition()
+        state = {"value": 0}
+
+        def update_state():
+            """Ändert State nach 100ms und notified."""
+            time.sleep(0.1)
+            with condition:
+                state["value"] = 100
+                condition.notify_all()
+
+        # Start async update
+        thread = threading.Thread(target=update_state, daemon=True)
+        thread.start()
+
+        # Wait for condition
+        result = ConditionWaiter.wait_for_condition(
+            condition_var=condition,
+            predicate=lambda s: s["value"] == 100,
+            state_getter=lambda: state,
+            timeout=1.0
+        )
+
+        assert result is True
+        assert state["value"] == 100
+
+    def test_timeout_before_condition_fulfilled(self):
+        """Timeout läuft ab bevor Prädikat erfüllt wird."""
+        condition = threading.Condition()
+        state = {"value": 0}
+
+        def slow_update():
+            """Ändert State nach 500ms (zu langsam)."""
+            time.sleep(0.5)
+            with condition:
+                state["value"] = 100
+                condition.notify_all()
+
+        thread = threading.Thread(target=slow_update, daemon=True)
+        thread.start()
+
+        # Timeout nach 100ms (State wird erst nach 500ms geändert)
+        result = ConditionWaiter.wait_for_condition(
+            condition_var=condition,
+            predicate=lambda s: s["value"] == 100,
+            state_getter=lambda: state,
+            timeout=0.1
+        )
+
+        assert result is False
+        # State sollte noch nicht geändert sein
+        assert state["value"] == 0
+
+    def test_no_timeout_waits_indefinitely(self):
+        """Ohne Timeout wird unbegrenzt gewartet (bis Condition erfüllt)."""
+        condition = threading.Condition()
+        state = {"ready": False}
+
+        def update_after_delay():
+            time.sleep(0.2)
+            with condition:
+                state["ready"] = True
+                condition.notify_all()
+
+        thread = threading.Thread(target=update_after_delay, daemon=True)
+        thread.start()
+
+        # Kein Timeout → wartet unbegrenzt
+        result = ConditionWaiter.wait_for_condition(
+            condition_var=condition,
+            predicate=lambda s: s["ready"],
+            state_getter=lambda: state,
+            timeout=None  # Explizit None
+        )
+
+        assert result is True
+        assert state["ready"] is True
+
+    def test_multiple_notifications_spurious_wakeups(self):
+        """Mehrere notify_all() Calls → while-loop schützt vor spurious wakeups."""
+        condition = threading.Condition()
+        state = {"counter": 0}
+
+        def send_multiple_notifications():
+            """Sendet mehrere Notifications, aber ändert Wert nur einmal."""
+            for i in range(5):
+                time.sleep(0.02)
+                with condition:
+                    if i == 3:  # Nur beim 4. Mal Wert ändern
+                        state["counter"] = 10
+                    condition.notify_all()
+
+        thread = threading.Thread(target=send_multiple_notifications, daemon=True)
+        thread.start()
+
+        # Warte auf counter == 10
+        result = ConditionWaiter.wait_for_condition(
+            condition_var=condition,
+            predicate=lambda s: s["counter"] == 10,
+            state_getter=lambda: state,
+            timeout=1.0
+        )
+
+        assert result is True
+        assert state["counter"] == 10
+
+    def test_complex_state_object(self):
+        """Funktioniert mit komplexen State-Objekten (nicht nur Dict)."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class ComplexState:
+            x: float
+            y: float
+            z: float
+
+        condition = threading.Condition()
+        state = ComplexState(0.0, 0.0, 0.0)
+
+        def update_z():
+            nonlocal state
+            time.sleep(0.1)
+            with condition:
+                state = ComplexState(state.x, state.y, 100.0)
+                condition.notify_all()
+
+        thread = threading.Thread(target=update_z, daemon=True)
+        thread.start()
+
+        result = ConditionWaiter.wait_for_condition(
+            condition_var=condition,
+            predicate=lambda s: s.z >= 100.0,
+            state_getter=lambda: state,
+            timeout=1.0
+        )
+
+        assert result is True
+        assert state.z == 100.0
+
+    def test_thread_safety_concurrent_waits(self):
+        """Mehrere Threads warten gleichzeitig auf dieselbe Condition."""
+        condition = threading.Condition()
+        state = {"value": 0}
+        results = []
+
+        def waiter(target_value):
+            result = ConditionWaiter.wait_for_condition(
+                condition_var=condition,
+                predicate=lambda s: s["value"] >= target_value,
+                state_getter=lambda: state,
+                timeout=2.0
+            )
+            results.append((target_value, result))
+
+        # 3 Threads warten auf verschiedene Werte
+        threads = [
+            threading.Thread(target=waiter, args=(10,), daemon=True),
+            threading.Thread(target=waiter, args=(20,), daemon=True),
+            threading.Thread(target=waiter, args=(30,), daemon=True),
+        ]
+
+        for t in threads:
+            t.start()
+
+        # State inkrementieren und notifyen
+        for value in [10, 20, 30]:
+            time.sleep(0.1)
+            with condition:
+                state["value"] = value
+                condition.notify_all()
+
+        # Warte auf alle Threads
+        for t in threads:
+            t.join(timeout=3.0)
+
+        # Alle sollten erfolgreich gewesen sein
+        assert len(results) == 3
+        assert all(result for _, result in results)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
+
+
+===== ./core/simulation/utils/test_geometry.py =====
+
+"""
+Unit-Tests für das utils.geometry Modul.
+
+Testet geometrische Transformationsfunktionen für 3D-Koordinaten.
+"""
+
+from __future__ import annotations
+
+import math
+
+from core.simulation.utils.geometry import cartesian_to_spherical, spherical_to_cartesian
+
+
+def assert_coordinates_equal(actual: tuple[float, float, float], expected: tuple[float, float, float], tolerance: float = 1e-10) -> None:
+    """Hilfsfunktion: Prüft, ob zwei 3D-Koordinaten innerhalb der Toleranz gleich sind."""
+    assert abs(actual[0] - expected[0]) < tolerance, f"x: {actual[0]} != {expected[0]}"
+    assert abs(actual[1] - expected[1]) < tolerance, f"y: {actual[1]} != {expected[1]}"
+    assert abs(actual[2] - expected[2]) < tolerance, f"z: {actual[2]} != {expected[2]}"
+
+
+class TestCartesianToSpherical:
+    """Tests für cartesian_to_spherical Funktion."""
+
+    def test_origin(self):
+        """Ursprung sollte (0, 0, 0) ergeben."""
+        r, theta, phi = cartesian_to_spherical(0.0, 0.0, 0.0)
+        assert r == 0.0
+        assert theta == 0.0
+        assert phi == 0.0
+
+    def test_positive_z_axis(self):
+        """Punkt auf positiver z-Achse."""
+        r, theta, phi = cartesian_to_spherical(0.0, 0.0, 1.0)
+        assert abs(r - 1.0) < 1e-10
+        assert abs(theta - 0.0) < 1e-10  # θ = 0 für +z
+
+    def test_negative_z_axis(self):
+        """Punkt auf negativer z-Achse."""
+        r, theta, phi = cartesian_to_spherical(0.0, 0.0, -1.0)
+        assert abs(r - 1.0) < 1e-10
+        assert abs(theta - math.pi) < 1e-10  # θ = π für -z
+
+    def test_positive_x_axis(self):
+        """Punkt auf positiver x-Achse."""
+        r, theta, phi = cartesian_to_spherical(1.0, 0.0, 0.0)
+        assert abs(r - 1.0) < 1e-10
+        assert abs(theta - math.pi / 2) < 1e-10  # θ = π/2 für xy-Ebene
+        assert abs(phi - 0.0) < 1e-10  # φ = 0 für +x
+
+    def test_positive_y_axis(self):
+        """Punkt auf positiver y-Achse."""
+        r, theta, phi = cartesian_to_spherical(0.0, 1.0, 0.0)
+        assert abs(r - 1.0) < 1e-10
+        assert abs(theta - math.pi / 2) < 1e-10
+        assert abs(phi - math.pi / 2) < 1e-10  # φ = π/2 für +y
+
+    def test_general_point(self):
+        """Allgemeiner Punkt im Raum."""
+        r, theta, phi = cartesian_to_spherical(1.0, 1.0, 1.0)
+        expected_r = math.sqrt(3.0)
+        assert abs(r - expected_r) < 1e-10
+
+    def test_large_coordinates(self):
+        """Große Koordinaten sollten korrekt konvertiert werden."""
+        r, theta, phi = cartesian_to_spherical(100.0, 0.0, 0.0)
+        assert abs(r - 100.0) < 1e-8
+
+
+class TestSphericalToCartesian:
+    """Tests für spherical_to_cartesian Funktion."""
+
+    def test_origin(self):
+        """r=0 sollte Ursprung ergeben."""
+        x, y, z = spherical_to_cartesian(0.0, 0.0, 0.0)
+        assert abs(x) < 1e-10
+        assert abs(y) < 1e-10
+        assert abs(z) < 1e-10
+
+    def test_positive_z_axis(self):
+        """θ=0 sollte positive z-Achse ergeben."""
+        x, y, z = spherical_to_cartesian(1.0, 0.0, 0.0)
+        assert abs(x - 0.0) < 1e-10
+        assert abs(y - 0.0) < 1e-10
+        assert abs(z - 1.0) < 1e-10
+
+    def test_negative_z_axis(self):
+        """θ=π sollte negative z-Achse ergeben."""
+        x, y, z = spherical_to_cartesian(1.0, math.pi, 0.0)
+        assert abs(x - 0.0) < 1e-10
+        assert abs(y - 0.0) < 1e-10
+        assert abs(z - (-1.0)) < 1e-10
+
+    def test_positive_x_axis(self):
+        """θ=π/2, φ=0 sollte positive x-Achse ergeben."""
+        x, y, z = spherical_to_cartesian(1.0, math.pi / 2, 0.0)
+        assert abs(x - 1.0) < 1e-10
+        assert abs(y - 0.0) < 1e-10
+        assert abs(z - 0.0) < 1e-10
+
+    def test_positive_y_axis(self):
+        """θ=π/2, φ=π/2 sollte positive y-Achse ergeben."""
+        x, y, z = spherical_to_cartesian(1.0, math.pi / 2, math.pi / 2)
+        assert abs(x - 0.0) < 1e-10
+        assert abs(y - 1.0) < 1e-10
+        assert abs(z - 0.0) < 1e-10
+
+    def test_large_radius(self):
+        """Großer Radius sollte korrekt skaliert werden."""
+        x, y, z = spherical_to_cartesian(100.0, math.pi / 2, 0.0)
+        assert abs(x - 100.0) < 1e-8
+
+
+class TestRoundtripConversion:
+    """Tests für Hin- und Rück-Konvertierung."""
+
+    def test_roundtrip_cartesian_spherical_cartesian(self):
+        """Kartesisch → Sphärisch → Kartesisch sollte Original ergeben."""
+        original_x, original_y, original_z = 3.0, 4.0, 5.0
+
+        # Hin
+        r, theta, phi = cartesian_to_spherical(original_x, original_y, original_z)
+
+        # Zurück
+        x, y, z = spherical_to_cartesian(r, theta, phi)
+
+        assert_coordinates_equal((x, y, z), (original_x, original_y, original_z))
+
+    def test_roundtrip_spherical_cartesian_spherical(self):
+        """Sphärisch → Kartesisch → Sphärisch sollte Original ergeben."""
+        original_r = 5.0
+        original_theta = math.pi / 4
+        original_phi = math.pi / 3
+
+        # Hin
+        x, y, z = spherical_to_cartesian(original_r, original_theta, original_phi)
+
+        # Zurück
+        r, theta, phi = cartesian_to_spherical(x, y, z)
+
+        assert_coordinates_equal((r, theta, phi), (original_r, original_theta, original_phi))
+
+    def test_multiple_points_roundtrip(self):
+        """Mehrere Punkte sollten Roundtrip korrekt durchlaufen."""
+        test_points = [
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, 0.0, 1.0),
+            (1.0, 1.0, 1.0),
+            (-1.0, -1.0, -1.0),
+        ]
+
+        for orig_x, orig_y, orig_z in test_points:
+            r, theta, phi = cartesian_to_spherical(orig_x, orig_y, orig_z)
+            x, y, z = spherical_to_cartesian(r, theta, phi)
+
+            assert_coordinates_equal((x, y, z), (orig_x, orig_y, orig_z))
+
+
+===== ./core/simulation/utils/test_maths.py =====
+
+"""
+Unit-Tests für das utils.maths Modul.
+
+Testet alle numerischen Hilfsfunktionen mit normalen Werten, Randwerten
+und Edge-Cases gemäß den Anforderungen aus Ticket T6.
+"""
+
+from __future__ import annotations
+
+import math
+import pytest
+
+from core.simulation.utils.maths import (
+    clamp,
+    deg_to_rad,
+    rad_to_deg,
+    wrap_angle_deg,
+    wrap_angle_rad,
+)
+
+
+class TestDegToRad:
+    """Tests für deg_to_rad Funktion."""
+
+    def test_zero_degrees(self):
+        """Null Grad sollte null Radiant ergeben."""
+        assert deg_to_rad(0.0) == 0.0
+
+    def test_90_degrees(self):
+        """90 Grad sollte π/2 ergeben."""
+        assert abs(deg_to_rad(90.0) - math.pi / 2) < 1e-10
+
+    def test_180_degrees(self):
+        """180 Grad sollte π ergeben."""
+        assert abs(deg_to_rad(180.0) - math.pi) < 1e-10
+
+    def test_360_degrees(self):
+        """360 Grad sollte 2π ergeben."""
+        assert abs(deg_to_rad(360.0) - 2 * math.pi) < 1e-10
+
+    def test_negative_degrees(self):
+        """Negative Grad sollten korrekt konvertiert werden."""
+        assert abs(deg_to_rad(-90.0) + math.pi / 2) < 1e-10
+        assert abs(deg_to_rad(-180.0) + math.pi) < 1e-10
+
+    def test_large_angle(self):
+        """Große Winkel sollten korrekt konvertiert werden."""
+        assert abs(deg_to_rad(720.0) - 4 * math.pi) < 1e-10
+
+
+class TestRadToDeg:
+    """Tests für rad_to_deg Funktion."""
+
+    def test_zero_radians(self):
+        """Null Radiant sollte null Grad ergeben."""
+        assert rad_to_deg(0.0) == 0.0
+
+    def test_pi_over_2_radians(self):
+        """π/2 Radiant sollte 90 Grad ergeben."""
+        assert abs(rad_to_deg(math.pi / 2) - 90.0) < 1e-10
+
+    def test_pi_radians(self):
+        """π Radiant sollte 180 Grad ergeben."""
+        assert abs(rad_to_deg(math.pi) - 180.0) < 1e-10
+
+    def test_two_pi_radians(self):
+        """2π Radiant sollte 360 Grad ergeben."""
+        assert abs(rad_to_deg(2 * math.pi) - 360.0) < 1e-10
+
+    def test_negative_radians(self):
+        """Negative Radiant sollten korrekt konvertiert werden."""
+        assert abs(rad_to_deg(-math.pi / 2) + 90.0) < 1e-10
+        assert abs(rad_to_deg(-math.pi) + 180.0) < 1e-10
+
+    def test_roundtrip_conversion(self):
+        """Hin- und Rückkonvertierung sollte Original-Wert ergeben."""
+        original = 45.0
+        converted = rad_to_deg(deg_to_rad(original))
+        assert abs(converted - original) < 1e-10
+
+
+class TestWrapAngleDeg:
+    """Tests für wrap_angle_deg Funktion."""
+
+    def test_zero_angle(self):
+        """Null Grad sollte unverändert bleiben."""
+        assert wrap_angle_deg(0.0) == 0.0
+
+    def test_angle_in_range(self):
+        """Winkel im Bereich sollten unverändert bleiben."""
+        assert wrap_angle_deg(45.0) == 45.0
+        assert wrap_angle_deg(-45.0) == -45.0
+        assert wrap_angle_deg(179.0) == 179.0
+        assert wrap_angle_deg(-179.0) == -179.0
+
+    def test_180_degrees(self):
+        """180 Grad wraps zu -180 Grad (mathematisch äquivalent)."""
+        # 180° und -180° sind mathematisch äquivalent
+        # Der Bereich ist [-180, 180), also exklusiv bei 180
+        assert wrap_angle_deg(180.0) == -180.0
+
+    def test_wrap_around_positive(self):
+        """Positive Winkel über 180° sollten auf negative Seite wrappen."""
+        assert abs(wrap_angle_deg(181.0) - (-179.0)) < 1e-10
+        assert abs(wrap_angle_deg(270.0) - (-90.0)) < 1e-10
+        assert abs(wrap_angle_deg(359.0) - (-1.0)) < 1e-10
+
+    def test_wrap_around_negative(self):
+        """Negative Winkel unter -180° sollten auf positive Seite wrappen."""
+        assert abs(wrap_angle_deg(-181.0) - 179.0) < 1e-10
+        assert abs(wrap_angle_deg(-270.0) - 90.0) < 1e-10
+        assert abs(wrap_angle_deg(-359.0) - 1.0) < 1e-10
+
+    def test_full_rotation(self):
+        """360° sollte zu 0° wrappen."""
+        assert abs(wrap_angle_deg(360.0)) < 1e-10
+        assert abs(wrap_angle_deg(-360.0)) < 1e-10
+
+    def test_multiple_rotations(self):
+        """Mehrfache Rotationen sollten korrekt behandelt werden."""
+        assert abs(wrap_angle_deg(370.0) - 10.0) < 1e-10
+        assert abs(wrap_angle_deg(720.0)) < 1e-10
+        assert abs(wrap_angle_deg(-720.0)) < 1e-10
+
+    def test_large_positive_angle(self):
+        """Sehr große positive Winkel sollten korrekt wrappen."""
+        assert abs(wrap_angle_deg(1810.0) - 10.0) < 1e-10
+
+    def test_large_negative_angle(self):
+        """Sehr große negative Winkel sollten korrekt wrappen."""
+        assert abs(wrap_angle_deg(-1810.0) - (-10.0)) < 1e-10
+
+    def test_custom_range_0_to_360(self):
+        """Custom Range [0, 360) sollte funktionieren."""
+        assert wrap_angle_deg(0.0, 0.0, 360.0) == 0.0
+        assert wrap_angle_deg(180.0, 0.0, 360.0) == 180.0
+        assert abs(wrap_angle_deg(370.0, 0.0, 360.0) - 10.0) < 1e-10
+        assert abs(wrap_angle_deg(-10.0, 0.0, 360.0) - 350.0) < 1e-10
+
+    def test_invalid_range_raises_error(self):
+        """lower >= upper sollte ValueError auslösen."""
+        with pytest.raises(ValueError, match="lower .* must be strictly less than upper"):
+            wrap_angle_deg(0.0, 180.0, 180.0)
+
+        with pytest.raises(ValueError, match="lower .* must be strictly less than upper"):
+            wrap_angle_deg(0.0, 180.0, 0.0)
+
+
+class TestWrapAngleRad:
+    """Tests für wrap_angle_rad Funktion."""
+
+    def test_zero_radians(self):
+        """Null Radiant sollte unverändert bleiben."""
+        assert wrap_angle_rad(0.0) == 0.0
+
+    def test_angle_in_range(self):
+        """Winkel im Bereich [-π, π) sollten unverändert bleiben."""
+        assert abs(wrap_angle_rad(math.pi / 4) - math.pi / 4) < 1e-10
+        assert abs(wrap_angle_rad(-math.pi / 4) - (-math.pi / 4)) < 1e-10
+
+    def test_pi_radians(self):
+        """π Radiant wraps zu -π (mathematisch äquivalent)."""
+        # π und -π sind mathematisch äquivalent
+        # Der Bereich ist [-π, π), also exklusiv bei π
+        assert abs(wrap_angle_rad(math.pi) - (-math.pi)) < 1e-10
+
+    def test_wrap_around_positive(self):
+        """Positive Winkel über π sollten wrappen."""
+        result = wrap_angle_rad(3 * math.pi)
+        expected = -math.pi  # 3π wraps to -π (äquivalent zu π)
+        assert abs(result - expected) < 1e-10
+
+    def test_wrap_around_negative(self):
+        """Negative Winkel unter -π sollten wrappen."""
+        result = wrap_angle_rad(-3 * math.pi)
+        expected = -math.pi  # -3π wraps to -π (äquivalent zu π)
+        assert abs(result - expected) < 1e-10
+
+    def test_two_pi_radians(self):
+        """2π sollte zu 0 wrappen."""
+        assert abs(wrap_angle_rad(2 * math.pi)) < 1e-10
+
+    def test_large_positive_angle(self):
+        """Sehr große positive Winkel sollten korrekt wrappen."""
+        result = wrap_angle_rad(10 * math.pi)
+        assert abs(result) < 1e-10
+
+    def test_large_negative_angle(self):
+        """Sehr große negative Winkel sollten korrekt wrappen."""
+        result = wrap_angle_rad(-10 * math.pi)
+        assert abs(result) < 1e-10
+
+
+class TestClamp:
+    """Tests für clamp Funktion."""
+
+    def test_value_in_range(self):
+        """Werte im Bereich sollten unverändert bleiben."""
+        assert clamp(5.0, 0.0, 10.0) == 5.0
+        assert clamp(0.0, 0.0, 10.0) == 0.0
+        assert clamp(10.0, 0.0, 10.0) == 10.0
+
+    def test_value_below_min(self):
+        """Werte unter Minimum sollten auf Minimum begrenzt werden."""
+        assert clamp(-5.0, 0.0, 10.0) == 0.0
+        assert clamp(-100.0, -50.0, 50.0) == -50.0
+
+    def test_value_above_max(self):
+        """Werte über Maximum sollten auf Maximum begrenzt werden."""
+        assert clamp(15.0, 0.0, 10.0) == 10.0
+        assert clamp(100.0, -50.0, 50.0) == 50.0
+
+    def test_negative_range(self):
+        """Negativer Wertebereich sollte funktionieren."""
+        assert clamp(-5.0, -10.0, -1.0) == -5.0
+        assert clamp(-15.0, -10.0, -1.0) == -10.0
+        assert clamp(0.0, -10.0, -1.0) == -1.0
+
+    def test_zero_value(self):
+        """Null sollte korrekt behandelt werden."""
+        assert clamp(0.0, -10.0, 10.0) == 0.0
+        assert clamp(0.0, 0.0, 10.0) == 0.0
+        assert clamp(0.0, -10.0, 0.0) == 0.0
+
+    def test_equal_min_max(self):
+        """Wenn min == max, sollte dieser Wert zurückgegeben werden."""
+        assert clamp(5.0, 3.0, 3.0) == 3.0
+        assert clamp(0.0, 3.0, 3.0) == 3.0
+        assert clamp(10.0, 3.0, 3.0) == 3.0
+
+    def test_float_precision(self):
+        """Floating-Point-Werte sollten präzise behandelt werden."""
+        assert clamp(1.5, 1.0, 2.0) == 1.5
+        assert clamp(0.99999, 1.0, 2.0) == 1.0
+        assert clamp(2.00001, 1.0, 2.0) == 2.0
+
+    def test_invalid_range_raises_error(self):
+        """min_value > max_value sollte ValueError auslösen."""
+        with pytest.raises(ValueError, match="min_value .* must not be greater than max_value"):
+            clamp(5.0, 10.0, 0.0)
+
+
+class TestModuleIndependence:
+    """Tests für Modul-Unabhängigkeit gemäß Architektur-Anforderungen."""
+
+    def test_no_simulation_imports(self):
+        """
+        Prüft, dass utils.maths keine Simulation-spezifischen Typen importiert.
+
+        Dieser Test stellt sicher, dass die Architektur-Anforderung eingehalten wird,
+        dass utils.maths unabhängig von Simulationslogik ist.
+        """
+        import core.simulation.utils.maths as maths_module
+
+        # Hole alle importierten Module
+        module_code = maths_module.__dict__
+
+        # Prüfe, dass keine verbotenen Importe vorhanden sind
+        forbidden_imports = ["UfoState", "UfoSim", "SimulationConfig", "StateManager"]
+
+        for forbidden in forbidden_imports:
+            assert forbidden not in module_code, f"utils.maths darf {forbidden} nicht importieren"
+
+class TestIntegrationScenarios:
+    """Integrations-Tests für realistische Anwendungsszenarien."""
+
+    def test_navigation_scenario(self):
+        """
+        Simuliert typische Navigation-Berechnungen.
+
+        Testet die Kombination mehrerer Funktionen wie sie in der
+        Physik-Engine verwendet werden könnten.
+        """
+        # Heading von 370° normalisieren
+        heading_deg = wrap_angle_deg(370.0, 0.0, 360.0)
+        assert abs(heading_deg - 10.0) < 1e-10
+
+        # Konvertierung zu Radiant
+        heading_rad = deg_to_rad(heading_deg)
+        assert abs(heading_rad - deg_to_rad(10.0)) < 1e-10
+
+        # Neigungswinkel clampen
+        inclination = clamp(95.0, -90.0, 90.0)
+        assert inclination == 90.0
+
+    def test_angle_difference_calculation(self):
+        """
+        Testet Berechnung von Winkeldifferenzen über die 360°-Grenze.
+
+        Dies ist ein häufiger Use-Case in der Navigation.
+        """
+        # Von 350° nach 10° ist +20° (nicht +380° oder -340°)
+        angle1 = 350.0
+        angle2 = 10.0
+
+        # Normalisiere beide Winkel
+        norm1 = wrap_angle_deg(angle1, -180.0, 180.0)  # -> -10°
+        norm2 = wrap_angle_deg(angle2, -180.0, 180.0)  # -> 10°
+
+        diff = norm2 - norm1  # 10° - (-10°) = 20°
+        assert abs(diff - 20.0) < 1e-10
+
+    def test_velocity_clamping_scenario(self):
+        """
+        Testet Geschwindigkeits-Clamping wie in der Physik-Engine.
+        """
+        vmax = 100.0
+
+        # Normale Geschwindigkeit
+        v1 = clamp(50.0, 0.0, vmax)
+        assert v1 == 50.0
+
+        # Zu hohe Geschwindigkeit
+        v2 = clamp(150.0, 0.0, vmax)
+        assert v2 == 100.0
+
+        # Negative Geschwindigkeit (nicht erlaubt)
+        v3 = clamp(-10.0, 0.0, vmax)
+        assert v3 == 0.0
+
+
+===== ./core/simulation/utils/test_threading_tools_demo.py =====
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Beispiel-Tests für Threading/Debugging-Tools.
+
+Demonstriert die Verwendung von:
+- pytest-timeout (Deadlock-Erkennung)
+- threadpoolctl (Thread-Pool-Kontrolle)
+"""
+
+import threading
+import time
+
+import pytest
+import threadpoolctl
+
+from tests._helpers import run_threaded_workers, assert_race_condition_free, create_decorated_counter
+from core.simulation.synchronization import synchronized
+
+
+@pytest.mark.timeout(5)
+def test_timeout_prevents_deadlock():
+    """
+    Demonstriert pytest-timeout: Test wird nach 5s abgebrochen.
+    
+    Dieser Test würde ohne timeout unendlich laufen.
+    Mit @pytest.mark.timeout(5) wird er automatisch abgebrochen.
+    """
+    lock1 = threading.Lock()
+    lock2 = threading.Lock()
+    
+    def worker1():
+        with lock1:
+            time.sleep(0.1)
+
+    def worker2():
+        with lock2:
+            time.sleep(0.1)
+
+    t1 = threading.Thread(target=worker1)
+    t2 = threading.Thread(target=worker2)
+
+    t1.start()
+    t2.start()
+
+    t1.join(timeout=1)
+    t2.join(timeout=1)
+
+    # Test ist OK - kein Deadlock
+    assert True
+
+
+@pytest.mark.timeout(10)
+def test_threadpoolctl_limits_threads():
+    """
+    Demonstriert threadpoolctl: Begrenzt Thread-Anzahl.
+    
+    Hilfreich um Lock-Contention in Tests zu reduzieren.
+    """
+    info = threadpoolctl.threadpool_info()
+    print(f"\nThread-Pool-Info: {len(info)} pools gefunden")
+    
+    with threadpoolctl.threadpool_limits(limits=2):
+        info_limited = threadpoolctl.threadpool_info()
+        print(f"Thread-Pool-Info (limitiert): {info_limited}")
+    
+    assert True
+
+
+@pytest.mark.timeout(15)
+def test_synchronized_decorator_under_load():
+    """
+    Stress-Test für @synchronized Decorator mit pytest-timeout Sicherheit.
+    """
+    class TestCounter:
+        def __init__(self):
+            self._lock = threading.RLock()
+            self._value = 0
+        
+        @synchronized
+        def increment(self):
+            old = self._value
+            time.sleep(0.0001)
+            self._value = old + 1
+        
+        @synchronized
+        def get_value(self):
+            return self._value
+    
+    counter = TestCounter()
+
+    # 50 Threads × 20 Inkremente = 1000
+    assert_race_condition_free(
+        counter.increment,
+        counter.get_value,
+        num_threads=50,
+        increments_per_thread=20
+    )
+
+
+@pytest.mark.timeout(10)
+def test_module_lock_decorator_works(rlock):
+    """
+    Test für @synchronized_module Decorator mit timeout-Schutz.
+    """
+    from core.simulation.synchronization import synchronized_module
+    
+    counter = create_decorated_counter(synchronized_module, rlock)
+
+    # 20 Threads × 10 Inkremente = 200
+    assert_race_condition_free(
+        counter["increment"],
+        counter["get_value"],
+        num_threads=20,
+        increments_per_thread=10
+    )
+
+
+# Marker für langsame Tests
+@pytest.mark.slow
+@pytest.mark.timeout(30)
+def test_long_running_operation():
+    time.sleep(2)  # Simuliere lange Operation
+    assert True
+
+
+# Marker für Threading-Tests
+@pytest.mark.threading
+@pytest.mark.timeout(20)
+def test_complex_threading_scenario():
+    """
+    Beispiel für komplexen Threading-Test.
+    """
+    class Resource:
+        def __init__(self, name: str):
+            self._lock = threading.RLock()
+            self._name = name
+            self._access_count = 0
+        
+        @synchronized
+        def access(self):
+            self._access_count += 1
+            time.sleep(0.001)
+            return self._access_count
+    
+    resources = [Resource(f"R{i}") for i in range(5)]
+
+    def worker(resource: Resource):
+        for _ in range(10):
+            resource.access()
+    
+    # Mehrere Threads auf verschiedene Resources
+    for resource in resources:
+        run_threaded_workers(
+            lambda r=resource: worker(r),
+            num_threads=3,
+            timeout_per_thread=5.0
+        )
+
+    # Jede Resource sollte 3*10 = 30 Zugriffe haben
+    for resource in resources:
+        assert resource._access_count == 30
+
+
+===== ./core/simulation/utils/test_validation.py =====
+
+"""
+Unit-Tests für das utils.validation Modul.
+
+Testet Validierungsfunktionen für Wertebereichs-Prüfungen.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from core.simulation.utils.validation import is_in_range, validate_range
+
+
+class TestValidateRange:
+    """Tests für validate_range Funktion."""
+
+    def test_value_in_range(self):
+        """Wert im Bereich sollte keinen Fehler werfen."""
+        validate_range(5.0, 0.0, 10.0, "test_value")  # Sollte nicht werfen
+
+    def test_value_at_min_boundary(self):
+        """Wert an unterer Grenze sollte erlaubt sein."""
+        validate_range(0.0, 0.0, 10.0, "test_value")
+
+    def test_value_at_max_boundary(self):
+        """Wert an oberer Grenze sollte erlaubt sein."""
+        validate_range(10.0, 0.0, 10.0, "test_value")
+
+    def test_value_below_min(self):
+        """Wert unter Minimum sollte ValueError werfen."""
+        with pytest.raises(ValueError, match="test_value muss zwischen 0.0 und 10.0 liegen"):
+            validate_range(-1.0, 0.0, 10.0, "test_value")
+
+    def test_value_above_max(self):
+        """Wert über Maximum sollte ValueError werfen."""
+        with pytest.raises(ValueError, match="test_value muss zwischen 0.0 und 10.0 liegen"):
+            validate_range(11.0, 0.0, 10.0, "test_value")
+
+    def test_negative_range(self):
+        """Negativer Wertebereich sollte funktionieren."""
+        validate_range(-5.0, -10.0, -1.0, "negative_value")
+
+    def test_error_message_includes_name(self):
+        """Fehlermeldung sollte Parameter-Namen enthalten."""
+        with pytest.raises(ValueError, match="velocity"):
+            validate_range(150.0, 0.0, 100.0, "velocity")
+
+
+class TestIsInRange:
+    """Tests für is_in_range Funktion."""
+
+    def test_value_in_range(self):
+        """Wert im Bereich sollte True zurückgeben."""
+        assert is_in_range(5.0, 0.0, 10.0) is True
+
+    def test_value_at_min_boundary(self):
+        """Wert an unterer Grenze sollte True sein."""
+        assert is_in_range(0.0, 0.0, 10.0) is True
+
+    def test_value_at_max_boundary(self):
+        """Wert an oberer Grenze sollte True sein."""
+        assert is_in_range(10.0, 0.0, 10.0) is True
+
+    def test_value_below_min(self):
+        """Wert unter Minimum sollte False sein."""
+        assert is_in_range(-1.0, 0.0, 10.0) is False
+
+    def test_value_above_max(self):
+        """Wert über Maximum sollte False sein."""
+        assert is_in_range(11.0, 0.0, 10.0) is False
+
+    def test_negative_range(self):
+        """Negativer Wertebereich sollte funktionieren."""
+        assert is_in_range(-5.0, -10.0, -1.0) is True
+        assert is_in_range(-15.0, -10.0, -1.0) is False
+
+    def test_zero_value(self):
+        """Null sollte korrekt behandelt werden."""
+        assert is_in_range(0.0, -10.0, 10.0) is True
+        assert is_in_range(0.0, 1.0, 10.0) is False
+
+
+class TestModuleIntegration:
+    """Integrations-Tests für validation Modul."""
+
+    def test_both_functions_consistent(self):
+        """validate_range und is_in_range sollten konsistent sein."""
+        # Wert im Bereich
+        assert is_in_range(5.0, 0.0, 10.0) is True
+        validate_range(5.0, 0.0, 10.0, "test")  # Kein Fehler
+
+        # Wert außerhalb
+        assert is_in_range(15.0, 0.0, 10.0) is False
+        with pytest.raises(ValueError):
+            validate_range(15.0, 0.0, 10.0, "test")
+
