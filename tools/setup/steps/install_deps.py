@@ -4,11 +4,15 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import chain
-from typing import override
+from typing import ClassVar, override
 
-from tools.setup.steps.base.config import step_config
-
-from tools.setup.steps.base import BaseStep, BaseStepContext, StepResult, handles_step_result
+from tools.setup.steps.base import (
+    BaseStep,
+    BaseStepContext,
+    StepResult,
+    PrepareResult,
+    handle_prepare,
+)
 from tools.setup.ui import CATALOG
 from tools.setup.ui.progress import ProgressStep
 from tools.setup.utils import run_command, short_output
@@ -16,7 +20,6 @@ from tools.setup.utils import run_command, short_output
 Command = tuple[tuple[str, ...], str]  # (argv, label)
 
 
-@step_config(stid="dependencies", priority=9999)
 @dataclass(slots=True)
 class InstallDepsStep(BaseStep[Sequence[Command]]):
     """
@@ -28,8 +31,19 @@ class InstallDepsStep(BaseStep[Sequence[Command]]):
     - Dev-Dependencies aus [project.optional-dependencies].dev einzeln installieren
     """
 
+    stid: ClassVar[str] = "dependencies"
+    prio: ClassVar[int] = 9999
+
     @override
-    def prepare(self, ctx: BaseStepContext) -> tuple[Command, ...] | None:
+    def estimate_total(self, prepared: Sequence[Command] | None) -> int | None:
+        if prepared:
+            return len(prepared)
+        return 1
+
+
+    @override
+    @handle_prepare
+    def prepare(self, ctx: BaseStepContext) -> PrepareResult[tuple[str, ...]]:
         """
         Erzeugt die Liste von Installations-Kommandos aus dem bereits geladenen
         PyProjectProfile (runtime_requirements + dev_requirements).
@@ -46,11 +60,14 @@ class InstallDepsStep(BaseStep[Sequence[Command]]):
             label = f"{name}{spec}"
             commands.append(((*base, label), label))
 
-        return tuple(commands)
+        return PrepareResult(
+            ok=True,
+            payload=tuple(commands),
+        )
+
 
     @override
-    @handles_step_result
-    def step(
+    def _step_impl(
             self,
             ctx: BaseStepContext,
             prepared: Sequence[Command] | None,
@@ -77,8 +94,8 @@ class InstallDepsStep(BaseStep[Sequence[Command]]):
         if total:
             status(
                 "progress_running",
-                "Running  /   Installiere Abhängigkeiten ({total} Pakete)",
-                total=total,
+                "Running  /   {details}",
+                details=f"Installiere Abhängigkeiten ({total} Pakete)",
             )
 
         ok = True
@@ -90,6 +107,7 @@ class InstallDepsStep(BaseStep[Sequence[Command]]):
         for index, (argv, label) in enumerate(prepared, start=1):
             last_label = label
 
+            # Laufender Status: welches Paket wird gerade installiert?
             status(
                 "progress_running",
                 "Running  /   {details}",
@@ -116,6 +134,7 @@ class InstallDepsStep(BaseStep[Sequence[Command]]):
             cause = "pip_install_failed"
             short = short_output(raw) or last_details
 
+            # Hier darf es ruhig sofort einen roten Status geben;
             status(
                 "progress_failed",
                 "Failed   /   {details}",
@@ -130,15 +149,23 @@ class InstallDepsStep(BaseStep[Sequence[Command]]):
             error_hint = f"{label}: {short}"
             break
 
-        label = last_label if ok else fmt(
-                "install_done",
-                "Alle Abhängigkeiten installiert.",
+        # Auf Summen-Label mappen:
+        # - Erfolg  → „Alle Abhängigkeiten installiert.“
+        # - Fehler  → Name des zuletzt fehlgeschlagenen Pakets
+        label = (
+            CATALOG.format(
+                "step_default",
+                field="install_done",
+                default="Alle Abhängigkeiten installiert.",
+            )
+            if ok
+            else last_label
         )
 
         return StepResult(
             ok=ok,
-            cause=cause,
-            details=last_details,
+            cause=cause or "",
+            details=last_details or empty_output,
             label=label,
-            error_hint=error_hint,
+            error_hint=error_hint or "",
         )

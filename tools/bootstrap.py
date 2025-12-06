@@ -72,7 +72,7 @@ def _select_steps(profile: PyProjectProfile) -> tuple[type[BaseStep[object]], ..
     else:
         ordered_ids = [
             cls.stid
-            for cls in sorted(by_stid.values(), key=lambda c: c.priority, reverse=True)
+            for cls in sorted(by_stid.values(), key=lambda c: c.prio, reverse=True)
         ]
 
     exclude_ids = set(profile.step_exclude)
@@ -149,5 +149,5 @@ def execute(argv: list[str] | None = None) -> int:
 
 
 def console_script() -> None:
-    """Entry-Point für pyproject.toml / setup_new.py."""
+    """Entry-Point für pyproject.toml / setup_v2.py."""
     raise SystemExit(execute(sys.argv[1:]))

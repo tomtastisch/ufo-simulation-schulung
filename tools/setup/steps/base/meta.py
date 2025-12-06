@@ -83,31 +83,31 @@ class BaseStepMeta(ABCMeta):
 
         stid = getattr(cls, "stid", None)
 
+        rsn: str = ""
+        obj: str = ""
+        err: type[Exception] | None = None
+
         if not isinstance(stid, str) or not stid:
-            BaseStepMeta.throw(
-                name=name,
-                stid=stid,
-                reason="leer ist",
-                obj="BaseStep.stid",
-                exc=TypeError,
-            )
+            rsn = "leer ist"
+            obj = "BaseStep.stid"
+            err = TypeError
+        else:
+            if not _STID_PATTERN.fullmatch(stid):
+                rsn = f"nicht dem Pattern {_STID_PATTERN.pattern} entspricht"
+                obj = f"BaseStep.stid={stid!r}"
+                err = ValueError
+            elif stid in registry and registry[stid] is not cls:
+                rsn = "bereits genutzt wird"
+                obj = registry[stid].__name__
+                err = ValueError
 
-        if not _STID_PATTERN.fullmatch(stid):
+        if err is not None:
             BaseStepMeta.throw(
                 name=name,
                 stid=stid,
-                reason=f"nicht dem Pattern {_STID_PATTERN.pattern} entspricht",
-                obj="BaseStep.stid",
-                exc=ValueError,
-            )
-
-        if stid in registry and registry[stid] is not cls:
-            BaseStepMeta.throw(
-                name=name,
-                stid=stid,
-                reason=f"bereits genutzt wird",
-                obj=registry[stid].__name__,
-                exc=ValueError,
+                reason=rsn,
+                obj=obj,
+                exc=err,
             )
 
         registry[stid] = cls

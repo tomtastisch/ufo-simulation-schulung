@@ -4,11 +4,13 @@ from __future__ import annotations
 import time
 import traceback
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Sized
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any, Generic, Mapping, TypeVar, ClassVar
 
+from tools.setup.steps.base.decorator import handle_step
 from tools.setup.steps.base.meta import BaseStepMeta, BaseStepContext, BaseStepCore
+from tools.setup.steps.base.result import StepResult
 from tools.setup.ui import CATALOG
 from tools.setup.ui.output.error import error
 from tools.setup.ui.progress import ProgressMode, ProgressStep
@@ -36,6 +38,7 @@ class BaseStep(
 
     mode: ProgressMode = ProgressMode.AUTO
     stid: ClassVar[str] = "base"
+    prio: ClassVar[int] = 0
 
     _error_block: str | None = field(default=None, init=False, repr=False)
     _prepared: T | None = field(default=None, init=False, repr=False)
@@ -55,12 +58,34 @@ class BaseStep(
         """
         return False
 
+
     def options(self, ctx: BaseStepContext) -> dict[str, object]:
         """
         Liefert Step-spezifische Optionen aus [tool.setup.options.<stid>].
         """
         raw: Mapping[str, Any] | None = ctx.profile.step_options.get(self.stid)
         return dict(raw or {})
+
+    @staticmethod
+    def _iter_units(prepared: T | None) -> Iterable[Any]:
+        """
+        Standard-Implementierung:
+        - kein prepared → keine Units
+        - sonst genau EINE Unit = der gesamte Payload
+
+        Steps, die mehrere Arbeitseinheiten haben (Contracts, Dependencies,
+        Test-Suites, ...), überschreiben diese Methode und liefern eine
+        Sequenz von „Units“.
+        """
+        return () if prepared is None else (prepared,)
+
+    def estimate_total(self, prepared: T | None) -> int | None:
+        """
+        Standard: Anzahl Units als Progress-Gesamtlänge, falls zählbar.
+        Spezielle Steps können das überschreiben (z. B. Gewichtung).
+        """
+        units = list(self._iter_units(prepared))
+        return len(units) if units else 1
 
 
     def output(
@@ -98,17 +123,6 @@ class BaseStep(
         return fallback
 
 
-    def estimate_total(self, prepared: T | None) -> int | None:
-        """
-        Dient als Progress-Hook zur Festlegung der Arbeitseinheiten
-        für den Progress-Balken.
-        """
-        if prepared is None:
-            return None
-
-        return len(prepared) if isinstance(prepared, Sized) else 1
-
-
     # noinspection PyMethodMayBeStatic
     def _ensure(
             self,
@@ -121,7 +135,6 @@ class BaseStep(
         Führe eine Installation über tools.setup.utils.install aus.
         """
         from tools.setup.utils import install  # Lazy import
-
         assert (spec is not None) ^ (cmd is not None)
 
         kwargs: dict[str, object] = {"cmd": cmd} if cmd else {
@@ -136,50 +149,73 @@ class BaseStep(
 
         return rc == 0
 
+
     def prepare(self, ctx: BaseStepContext) -> T | None:
         """Optionaler Vorbereitungsschritt, wenn Arbeitsschritt dies erfordert."""
         return None
 
+
     @abstractmethod
+    def _step_impl(
+            self,
+            ctx: BaseStepContext,
+            prepared: T | None,
+            progress: ProgressStep | None,
+    ) -> StepResult:
+        """Fachlicher Kern des Arbeitsschritts."""
+        raise NotImplementedError
+
+
     def step(
             self,
             ctx: BaseStepContext,
             prepared: T | None,
             progress: ProgressStep | None,
     ) -> bool:
-        """
-        Fachlicher Kern des Arbeitsschritts.
+        impl = type(self)._step_impl
+        wrapped = handle_step(impl)  # type: ignore[misc]
+        return wrapped(self, ctx, prepared, progress)
 
-        Rückgabe:
-            True  → Step erfolgreich
-            False → Step fehlgeschlagen
-        """
-        raise NotImplementedError
 
     def run(self, ctx: BaseStepContext) -> bool:
         """
-        Orchestriert den Arbeitsschritt mithilfe der festgelegten Anzahl
-        an Arbeitseinheiten, welche anhand von estimate_total festgelegt werden.
+        Orchestriert den Arbeitsschritt.
 
-        Returns:
-            True, wenn alle Durchläufe erfolgreich waren
-            False, wenn mindestens ein Durchlauf fehlgeschlagen ist
+        Ablauf:
+        1. prepare(...) liefert Payload
+        2. iter_units(...) wandelt Payload in „Units“ um
+        3. Progress-Gesamtlänge aus estimate_total(...) / Units
+        4. Für jede Unit genau ein step(...)-Aufruf
         """
-
         self._error_block = None
         self._prepared = self.prepare(ctx)
+
+        # Units aus prepared ableiten (1D/2D egal – die Step-Klasse definiert das)
+        units = list(self._iter_units(self._prepared))
+        has_units = bool(units)
 
         header_text = self.output(ctx, field="header") or f"Setup-{self.stid} {self.name}"
 
         with self.mode.make_context(header_text, ctx.console) as progress:
             if progress is not None:
                 total_hint = self.estimate_total(self._prepared)
+                if total_hint is None:
+                    # Fallback: Anzahl Units, wenn vorhanden
+                    total_hint = len(units) if has_units else None
 
-                if total_hint is not None:
+                if isinstance(total_hint, int):
                     progress.set_total(total_hint)
 
+            ok = True
+
             try:
-                ok = self.step(ctx, self._prepared, progress)
+                if not has_units:
+                    ok = self.step(ctx, None, progress)
+                else:
+                    for unit in units:
+                        if not self.step(ctx, unit, progress):
+                            ok = False
+                            break
 
             except BaseException as exc:
                 exc_type_name = type(exc).__name__
@@ -197,7 +233,7 @@ class BaseStep(
 
                 if progress is not None:
                     progress.set_status(msg)
-                    progress.mark_failed()
+                    # keine Entscheidung über „fertig“, nur Status setzen
 
                 block = error(
                     step=self.name,
@@ -206,6 +242,7 @@ class BaseStep(
                     message=exc_message,
                     traceback_text=tb_text,
                 )
+                self._error_block = block
                 ctx.console.error(block)
 
                 ctx.log.write_error(
@@ -213,21 +250,24 @@ class BaseStep(
                     message=msg,
                     details=tb_text,
                 )
-                return False
+
+                ok = False  # wichtig: nur Flag setzen, kein return
 
             if progress is not None:
                 total = getattr(progress, "total", None)
                 completed = getattr(progress, "completed", 0)
 
-                if isinstance(total, int) and (delta := total - completed) > 0:
+                # Nur bei Erfolg auf 100 % ziehen:
+                if ok and isinstance(total, int) and (delta := total - completed) > 0:
                     progress.advance(delta)
 
-                (progress.mark_finished if ok else progress.mark_failed)()
+                if ok:
+                    progress.mark_finished()
+                else:
+                    progress.mark_failed()
 
             if not ok and self._error_block:
                 ctx.console.error(self._error_block)
 
-            # kurzes warten, damit der Status im UI aktualisiert wird
             time.sleep(0.5)
-
             return ok

@@ -3,25 +3,26 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from typing import override
+from typing import ClassVar, override
 
-from tools.setup.steps.base.config import step_config
-
-from tools.setup.steps.base import BaseStep, BaseStepContext, StepResult, handle_step
+from tools.setup.steps.base import BaseStep, BaseStepContext, StepResult
 from tools.setup.ui.progress import ProgressStep
 from tools.setup.utils import run_command
 
 
-@step_config(stid="create_env", priority=sys.maxsize - 1000)
 @dataclass(slots=True)
 class CreateEnvStep(BaseStep[None]):
     """
     Setup-Schritt zum Erzeugen der Projekt-Virtualenv.
     """
 
+    # Registrierung über BaseStepCore
+    stid: ClassVar[str] = "create_env"
+    prio: ClassVar[int] = sys.maxsize - 1000
+
+
     @override
-    @handle_step
-    def step(
+    def _step_impl(
             self,
             ctx: BaseStepContext,
             prepared: None,

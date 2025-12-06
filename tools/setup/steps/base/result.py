@@ -11,7 +11,7 @@ V = TypeVar("V", covariant=True)
 class _BaseResult:
     """
     Standardisiertes Ergebnis von Einheiten
-    innerhalb eines Arneitsschrittes.
+    innerhalb eines Arbeitsschrittes.
 
     - ok         → fachliches Ergebnis
     - cause      → technischer Grund (Error-Code / Kategorie)
@@ -27,11 +27,38 @@ class _BaseResult:
 @dataclass(slots=True)
 class PrepareResult(_BaseResult, Generic[V]):
     """Ergebnis eines prepare(...)-Aufrufs."""
-
-    payload: V | object = object()
+    payload: V | None = None
 
 
 @dataclass(slots=True)
 class StepResult(_BaseResult):
     """Standardisiertes Ergebnis eines Steps."""
     label: str = ""
+
+    @classmethod
+    def success(cls, *, label: str = "", details: str = "") -> StepResult:
+        return cls(
+            ok=True,
+            cause="",
+            details=details,
+            label=label,
+            error_hint="",
+        )
+
+    @classmethod
+    def failure(
+            cls,
+            *,
+            cause: str,
+            details: str,
+            label: str = "",
+            error_hint: str | None = None,
+    ) -> StepResult:
+        text = details or "keine Ausgabe"
+        return cls(
+            ok=False,
+            cause=cause or "step_failed",
+            details=text,
+            label=label,
+            error_hint=error_hint or text,
+        )

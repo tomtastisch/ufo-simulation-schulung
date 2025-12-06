@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-import yaml
 from datetime import datetime, timezone
-
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 EXCLUDES = {".git", ".venv", "__pycache__", "dumps", "dump"}
 
@@ -57,10 +57,15 @@ def _next_dump_code() -> int:
     return delta_ms
 
 
-def collect_files(root: Path) -> dict[str, dict[str, Any]]:
+def collect_files(root: Path, include_subdirs: bool = True) -> dict[str, dict[str, Any]]:
     files: dict[str, dict[str, Any]] = {}
 
-    for path in sorted(root.rglob("*")):
+    if include_subdirs:
+        paths = sorted(root.rglob("*"))
+    else:
+        paths = sorted(p for p in root.iterdir() if p.is_file())
+
+    for path in paths:
         if should_exclude(path):
             continue
         if path.suffix not in {".py", ".toml"}:
@@ -89,6 +94,10 @@ def main() -> None:
     print("Name für die YAML-Datei eingeben (ohne .yaml, leer = complete_dump):")
     name_raw = input("> ").strip()
 
+    print("Sollen Unterordner mit aufgenommen werden? [Y/n]")
+    sub_raw = input("> ").strip().lower()
+    include_subdirs = sub_raw not in {"n", "nein", "no"}
+
     if not raw:
         target = cwd
     else:
@@ -106,9 +115,12 @@ def main() -> None:
         print(f"Fehler: Pfad ist kein Ordner: {target}")
         raise SystemExit(1)
 
-    print(f"Sammle Python-Dateien unter: {target}\n")
+    if include_subdirs:
+        print(f"Sammle Python-Dateien unter: {target}\n")
+    else:
+        print(f"Sammle Python-Dateien nur im Verzeichnis: {target}\n")
 
-    files = collect_files(target)
+    files = collect_files(target, include_subdirs=include_subdirs)
 
     # Verzeichnisliste aus rel_paths ableiten, "." ausblenden
     dir_set: set[str] = set()

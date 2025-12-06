@@ -416,7 +416,7 @@ files:
       # ---------------------------------------------------------------------------
       # Weitere geplante Contracts (T11, T12, T14) sind in .importlinter-future.toml
       # dokumentiert und werden bei Bedarf hierher verschoben.
-  - rel_path: setup_new.py
+  - rel_path: setup_v2.py
     hash: c3acef0f13ccdea8bc81b6016be818278730c0ebd0214f6e689ac9a4e3af7e98
     content: |-
       #!/usr/bin/env python3
