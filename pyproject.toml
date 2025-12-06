@@ -52,7 +52,7 @@ core = [
 
 [tool.setup]
 # Explizite Reihenfolge aller Steps
-steps = ["create_env", "dependencies", "import_linter", "tests"]
+steps = ["create_env", "dependencies", "typing_check", "import_linter", "tests"]
 
 # Optional: bestimmte Steps deaktivieren
 exclude = ["import_linter"]  # Beispiel: Import-Linter vorübergehend abschalten
@@ -64,6 +64,12 @@ auto_install = true
 [tool.setup.options.tests]
 marker = "not slow"
 max_workers = 4
+
+[tool.setup.options.typing_check]
+mode = "relaxed"
+check_params = true
+check_returns = true
+check_variables = false
 
 # Spezifische Linter-Konfiguration:
 [tool.setup.linter]
