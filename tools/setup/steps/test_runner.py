@@ -27,8 +27,9 @@ logger = logging.getLogger(__name__)
 #           <Module test_heading_delta.py>
 #             <Class TestNormalizeHeadingDelta>
 #               <Function test_no_wrap_around_positive_small>
+# Hinweis: <Package> wird seit pytest >= 7.0 für Verzeichnisse mit __init__.py verwendet
 _COLLECT_LINE_RE = re.compile(
-    r"^(?P<indent>\s*)<(?P<kind>Dir|Module|Class|Function) (?P<name>[^>]+)>"
+    r"^(?P<indent>\s*)<(?P<kind>Dir|Package|Module|Class|Function) (?P<name>[^>]+)>"
 )
 
 
@@ -122,11 +123,11 @@ class RunTestsStep(BaseStep[tuple[tuple[str, str], ...]]):
                     i for i, (k, _, _) in enumerate(stack) if k == "Module"
                 )
 
-                # Verzeichnisse vor dem Module-Eintrag
+                # Verzeichnisse vor dem Module-Eintrag (inkl. Packages)
                 dir_parts = [
                     n
                     for k, n, _ in stack[:module_index]
-                    if k == "Dir"
+                    if k in ("Dir", "Package")
                 ]
                 module_name = stack[module_index][1]
 
@@ -150,7 +151,7 @@ class RunTestsStep(BaseStep[tuple[tuple[str, str], ...]]):
                 pairs.append((module_path, qualified))
                 continue
 
-            # Für Dir / Module / Class: Node in den Stack pushen
+            # Für Dir / Package / Module / Class: Node in den Stack pushen
             stack.append((kind, name, level))
 
         return PrepareResult(
