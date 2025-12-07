@@ -16,6 +16,7 @@ from tools.setup.steps.base import (
 from tools.setup.ui import CATALOG
 from tools.setup.ui.progress import ProgressStep
 from tools.setup.utils import module, run_single
+from tools.setup.utils.ui_text import initial_running_text, running_text
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +172,7 @@ class EvaluateImportsStep(BaseStep[tuple[str, ...]]):
         tests_done_label = CATALOG.format(
             "RunTestsStep",
             field="tests_done",
-            default="Alle Tests erfolgreich.",
+            default="Alle Prüfungen erfolgreich.",
         )
         tests_failed_label = CATALOG.format(
             "RunTestsStep",
@@ -200,15 +201,11 @@ class EvaluateImportsStep(BaseStep[tuple[str, ...]]):
                 total=total,
                 test=nodeid or "<alle>",
             )
-            running = CATALOG.format(
-                "step_default",
-                field="progress_running",
-                default="Running  /   {details}",
-                details=test_details,
-            )
-            progress.set_status(running)
+            progress.set_status(running_text(test_details))
 
         total = len(tests)
+        if progress is not None:
+            progress.set_status(initial_running_text())
         last_details = ""
 
         for index, nodeid in enumerate(tests, start=1):

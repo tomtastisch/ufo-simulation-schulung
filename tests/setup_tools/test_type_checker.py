@@ -14,6 +14,7 @@ Prüft nicht nur die Struktur, sondern auch die tatsächliche Funktionalität:
 
 from pathlib import Path
 from unittest.mock import Mock
+from textwrap import dedent
 
 import pytest
 
@@ -118,7 +119,7 @@ def calculate(x, y: float) -> float:
         assert len(checker.findings) == 1
         finding = checker.findings[0]
         assert finding.name == "x"
-        assert finding.type == "parameter"
+        assert finding.annotation_type == "parameter"
 
     def test_missing_return_annotation(self):
         """Erkennt fehlende Return-Annotation."""
@@ -142,7 +143,7 @@ def calculate(x: float, y: float):
         assert len(checker.findings) == 1
         finding = checker.findings[0]
         assert finding.name == "calculate"
-        assert finding.type == "return"
+        assert finding.annotation_type == "return"
 
     def test_init_no_return_annotation_required(self):
         """__init__ benötigt keine Return-Annotation."""
@@ -164,7 +165,7 @@ class Foo:
         checker.visit(tree)
 
         # __init__ soll KEINE Return-Annotation-Warnung erzeugen
-        return_findings = [f for f in checker.findings if f.type == "return"]
+        return_findings = [f for f in checker.findings if f.annotation_type == "return"]
         assert len(return_findings) == 0
 
     def test_self_and_cls_ignored(self):
@@ -191,7 +192,7 @@ class Foo:
         checker.visit(tree)
 
         # Nur 'x' in beiden Methoden sollte bemängelt werden, nicht self/cls
-        param_findings = [f for f in checker.findings if f.type == "parameter"]
+        param_findings = [f for f in checker.findings if f.annotation_type == "parameter"]
         assert all(f.name == "x" for f in param_findings)
         assert len(param_findings) == 2
 
@@ -214,7 +215,7 @@ y: int = 100
         checker.visit(tree)
 
         # Keine Variable-Findings im relaxed mode ohne check_variables
-        var_findings = [f for f in checker.findings if f.type == "variable"]
+        var_findings = [f for f in checker.findings if f.annotation_type == "variable"]
         assert len(var_findings) == 0
 
     def test_variable_annotation_with_check_variables(self):
@@ -236,17 +237,20 @@ y: int = 100
         checker.visit(tree)
 
         # Variable 'x' sollte bemängelt werden, 'y' nicht
-        var_findings = [f for f in checker.findings if f.type == "variable"]
+        var_findings = [f for f in checker.findings if f.annotation_type == "variable"]
         assert len(var_findings) == 1
         assert var_findings[0].name == "x"
 
     def test_fully_annotated_code(self):
         """Vollständig annotierter Code erzeugt keine Findings."""
-        code = '''
-def calculate(x: float, y: float) -> float:
-    result: float = x + y
-    return result
-'''
+        code = dedent(
+            """
+            def calculate(x: float, y: float) -> float:
+                result: float = x + y
+                return result
+            """
+        )
+
         checker = AnnotationChecker(
             mode="strict",
             check_variables=True,
@@ -281,15 +285,18 @@ def calculate(x, y) -> float:
         checker.visit(tree)
 
         # Keine Parameter-Findings
-        param_findings = [f for f in checker.findings if f.type == "parameter"]
+        param_findings = [f for f in checker.findings if f.annotation_type == "parameter"]
         assert len(param_findings) == 0
 
     def test_check_returns_disabled(self):
         """Mit check_returns=False werden Returns nicht geprüft."""
-        code = '''
-def calculate(x: float, y: float):
-    return x + y
-'''
+        code = dedent(
+            """
+            def calculate(x: float, y: float):
+                return x + y
+            """
+        )
+
         checker = AnnotationChecker(
             mode="relaxed",
             check_variables=False,
@@ -303,7 +310,7 @@ def calculate(x: float, y: float):
         checker.visit(tree)
 
         # Keine Return-Findings
-        return_findings = [f for f in checker.findings if f.type == "return"]
+        return_findings = [f for f in checker.findings if f.annotation_type == "return"]
         assert len(return_findings) == 0
 
 
@@ -325,7 +332,7 @@ class TestTypingCheckStep:
     def test_prepare_no_task_dir(self, mock_context: BaseStepContext):
         """Prepare gibt leeres Tuple zurück wenn src/task/ fehlt."""
         step = TypingCheckStep()
-        result = step.prepare(mock_context)
+        result = step.prepare(mock_context)  # type: ignore
 
         # prepare() gibt durch @handle_prepare nur das payload zurück
         assert result == tuple()
@@ -343,7 +350,7 @@ class TestTypingCheckStep:
         (temp_task_dir / "subdir" / "task3.py").write_text("# test")
 
         step = TypingCheckStep()
-        result = step.prepare(mock_context)
+        result = step.prepare(mock_context)  # type: ignore
 
         # prepare() gibt durch @handle_prepare nur das payload zurück
         assert result is not None
@@ -369,13 +376,17 @@ class TestTypingCheckStep:
         """Step findet fehlende Annotationen und meldet sie."""
         # Erstelle Datei mit fehlenden Annotationen
         test_file = temp_task_dir / "bad_code.py"
-        test_file.write_text('''
-def calculate(x, y):
-    return x + y
-''')
+        test_file.write_text(
+            dedent(
+                """
+                def calculate(x, y):
+                    return x + y
+                """
+            )
+        )
 
         step = TypingCheckStep()
-        prepared = step.prepare(mock_context)
+        prepared = step.prepare(mock_context)  # type: ignore
         result = step._step_impl(mock_context, prepared, None)
 
         # Im relaxed mode sollte es eine Warnung geben (aber Success)
@@ -391,13 +402,17 @@ def calculate(x, y):
         """Step gibt Success bei vollständig annotiertem Code."""
         # Erstelle Datei mit vollständigen Annotationen
         test_file = temp_task_dir / "good_code.py"
-        test_file.write_text('''
-def calculate(x: float, y: float) -> float:
-    return x + y
-''')
+        test_file.write_text(
+            dedent(
+                """
+                def calculate(x: float, y: float) -> float:
+                    return x + y
+                """
+            )
+        )
 
         step = TypingCheckStep()
-        prepared = step.prepare(mock_context)
+        prepared = step.prepare(mock_context)  # type: ignore
         result = step._step_impl(mock_context, prepared, None)
 
         assert result.ok
@@ -411,13 +426,17 @@ def calculate(x: float, y: float) -> float:
         """Syntaxfehler werden abgefangen und ignoriert."""
         # Erstelle Datei mit Syntaxfehler
         test_file = temp_task_dir / "broken.py"
-        test_file.write_text('''
-def broken(
-    # unvollständige Funktionsdefinition
-''')
+        test_file.write_text(
+            dedent(
+                """
+                def broken(
+                    # unvollständige Funktionsdefinition
+                """
+            )
+        )
 
         step = TypingCheckStep()
-        prepared = step.prepare(mock_context)
+        prepared = step.prepare(mock_context)  # type: ignore
 
         # Sollte nicht crashen
         result = step._step_impl(mock_context, prepared, None)
@@ -490,7 +509,7 @@ class TestConfiguration:
             log=mock_log,
         )
         step = TypingCheckStep()
-        prepared = step.prepare(context)
+        prepared = step.prepare(context)  # type: ignore
         result = step._step_impl(context, prepared, None)
 
         # Im strict mode sollte es fehlschlagen

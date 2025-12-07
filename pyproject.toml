@@ -21,13 +21,15 @@ dependencies = [
     "PyQt5-sip>=12.17.2",
     "numpy>=2.3.5",
     # "rich>=13.0.0",  # ENTFERNT, da Rich nicht mehr verwendet werden soll
-    "pyyaml>=6.0.3"
+    "pyyaml>=6.0.3",
+    "matplotlib>=3.10.7"
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0.0",
+    "pytest>=9.0.2",
     "pytest-timeout>=2.3.1",
+    "pytest-xdist>=3.6,<4",
     "threadpoolctl>=3.5.0",
     "py-spy>=0.3.14",
     "black>=24.4.0",
@@ -55,7 +57,7 @@ core = [
 steps = ["create_env", "dependencies", "typing_check", "import_linter", "tests"]
 
 # Optional: bestimmte Steps deaktivieren
-exclude = ["import_linter"]  # Beispiel: Import-Linter vorübergehend abschalten
+# exclude = ["import_linter"]  # Beispiel: Import-Linter vorübergehend abschalten
 
 # Optional: globale Setup-Flags
 auto_install = true
@@ -90,6 +92,10 @@ timeout_method = "thread"
 # Test-Output-Einstellungen
 addopts = [
     "-v",
+    "-n",
+    "auto",
+    "--dist",
+    "loadscope",
     "--strict-markers",
     "--tb=short",
 ]

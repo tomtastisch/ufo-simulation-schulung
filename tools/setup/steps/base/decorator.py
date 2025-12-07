@@ -146,6 +146,7 @@ def handle_step(
             if result.ok:
                 text = result.label or "OK"
                 progress.set_status(f"Finished /   {text}")
+
             else:
                 text = result.label or result.error_hint or "Fehler"
                 progress.set_status(f"Failed   /   {text}")

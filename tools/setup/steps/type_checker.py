@@ -22,6 +22,7 @@ from tools.setup.steps.base import (
 )
 from tools.setup.ui import CATALOG
 from tools.setup.ui.progress import ProgressStep
+from tools.setup.utils.ui_text import initial_running_text, running_text
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,7 @@ class AnnotationChecker(ast.NodeVisitor):
                             file=self._current_file,
                             line=arg.lineno,
                             name=arg_name,
-                            type="parameter",
+                            annotation_type="parameter",
                         )
                     )
 
@@ -122,7 +123,7 @@ class AnnotationChecker(ast.NodeVisitor):
                     file=self._current_file,
                     line=node.lineno,
                     name=node.name,
-                    type="return",
+                    annotation_type="return",
                 )
             )
 
@@ -146,7 +147,7 @@ class AnnotationChecker(ast.NodeVisitor):
                             file=self._current_file,
                             line=node.lineno,
                             name=target.id,
-                            type="variable",
+                            annotation_type="variable",
                         )
                     )
         self.generic_visit(node)
@@ -196,6 +197,7 @@ class TypingCheckStep(BaseStep[tuple[Path, ...]]):
 
         return PrepareResult(ok=True, payload=tuple(files))
 
+    # noinspection PyMethodMayBeStatic
     def _check_file(
             self,
             path: Path,
@@ -275,6 +277,10 @@ class TypingCheckStep(BaseStep[tuple[Path, ...]]):
         check_params: bool = bool(options.get("check_params", True))
         check_returns: bool = bool(options.get("check_returns", True))
 
+        # Initialer Statustext gemäß Vorgabe
+        if progress is not None:
+            progress.set_status(initial_running_text())
+
         # Alle Dateien prüfen
         all_findings: list[TypeAnnotation] = []
         for file_path in files:
@@ -289,6 +295,8 @@ class TypingCheckStep(BaseStep[tuple[Path, ...]]):
             all_findings.extend(findings)
 
             if progress is not None:
+                # Fortschritt nur aus Abschlussereignissen ableiten: eine Datei = ein Abschluss
+                progress.set_status(running_text(file_path.name))
                 progress.advance(1)
 
         # Ergebnis auswerten
@@ -313,11 +321,11 @@ class TypingCheckStep(BaseStep[tuple[Path, ...]]):
                 details_lines.append(f"\n{current_file}:")
 
             # Passende Nachricht aus Katalog holen
-            field_name = f"missing_{finding.type}"
+            field_name = f"missing_{finding.annotation_type}"
             msg = CATALOG.format(
                 "typing_check",
                 field=field_name,
-                default=f"  Zeile {finding.line}: {finding.name} ({finding.type})",
+                default=f"  Zeile {finding.line}: {finding.name} ({finding.annotation_type})",
                 line=finding.line,
                 name=finding.name,
             )

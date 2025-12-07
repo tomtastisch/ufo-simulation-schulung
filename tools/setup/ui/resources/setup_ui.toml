@@ -97,6 +97,12 @@ install_failed = "{package}: {details}"
 
 [texts.RunTestsStep]
 failure = "Tests im Schritt {step} unter {env} fehlgeschlagen: {cause}\n{details}"
+tests_done = "Alle Tests erfolgreich."
+tests_failed = "Tests fehlgeschlagen – Details siehe Log."
+running_init = "Tests starten ({total_tests} Tests in {total_files} Dateien)"
+running_progress = "{icon} {file_name} ({completed}/{total})"
+finished_success = "Alle Tests erfolgreich ({total_tests} Tests in {total_files} Dateien)"
+failed_detail = "{file_name}: {cause}"
 
 [texts.help]
 title = "UFO-Simulation Setup – Hilfe"

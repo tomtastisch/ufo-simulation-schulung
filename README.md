@@ -115,6 +115,26 @@ source .venv/bin/activate  # macOS/Linux
 
 ---
 
+## 🧪 Tests
+
+Tests laufen **standardmäßig parallel** für schnellere Iteration:
+
+```bash
+# Tests mit paralleler Ausführung (4 Worker)
+pytest
+
+# Tests seriell ausführen (z. B. für Debugging)
+pytest -n 0
+
+# Nur bestimmte Tests ausführen
+pytest tests/core/simulation/ -v
+```
+
+**Info**: Die Parallelisierung wird via `pytest-xdist` mit `--dist loadscope` umgesetzt – alle Tests einer Datei laufen
+im selben Worker, um Fixture-Konflikte zu vermeiden.
+
+---
+
 ## 🎓 Projekt-Features
 
 - **Realistische Physik**: 3D-Vektorrechnung mit NumPy

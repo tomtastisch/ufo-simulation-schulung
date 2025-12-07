@@ -16,6 +16,7 @@ from tools.setup.steps.base import (
 from tools.setup.ui import CATALOG
 from tools.setup.ui.progress import ProgressStep
 from tools.setup.utils import run_command, short_output
+from tools.setup.utils.ui_text import initial_running_text, running_text, failed_text
 
 Command = tuple[tuple[str, ...], str]  # (argv, label)
 
@@ -79,24 +80,8 @@ class InstallDepsStep(BaseStep[Sequence[Command]]):
         total = len(prepared) or 1
         empty_output = "keine Ausgabe"
 
-        def fmt(field: str, default: str, **kwargs: object) -> str:
-            return CATALOG.format(
-                "step_default",
-                field=field,
-                default=default,
-                **kwargs,
-            )
-
-        def status(field: str, default: str, **kwargs: object) -> None:
-            if progress is not None:
-                progress.set_status(fmt(field, default, **kwargs))
-
-        if total:
-            status(
-                "progress_running",
-                "Running  /   {details}",
-                details=f"Installiere Abhängigkeiten ({total} Pakete)",
-            )
+        if total and progress is not None:
+            progress.set_status(initial_running_text())
 
         ok = True
         cause: str | None = None
@@ -108,17 +93,10 @@ class InstallDepsStep(BaseStep[Sequence[Command]]):
             last_label = label
 
             # Laufender Status: welches Paket wird gerade installiert?
-            status(
-                "progress_running",
-                "Running  /   {details}",
-                details=fmt(
-                    "install_details",
-                    "Installiere: {package} ({index}/{total})",
-                    package=label,
-                    index=index,
-                    total=total,
-                ),
-            )
+            if progress is not None:
+                progress.set_status(
+                    running_text(f"Installiere: {label} ({index}/{total})")
+                )
 
             result = run_command(argv, cwd=cwd)
             raw = (result.stdout or "") + (result.stderr or "")
@@ -134,17 +112,9 @@ class InstallDepsStep(BaseStep[Sequence[Command]]):
             cause = "pip_install_failed"
             short = short_output(raw) or last_details
 
-            # Hier darf es ruhig sofort einen roten Status geben;
-            status(
-                "progress_failed",
-                "Failed   /   {details}",
-                details=fmt(
-                    "install_failed",
-                    "{package}: {details}",
-                    package=label,
-                    details=short,
-                ),
-            )
+            # Fehlerstatus
+            if progress is not None:
+                progress.set_status(failed_text(label))
 
             error_hint = f"{label}: {short}"
             break
