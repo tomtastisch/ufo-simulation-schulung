@@ -13,12 +13,14 @@ from tools.setup.steps.base import (
     PrepareResult,
     handle_prepare,
 )
+from tools.setup.steps.worker.interpreter import InterpreterWorker
 from tools.setup.ui import CATALOG
 from tools.setup.ui.progress import ProgressStep
 from tools.setup.utils import module, run_single
 from tools.setup.utils.ui_text import initial_running_text, running_text
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass(slots=True)
 class EvaluateImportsStep(BaseStep[tuple[str, ...]]):
@@ -95,7 +97,6 @@ class EvaluateImportsStep(BaseStep[tuple[str, ...]]):
         # Fallback: mindestens eine „logische“ Einheit anzeigen
         return tuple(names) or ("Konfigurationsprüfung",)
 
-
     @override
     @handle_prepare
     def prepare(self, ctx: BaseStepContext) -> PrepareResult[tuple[str, ...]] | PrepareResult:
@@ -104,12 +105,15 @@ class EvaluateImportsStep(BaseStep[tuple[str, ...]]):
         1. importlinter.cli probeweise aufrufen
         2. ggf. Auto-Installation versuchen
         3. aus Profil die relevante Contract-Liste ermitteln
+
+        Die Interpreter-/venv-Logik liegt im InterpreterWorker.
         """
-        python = str(ctx.config.venv_python)
+        worker = InterpreterWorker(ctx.config)
+        python = worker.python_executable()
         cwd = ctx.config.repo_root
 
         def probe() -> tuple[bool, str, str | None]:
-            """Einmaliger Probelauf von importlinter.cli (--help) im venv."""
+            """Einmaliger Probelauf von importlinter.cli (--help)."""
             return module.evaluate(
                 python=python,
                 module="importlinter.cli",
@@ -208,11 +212,14 @@ class EvaluateImportsStep(BaseStep[tuple[str, ...]]):
             progress.set_status(initial_running_text())
         last_details = ""
 
+        worker = InterpreterWorker(ctx.config)
+        python = worker.python_executable()
+
         for index, nodeid in enumerate(tests, start=1):
             update_progress(index, total, nodeid)
 
             ok, cause, details = run_single(
-                python=str(ctx.config.venv_python),
+                python=python,
                 cwd=ctx.config.repo_root,
                 logger=logger,
             )

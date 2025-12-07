@@ -13,6 +13,7 @@ from tools.setup.steps.base import (
     PrepareResult,
     handle_prepare,
 )
+from tools.setup.steps.worker.interpreter import InterpreterWorker
 from tools.setup.ui import CATALOG
 from tools.setup.ui.progress import ProgressStep
 from tools.setup.utils import run_command, short_output
@@ -41,31 +42,34 @@ class InstallDepsStep(BaseStep[Sequence[Command]]):
             return len(prepared)
         return 1
 
-
     @override
     @handle_prepare
     def prepare(self, ctx: BaseStepContext) -> PrepareResult[tuple[str, ...]]:
         """
         Erzeugt die Liste von Installations-Kommandos aus dem bereits geladenen
         PyProjectProfile (runtime_requirements + dev_requirements).
-        """
-        python = str(ctx.config.venv_python)
-        base = (python, "-m", "pip", "install")
 
-        commands: list[Command] = [((*base, "-e", "."), "Projekt (editable)")]
+        Die eigentliche Interpreter-/venv-Logik liegt im InterpreterWorker.
+        """
+        worker = InterpreterWorker(ctx.config)
+
+        commands: list[Command] = [
+            # Projekt im Editable-Mode
+            (worker.pip_install_cmd(".", editable=True), "Projekt (editable)")
+        ]
 
         for name, spec in chain(
                 ctx.profile.runtime_requirements.items(),
                 ctx.profile.dev_requirements.items(),
         ):
             label = f"{name}{spec}"
-            commands.append(((*base, label), label))
+            argv = worker.pip_install_cmd(label, editable=False)
+            commands.append((argv, label))
 
         return PrepareResult(
             ok=True,
             payload=tuple(commands),
         )
-
 
     @override
     def _step_impl(
