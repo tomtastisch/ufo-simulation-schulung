@@ -3,16 +3,13 @@
 
 import sys
 
-from tools import setup
-
 
 def _run_bootstrap() -> int:
     """Führt das neue Setup-Bootstrap-System aus."""
     from tools.bootstrap import execute
-    return execute()
+    return execute(sys.argv[1:])
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 1:
-        raise SystemExit(_run_bootstrap())
-    setup()
+    # Immer das neue Bootstrap-System verwenden
+    raise SystemExit(_run_bootstrap())

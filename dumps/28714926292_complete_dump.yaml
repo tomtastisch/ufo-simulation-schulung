@@ -34,7 +34,7 @@ dirs:
   - tools/setup/steps
   - tools/setup/steps/base
   - tools/setup/ui
-  - tools/setup/ui/output
+  - tools/setup/ui/err
   - tools/setup/ui/progress
   - tools/setup/ui/resources
   - tools/setup/utils
@@ -9304,7 +9304,7 @@ files:
           def header(self, message: str) -> None:
               # Header bewusst ohne Level-Icon, um die Einleitung nicht zu überfrachten
               print(message)
-  - rel_path: tools/setup/ui/output/__init__.py
+  - rel_path: tools/setup/ui/err/__init__.py
     hash: 1acc797a9f8afa2cbb5f3f09f2789e5297b7fef7ebac47d56af8b92d9be1da27
     content: |
       from __future__ import annotations
@@ -9313,7 +9313,7 @@ files:
       from .error import error
       
       __all__ = ["Message", "error"]
-  - rel_path: tools/setup/ui/output/error.py
+  - rel_path: tools/setup/ui/err/error.py
     hash: e9759ec28788a5b13412b729d73d4e6975a8c2862af81011142c7dae823403f2
     content: |
       # tools/setup/ui/error.py
@@ -9348,7 +9348,7 @@ files:
           lines.append("")
       
           return "\n".join(lines)
-  - rel_path: tools/setup/ui/output/message.py
+  - rel_path: tools/setup/ui/err/message.py
     hash: 40938c752242a38be547f32290ab972d8cd7e9224893ff37087e879cf396991d
     content: |
       from __future__ import annotations

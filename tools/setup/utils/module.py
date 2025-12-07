@@ -31,7 +31,7 @@ def evaluate(
 
     Rückgabe:
         ok       – True, wenn returncode == 0
-        output   – kombinierte stdout/stderr-Ausgabe
+        err   – kombinierte stdout/stderr-Ausgabe
         exc_info – Fehlermeldung, falls der Interpreter selbst nicht gestartet werden konnte
     """
 

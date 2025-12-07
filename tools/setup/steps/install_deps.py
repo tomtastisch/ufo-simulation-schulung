@@ -13,9 +13,11 @@ from tools.setup.steps.base import (
     PrepareResult,
     handle_prepare,
 )
+from tools.setup.steps.worker.interpreter import InterpreterWorker
 from tools.setup.ui import CATALOG
 from tools.setup.ui.progress import ProgressStep
 from tools.setup.utils import run_command, short_output
+from tools.setup.utils.ui_text import initial_running_text, running_text, failed_text
 
 Command = tuple[tuple[str, ...], str]  # (argv, label)
 
@@ -40,31 +42,34 @@ class InstallDepsStep(BaseStep[Sequence[Command]]):
             return len(prepared)
         return 1
 
-
     @override
     @handle_prepare
     def prepare(self, ctx: BaseStepContext) -> PrepareResult[tuple[str, ...]]:
         """
         Erzeugt die Liste von Installations-Kommandos aus dem bereits geladenen
         PyProjectProfile (runtime_requirements + dev_requirements).
-        """
-        python = str(ctx.config.venv_python)
-        base = (python, "-m", "pip", "install")
 
-        commands: list[Command] = [((*base, "-e", "."), "Projekt (editable)")]
+        Die eigentliche Interpreter-/venv-Logik liegt im InterpreterWorker.
+        """
+        worker = InterpreterWorker(ctx.config)
+
+        commands: list[Command] = [
+            # Projekt im Editable-Mode
+            (worker.pip_install_cmd(".", editable=True), "Projekt (editable)")
+        ]
 
         for name, spec in chain(
                 ctx.profile.runtime_requirements.items(),
                 ctx.profile.dev_requirements.items(),
         ):
             label = f"{name}{spec}"
-            commands.append(((*base, label), label))
+            argv = worker.pip_install_cmd(label, editable=False)
+            commands.append((argv, label))
 
         return PrepareResult(
             ok=True,
             payload=tuple(commands),
         )
-
 
     @override
     def _step_impl(
@@ -79,24 +84,8 @@ class InstallDepsStep(BaseStep[Sequence[Command]]):
         total = len(prepared) or 1
         empty_output = "keine Ausgabe"
 
-        def fmt(field: str, default: str, **kwargs: object) -> str:
-            return CATALOG.format(
-                "step_default",
-                field=field,
-                default=default,
-                **kwargs,
-            )
-
-        def status(field: str, default: str, **kwargs: object) -> None:
-            if progress is not None:
-                progress.set_status(fmt(field, default, **kwargs))
-
-        if total:
-            status(
-                "progress_running",
-                "Running  /   {details}",
-                details=f"Installiere Abhängigkeiten ({total} Pakete)",
-            )
+        if total and progress is not None:
+            progress.set_status(initial_running_text())
 
         ok = True
         cause: str | None = None
@@ -108,17 +97,10 @@ class InstallDepsStep(BaseStep[Sequence[Command]]):
             last_label = label
 
             # Laufender Status: welches Paket wird gerade installiert?
-            status(
-                "progress_running",
-                "Running  /   {details}",
-                details=fmt(
-                    "install_details",
-                    "Installiere: {package} ({index}/{total})",
-                    package=label,
-                    index=index,
-                    total=total,
-                ),
-            )
+            if progress is not None:
+                progress.set_status(
+                    running_text(f"Installiere: {label} ({index}/{total})")
+                )
 
             result = run_command(argv, cwd=cwd)
             raw = (result.stdout or "") + (result.stderr or "")
@@ -134,17 +116,9 @@ class InstallDepsStep(BaseStep[Sequence[Command]]):
             cause = "pip_install_failed"
             short = short_output(raw) or last_details
 
-            # Hier darf es ruhig sofort einen roten Status geben;
-            status(
-                "progress_failed",
-                "Failed   /   {details}",
-                details=fmt(
-                    "install_failed",
-                    "{package}: {details}",
-                    package=label,
-                    details=short,
-                ),
-            )
+            # Fehlerstatus
+            if progress is not None:
+                progress.set_status(failed_text(label))
 
             error_hint = f"{label}: {short}"
             break

@@ -26,6 +26,7 @@ def error(
     ]
     for line in traceback_text.rstrip().splitlines():
         lines.append(f"    {line}")
+
     lines.append(f"  timestamp: {iso}")
     lines.append("")
 

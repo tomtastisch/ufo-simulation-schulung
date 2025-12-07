@@ -93,15 +93,20 @@ class TextCatalog:
         result: str = self._resolve_field(key, field, default)
         return result
 
-    def format(self, key: str, field: str = "body", **kwargs: Any) -> str:
+    def format(self, key: str, field: str = "body", default: str = "", **kwargs: Any) -> str:
         """
         Liefert einen formatierten Text aus dem angegebenen Block.
 
         Nicht vorhandene Blöcke oder Felder liefern einen leeren String.
         """
-        template: str = self._resolve_field(key, field, "")
-        result: str = "" if not template else template.format(**kwargs)
-        return result
+        template: str = self._resolve_field(key, field, default)
+        if not template:
+            return default
+        try:
+            return template.format(**kwargs)
+        except (KeyError, IndexError, ValueError):
+            # Bei Formatierungsproblemen lieber den Roh-Template-Text oder Default zurückgeben
+            return default or template
 
     def icon(self, key: str, default: str) -> str:
         """
