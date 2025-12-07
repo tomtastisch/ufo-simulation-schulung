@@ -27,7 +27,12 @@ logger = logging.getLogger(__name__)
 #           <Module test_heading_delta.py>
 #             <Class TestNormalizeHeadingDelta>
 #               <Function test_no_wrap_around_positive_small>
-# Hinweis: <Package> wird seit pytest >= 7.0 für Verzeichnisse mit __init__.py verwendet
+# Hinweis zur Unterscheidung "Dir" vs. "Package":
+# - "Dir": Ein normales Verzeichnis ohne __init__.py.
+# - "Package": Ein Verzeichnis mit __init__.py, wird von pytest ab Version >= 7.0 als "Package" angezeigt.
+# Für die Test-Sammlung werden beide Typen ("Dir" und "Package") identisch behandelt,
+# da sie jeweils einen Verzeichnis-Knoten in der Test-Hierarchie darstellen.
+# Die Regex erfasst daher beide Fälle unter dem gemeinsamen Gruppennamen "kind".
 _COLLECT_LINE_RE = re.compile(
     r"^(?P<indent>\s*)<(?P<kind>Dir|Package|Module|Class|Function) (?P<name>[^>]+)>"
 )
