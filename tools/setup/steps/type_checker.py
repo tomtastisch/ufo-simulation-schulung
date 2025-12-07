@@ -39,13 +39,13 @@ class TypeAnnotation:
         file: Relative Dateipfad
         line: Zeilennummer
         name: Name des Elements (Parameter, Funktion, Variable)
-        type: Art des Elements ("parameter", "return", "variable")
+        annotation_type: Art des Elements ("parameter", "return", "variable")
     """
 
     file: str
     line: int
     name: str
-    type: str  # "parameter", "return", "variable"
+    annotation_type: str  # "parameter", "return", "variable"
 
 
 # ============================================================================
