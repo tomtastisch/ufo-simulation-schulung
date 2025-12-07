@@ -11,8 +11,9 @@ from typing import (
 )
 
 from tools.setup.steps.base.result import StepResult, PrepareResult
-from tools.setup.ui.output.error import error as format_error
+from tools.setup.ui.err.error import error as format_error
 from tools.setup.ui.progress import ProgressStep
+from tools.setup.utils.ui_text import finished_text, failed_text
 
 if TYPE_CHECKING:
     from tools.setup.steps.base.meta import BaseStepContext
@@ -42,7 +43,7 @@ def _log_failure(
 ) -> None:
     """Gemeinsame Fehlerbehandlung für Step- und Prepare-Ergebnisse.
 
-    - formatiert Message via self.output(...)
+    - formatiert Message via self.err(...)
     - schreibt in ctx.log
     - optional: YAML-Errorblock in self._error_block für BaseStep.run(...)
     """
@@ -145,11 +146,11 @@ def handle_step(
         if progress is not None:
             if result.ok:
                 text = result.label or "OK"
-                progress.set_status(f"Finished /   {text}")
+                progress.set_status(finished_text(text))
 
             else:
                 text = result.label or result.error_hint or "Fehler"
-                progress.set_status(f"Failed   /   {text}")
+                progress.set_status(failed_text(text))
 
         if not result.ok:
             _log_failure(

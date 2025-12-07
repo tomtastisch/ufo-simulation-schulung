@@ -12,7 +12,7 @@ from tools.setup.steps.base.decorator import handle_step
 from tools.setup.steps.base.meta import BaseStepMeta, BaseStepContext, BaseStepCore
 from tools.setup.steps.base.result import StepResult
 from tools.setup.ui import CATALOG
-from tools.setup.ui.output.error import error
+from tools.setup.ui.err.error import error
 from tools.setup.ui.progress import ProgressMode, ProgressStep
 
 T = TypeVar("T")  # Typ des prepare()-Ergebnisses
@@ -30,7 +30,7 @@ class BaseStep(
 
     Verantwortlichkeiten:
     - Konfiguration (options)
-    - Textausgabe (output)
+    - Textausgabe (err)
     - Vorbereitungsphase (prepare)
     - fachliche Ausführung (step)
     - zentrale Orchestrierung (run)
@@ -101,8 +101,12 @@ class BaseStep(
         placeholders: dict[str, object] = {
             "step": self.name,
             "env": ctx.config.platform.name,
+            # beide Schreibweisen anbieten, damit Templates frei sind
             "type": self.stid,
+            "typ": self.stid,
             "module": self.name,
+            # optionale Zusatzinfo für Header o. ä.
+            "info": str(extra.get("info", "")),
             **extra,
         }
 
@@ -116,7 +120,14 @@ class BaseStep(
             f"{self.name}: {' – '.join(parts)}" if parts else self.name
         )
 
-        for block in (self.name, "step_default"):
+        blocks: tuple[str, ...]
+        if field == "header":
+            # Für Header zuerst Step-spezifisch, dann generisches Header-Template
+            blocks = (self.name, "module_setup", "step_default")
+        else:
+            blocks = (self.name, "step_default")
+
+        for block in blocks:
             if text := CATALOG.format(block, field=field, default="", **placeholders):
                 return text
 

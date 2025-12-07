@@ -248,7 +248,7 @@ class RunTestsStep(BaseStep[tuple[tuple[str, str], ...]]):
 
         tests: tuple[tuple[str, str], ...] = prepared or tuple()
 
-        # Labels aus Catalog über BaseStep.output
+        # Labels aus Catalog über BaseStep.err
         tests_done_label = self.output(ctx, field="tests_done") or "Alle Tests erfolgreich."
         tests_failed_label = self.output(ctx, field="tests_failed") or "Tests fehlgeschlagen – Details siehe Log."
 
